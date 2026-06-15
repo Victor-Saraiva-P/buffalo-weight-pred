@@ -1,0 +1,1 @@
+"""Buffalo weight prediction tooling."""

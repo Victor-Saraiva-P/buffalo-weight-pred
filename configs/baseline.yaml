@@ -8,16 +8,6 @@ data:
   target_column: Peso
   tag_column: Tags
 
-features:
-  include:
-    - area
-    - perimeter
-    - solidity
-    - circularity
-    - equivalent_diameter
-    - hu_moment_1
-    - hu_moment_2
-
 output:
   features_index_path: generated/baseline_features.csv
   columns:

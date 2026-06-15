@@ -19,7 +19,7 @@ Somente máscaras presentes no `indice.xlsx` devem ser usadas no treinamento.
 
 Cada experimento deve ter sua própria configuração em `configs/`.
 
-O primeiro experimento usa `configs/baseline.yaml`. Essa configuração define os caminhos dos dados, coluna-alvo, tag válida, features incluídas e arquivo gerado com as features calculadas.
+O primeiro experimento usa `configs/baseline.yaml`. Essa configuração define os caminhos dos dados, coluna-alvo e colunas do arquivo gerado com as features calculadas.
 
 Essa separação permite gerar bases futuras com outras features sem misturar decisões entre experimentos.
 

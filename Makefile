@@ -1,5 +1,5 @@
 CONFIG ?= configs/baseline.yaml
-PYTHON ?= python
+PYTHON ?= .venv/bin/python
 
 .PHONY: features test
 

@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import struct
 import sys
 from pathlib import Path
 import zlib
 
 from buffalo_weight.config import load_config
+from buffalo_weight.feature_calculators import calculate_mask_features, zero_features
+from buffalo_weight.feature_calculators.circularity import calculate_circularity
+from buffalo_weight.feature_calculators.equivalent_diameter import (
+    calculate_equivalent_diameter,
+)
+from buffalo_weight.feature_calculators.geometry import convex_hull, polygon_area
 from buffalo_weight.index import read_index
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
@@ -108,128 +113,17 @@ def read_png_mask(path: Path) -> list[list[bool]]:
     return mask
 
 
-def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    points = sorted(set(points))
-    if len(points) <= 1:
-        return points
-
-    def cross(
-        origin: tuple[float, float],
-        left: tuple[float, float],
-        right: tuple[float, float],
-    ) -> float:
-        return (left[0] - origin[0]) * (right[1] - origin[1]) - (
-            left[1] - origin[1]
-        ) * (right[0] - origin[0])
-
-    lower: list[tuple[float, float]] = []
-    for point in points:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-            lower.pop()
-        lower.append(point)
-
-    upper: list[tuple[float, float]] = []
-    for point in reversed(points):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-            upper.pop()
-        upper.append(point)
-
-    return lower[:-1] + upper[:-1]
-
-
-def polygon_area(points: list[tuple[float, float]]) -> float:
-    if len(points) < 3:
-        return 0.0
-    total = 0.0
-    for index, point in enumerate(points):
-        next_point = points[(index + 1) % len(points)]
-        total += point[0] * next_point[1] - next_point[0] * point[1]
-    return abs(total) / 2.0
-
-
-def calculate_features(mask: list[list[bool]]) -> dict[str, float]:
-    pixels = [
-        (x, y)
-        for y, row in enumerate(mask)
-        for x, value in enumerate(row)
-        if value
-    ]
-    area = len(pixels)
-    if area == 0:
-        return {
-            "area": 0,
-            "perimeter": 0,
-            "solidity": 0,
-            "circularity": 0,
-            "equivalent_diameter": 0,
-            "hu_moment_1": 0,
-            "hu_moment_2": 0,
-        }
-
-    height = len(mask)
-    width = len(mask[0]) if height else 0
-    perimeter = 0
-    for x, y in pixels:
-        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-            if nx < 0 or ny < 0 or nx >= width or ny >= height or not mask[ny][nx]:
-                perimeter += 1
-
-    corners = []
-    for x, y in pixels:
-        corners.extend([(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)])
-    hull_area = polygon_area(convex_hull(corners))
-    solidity = area / hull_area if hull_area else 0
-    circularity = 4 * math.pi * area / (perimeter * perimeter) if perimeter else 0
-    equivalent_diameter = math.sqrt(4 * area / math.pi)
-
-    m00 = float(area)
-    m10 = sum(x + 0.5 for x, _ in pixels)
-    m01 = sum(y + 0.5 for _, y in pixels)
-    cx = m10 / m00
-    cy = m01 / m00
-
-    def central_moment(p: int, q: int) -> float:
-        return sum(((x + 0.5) - cx) ** p * ((y + 0.5) - cy) ** q for x, y in pixels)
-
-    def normalized_moment(p: int, q: int) -> float:
-        return central_moment(p, q) / (m00 ** (1 + (p + q) / 2))
-
-    eta20 = normalized_moment(2, 0)
-    eta02 = normalized_moment(0, 2)
-    eta11 = normalized_moment(1, 1)
-    hu_moment_1 = eta20 + eta02
-    hu_moment_2 = (eta20 - eta02) ** 2 + 4 * eta11**2
-
-    return {
-        "area": area,
-        "perimeter": perimeter,
-        "solidity": solidity,
-        "circularity": circularity,
-        "equivalent_diameter": equivalent_diameter,
-        "hu_moment_1": hu_moment_1,
-        "hu_moment_2": hu_moment_2,
-    }
-
-
 def calculate_features_fast(path: Path) -> dict[str, float]:
     try:
         import numpy as np
         from PIL import Image
     except ImportError:
-        return calculate_features(read_png_mask(path))
+        return calculate_mask_features(read_png_mask(path))
 
     mask = np.asarray(Image.open(path).convert("L")) > 0
     area = int(mask.sum())
     if area == 0:
-        return {
-            "area": 0,
-            "perimeter": 0,
-            "solidity": 0,
-            "circularity": 0,
-            "equivalent_diameter": 0,
-            "hu_moment_1": 0,
-            "hu_moment_2": 0,
-        }
+        return zero_features()
 
     padded = np.pad(mask, 1, constant_values=False)
     center = padded[1:-1, 1:-1]
@@ -267,8 +161,8 @@ def calculate_features_fast(path: Path) -> dict[str, float]:
         "area": area,
         "perimeter": perimeter,
         "solidity": area / hull_area if hull_area else 0,
-        "circularity": 4 * math.pi * area / (perimeter * perimeter) if perimeter else 0,
-        "equivalent_diameter": math.sqrt(4 * area / math.pi),
+        "circularity": calculate_circularity(area, perimeter),
+        "equivalent_diameter": calculate_equivalent_diameter(area),
         "hu_moment_1": eta20 + eta02,
         "hu_moment_2": (eta20 - eta02) ** 2 + 4 * eta11**2,
     }

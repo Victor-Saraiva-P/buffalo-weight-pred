@@ -44,6 +44,18 @@ Gerar índice de features:
 PYTHON=.venv/bin/python make features
 ```
 
+Gerar divisão estratificada e gráfico de categorias de peso:
+
+```bash
+PYTHON=.venv/bin/python make split
+```
+
+Treinar baseline Random Forest com kfold estratificado:
+
+```bash
+PYTHON=.venv/bin/python make train
+```
+
 Rodar testes:
 
 ```bash

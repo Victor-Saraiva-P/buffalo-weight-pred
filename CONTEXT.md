@@ -19,3 +19,11 @@ _Avoid_: Lista de fotos, tabela de imagens
 **Índice de Features**:
 Arquivo derivado do índice de máscaras e do conjunto de máscaras, contendo uma linha por máscara válida e colunas com rótulos e features geométricas calculadas.
 _Avoid_: Banco de dados, tabela temporária
+
+**Categoria de Peso**:
+Grupo definido por quartis globais do peso dos animais no dataset inteiro, usado para balancear a avaliação entre faixas de peso absoluto.
+_Avoid_: Categoria da fazenda, balde por fazenda
+
+**Divisão Estratificada**:
+Arquivo que associa cada máscara válida a uma categoria de peso e a um fold de avaliação, preservando a distribuição das categorias de peso entre folds.
+_Avoid_: Separação aleatória, split temporário

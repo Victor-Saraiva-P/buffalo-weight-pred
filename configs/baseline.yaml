@@ -22,3 +22,26 @@ output:
     - equivalent_diameter
     - hu_moment_1
     - hu_moment_2
+
+split:
+  k: 5
+  random_state: 42
+  split_path: generated/splits/baseline_kfold_split.csv
+  distribution_plot_data_path: generated/plots/baseline_weight_categories.csv
+  distribution_plot_path: generated/plots/baseline_weight_categories.png
+
+training:
+  split_path: generated/splits/baseline_kfold_split.csv
+  metrics_path: generated/plots/baseline_model_fold_metrics.csv
+  metrics_plot_path: generated/plots/baseline_model_fold_metrics.png
+  predictions_path: generated/predictions/baseline_random_forest_predictions.csv
+  random_state: 42
+  n_estimators: 200
+  feature_columns:
+    - area
+    - perimeter
+    - solidity
+    - circularity
+    - equivalent_diameter
+    - hu_moment_1
+    - hu_moment_2

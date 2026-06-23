@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
+import tempfile
 import unittest
 
-from buffalo_weight.split import assign_folds, assign_weight_categories
+from buffalo_weight.split import assign_folds, assign_weight_categories, plot_weight_distribution
 
 
 class SplitTest(unittest.TestCase):
@@ -60,6 +62,19 @@ class SplitTest(unittest.TestCase):
             )
             self.assertEqual(set(categories), {"B1", "B2", "B3", "B4"})
             self.assertTrue(all(count in {6, 7} for count in categories.values()))
+
+    def test_plots_configurable_weight_categories(self) -> None:
+        rows = [
+            {"file_name": f"mask-{index:03d}", "weight": str(index)}
+            for index in range(1, 101)
+        ]
+        assign_weight_categories(rows, category_count=10)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "weight_categories.png"
+            plot_weight_distribution(rows, path)
+
+            self.assertTrue(path.exists())
 
 
 if __name__ == "__main__":

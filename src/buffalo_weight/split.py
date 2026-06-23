@@ -90,7 +90,11 @@ def write_distribution_data(rows: list[dict[str, str]], path: Path) -> None:
 def plot_weight_distribution(rows: list[dict[str, str]], path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    x_by_category = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
+    categories = sorted(
+        {row["weight_category"] for row in rows},
+        key=lambda category: int(category.removeprefix("B")),
+    )
+    x_by_category = {category: index for index, category in enumerate(categories, start=1)}
     x_values = []
     y_values = []
     for row in rows:
@@ -102,7 +106,13 @@ def plot_weight_distribution(rows: list[dict[str, str]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.scatter(x_values, y_values, color="#1f77b4", alpha=0.75, edgecolors="none")
-    ax.set_xticks([1, 2, 3, 4], ["Q1\nLeves", "Q2\nMedio-Leves", "Q3\nMedio-Pesados", "Q4\nPesados"])
+    ax.set_xticks(
+        list(x_by_category.values()),
+        [
+            f"{category}\n{next(row['weight_category_label'] for row in rows if row['weight_category'] == category)}"
+            for category in categories
+        ],
+    )
     ax.set_ylabel("Peso (kg)")
     ax.set_xlabel("Categoria de Peso")
     ax.set_title("Distribuicao de pesos por Categoria de Peso")

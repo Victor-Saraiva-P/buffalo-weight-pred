@@ -78,7 +78,7 @@ Comparar granularidades de `Categoria de Peso` na divisão estratificada:
 PYTHON=.venv/bin/python make compare-categories
 ```
 
-Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Ele gera arquivos em `generated/diagnostics/`:
+Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Use `CATEGORY_COUNTS` para explorar mais granularidades. Ele gera arquivos em `generated/diagnostics/`:
 
 - `category_comparison_overall.csv`: resumo por quantidade de categorias.
 - `category_comparison_fold_metrics.csv`: métricas por quantidade de categorias, seed e fold.
@@ -93,6 +93,8 @@ Para rodadas rápidas, ajuste as variáveis do Makefile:
 ```bash
 SEED_COUNT=2 PYTHON=.venv/bin/python make compare-categories
 ```
+
+A configuração baseline usa 10 `Categorias de Peso`; veja `docs/weight-category-count.md` para a justificativa.
 
 Rodar testes:
 

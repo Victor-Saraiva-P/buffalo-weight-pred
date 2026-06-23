@@ -26,7 +26,7 @@ output:
 split:
   k: 5
   random_state: 42
-  weight_category_count: 4
+  weight_category_count: 10
   split_path: generated/splits/baseline_kfold_split.csv
   distribution_plot_data_path: generated/plots/baseline_weight_categories.csv
   distribution_plot_path: generated/plots/baseline_weight_categories.png

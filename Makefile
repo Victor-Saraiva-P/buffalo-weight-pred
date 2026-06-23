@@ -1,16 +1,31 @@
 CONFIG ?= configs/baseline.yaml
-PYTHON ?= .venv/bin/python
+VENV ?= .venv
+PYTHON ?= $(VENV)/bin/python
+PIP ?= $(PYTHON) -m pip
+DEPS_STAMP ?= $(VENV)/.deps.stamp
 
-.PHONY: features split train test
+.PHONY: setup features split train stability test
 
-features:
+setup: $(DEPS_STAMP)
+
+$(PYTHON):
+	python -m venv $(VENV)
+
+$(DEPS_STAMP): requirements.txt | $(PYTHON)
+	$(PIP) install -r requirements.txt
+	touch $(DEPS_STAMP)
+
+features: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.features --config $(CONFIG)
 
-split:
+split: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --config $(CONFIG)
 
-train:
+train: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train --config $(CONFIG)
 
-test:
+stability: setup
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --config $(CONFIG)
+
+test: setup
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests

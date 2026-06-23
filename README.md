@@ -56,6 +56,22 @@ Treinar baseline Random Forest com kfold estratificado:
 PYTHON=.venv/bin/python make train
 ```
 
+Medir estabilidade da divisão estratificada entre diferentes `split.random_state`:
+
+```bash
+PYTHON=.venv/bin/python make stability
+```
+
+Esse diagnóstico gera arquivos em `generated/diagnostics/`:
+
+- `split_stability_fold_metrics.csv`: métricas por seed e fold.
+- `split_stability_seed_summary.csv`: média, desvio, mínimo e máximo de MAE por seed.
+- `split_stability_overall.csv`: variação do MAE médio entre seeds.
+- `split_stability_hard_examples.csv`: máscaras com maior erro absoluto médio quando aparecem em validação.
+- `split_stability_seed_mae.png`: gráfico do MAE médio por seed com faixa mínimo-máximo entre folds.
+- `split_stability_fold_mae.png`: gráfico do MAE de cada fold em cada seed.
+- `split_stability_hard_examples.png`: gráfico das máscaras com maior erro absoluto médio.
+
 Rodar testes:
 
 ```bash

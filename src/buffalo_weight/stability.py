@@ -153,6 +153,7 @@ def evaluate_split_stability(
     rows: list[dict[str, str]],
     feature_columns: list[str],
     k: int,
+    weight_category_count: int,
     split_random_states: list[int],
     n_estimators: int,
     training_random_state: int,
@@ -165,7 +166,7 @@ def evaluate_split_stability(
 
     for seed in split_random_states:
         seed_rows = [row.copy() for row in rows]
-        assign_weight_categories(seed_rows)
+        assign_weight_categories(seed_rows, weight_category_count)
         assign_folds(seed_rows, k, seed)
         metrics, seed_predictions = evaluate_random_forest(
             seed_rows, feature_columns, n_estimators, training_random_state
@@ -206,6 +207,7 @@ def run_stability(config_path: Path, start_seed: int, seed_count: int, output_di
         feature_rows,
         [str(column) for column in feature_columns],
         parse_int(split["k"], "split.k"),
+        parse_int(split.get("weight_category_count", 4), "split.weight_category_count"),
         split_random_states(start_seed, seed_count),
         parse_int(training["n_estimators"], "training.n_estimators"),
         parse_int(training["random_state"], "training.random_state"),

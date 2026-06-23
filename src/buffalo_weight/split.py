@@ -10,14 +10,6 @@ from sklearn.model_selection import StratifiedKFold
 from buffalo_weight.config import load_config
 
 
-CATEGORY_LABELS = {
-    "Q1": "Leves",
-    "Q2": "Medio-Leves",
-    "Q3": "Medio-Pesados",
-    "Q4": "Pesados",
-}
-
-
 def read_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="") as file:
         return list(csv.DictReader(file))
@@ -37,7 +29,9 @@ def parse_weight(value: str, file_name: str) -> float:
         raise ValueError(f"Invalid weight for {file_name}: {value}") from error
 
 
-def assign_weight_categories(rows: list[dict[str, str]]) -> None:
+def assign_weight_categories(rows: list[dict[str, str]], category_count: int = 4) -> None:
+    if category_count < 2:
+        raise ValueError("weight category count must be at least 2")
     sorted_rows = sorted(
         rows,
         key=lambda row: (
@@ -47,10 +41,10 @@ def assign_weight_categories(rows: list[dict[str, str]]) -> None:
     )
     total = len(sorted_rows)
     for index, row in enumerate(sorted_rows):
-        category_index = min((index * 4) // total + 1, 4)
-        category = f"Q{category_index}"
+        category_index = min((index * category_count) // total + 1, category_count)
+        category = f"B{category_index}"
         row["weight_category"] = category
-        row["weight_category_label"] = CATEGORY_LABELS[category]
+        row["weight_category_label"] = f"Faixa {category_index}"
 
 
 def assign_folds(rows: list[dict[str, str]], k: int, random_state: int) -> None:
@@ -133,7 +127,8 @@ def generate_split(config_path: Path) -> None:
 
     k = parse_int(split["k"], "split.k")
     random_state = parse_int(split["random_state"], "split.random_state")
-    assign_weight_categories(rows)
+    category_count = parse_int(split.get("weight_category_count", 4), "split.weight_category_count")
+    assign_weight_categories(rows, category_count)
     assign_folds(rows, k, random_state)
     write_split(rows, Path(str(split["split_path"])))
     write_distribution_data(rows, Path(str(split["distribution_plot_data_path"])))

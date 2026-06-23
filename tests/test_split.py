@@ -13,27 +13,43 @@ class SplitTest(unittest.TestCase):
             for index in range(132, 0, -1)
         ]
 
-        assign_weight_categories(rows)
+        assign_weight_categories(rows, category_count=4)
 
         self.assertEqual(
             Counter(row["weight_category"] for row in rows),
-            {"Q1": 33, "Q2": 33, "Q3": 33, "Q4": 33},
+            {"B1": 33, "B2": 33, "B3": 33, "B4": 33},
         )
         light_weights = [
-            float(row["weight"]) for row in rows if row["weight_category"] == "Q1"
+            float(row["weight"]) for row in rows if row["weight_category"] == "B1"
         ]
         heavy_weights = [
-            float(row["weight"]) for row in rows if row["weight_category"] == "Q4"
+            float(row["weight"]) for row in rows if row["weight_category"] == "B4"
         ]
         self.assertEqual(max(light_weights), 33)
         self.assertEqual(min(heavy_weights), 100)
+
+    def test_assigns_configurable_weight_category_count(self) -> None:
+        rows = [
+            {"file_name": f"mask-{index:03d}", "weight": str(index)}
+            for index in range(1, 133)
+        ]
+
+        assign_weight_categories(rows, category_count=8)
+
+        categories = Counter(row["weight_category"] for row in rows)
+        self.assertEqual(set(categories), {f"B{index}" for index in range(1, 9)})
+        self.assertTrue(all(count in {16, 17} for count in categories.values()))
+        self.assertEqual(
+            {row["weight_category_label"] for row in rows},
+            {f"Faixa {index}" for index in range(1, 9)},
+        )
 
     def test_assigns_reproducible_stratified_validation_folds(self) -> None:
         rows = [
             {"file_name": f"mask-{index:03d}", "weight": str(index)}
             for index in range(1, 133)
         ]
-        assign_weight_categories(rows)
+        assign_weight_categories(rows, category_count=4)
 
         assign_folds(rows, k=5, random_state=42)
 
@@ -42,7 +58,7 @@ class SplitTest(unittest.TestCase):
             categories = Counter(
                 row["weight_category"] for row in rows if row["fold"] == fold
             )
-            self.assertEqual(set(categories), {"Q1", "Q2", "Q3", "Q4"})
+            self.assertEqual(set(categories), {"B1", "B2", "B3", "B4"})
             self.assertTrue(all(count in {6, 7} for count in categories.values()))
 
 

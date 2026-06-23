@@ -33,8 +33,9 @@ Etapa que usa features geométricas extraídas de máscaras binarizadas para ava
 _Avoid_: Avaliação de segmentação, treinamento de segmentação
 
 **Categoria de Peso**:
-Grupo definido por quartis globais do peso dos animais no dataset inteiro, usado para balancear a avaliação entre faixas de peso absoluto.
-_Avoid_: Categoria da fazenda, balde por fazenda
+Grupo definido por faixas quantílicas globais do peso dos animais no dataset inteiro, usado para balancear a avaliação entre faixas de peso absoluto.
+As categorias são nomeadas com códigos neutros (`B1`, `B2`, ...), acompanhados por rótulos como `Faixa 1`, `Faixa 2`, ... para evitar assumir quartis quando a quantidade de faixas é configurável.
+_Avoid_: Categoria da fazenda, balde por fazenda, quartil quando a quantidade de faixas for configurável, leve/pesado quando a quantidade de faixas tornar o rótulo ambíguo
 
 **Divisão Estratificada**:
 Arquivo que associa cada máscara válida a uma categoria de peso e a um fold de avaliação, preservando a distribuição das categorias de peso entre folds.

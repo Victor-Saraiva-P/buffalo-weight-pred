@@ -72,6 +72,28 @@ Esse diagnóstico gera arquivos em `generated/diagnostics/`:
 - `split_stability_fold_mae.png`: gráfico do MAE de cada fold em cada seed.
 - `split_stability_hard_examples.png`: gráfico das máscaras com maior erro absoluto médio.
 
+Comparar granularidades de `Categoria de Peso` na divisão estratificada:
+
+```bash
+PYTHON=.venv/bin/python make compare-categories
+```
+
+Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Ele gera arquivos em `generated/diagnostics/`:
+
+- `category_comparison_overall.csv`: resumo por quantidade de categorias.
+- `category_comparison_fold_metrics.csv`: métricas por quantidade de categorias, seed e fold.
+- `category_comparison_split_balance.csv`: distribuição de validação por categoria, seed e fold.
+- `category_comparison_mae.png`: MAE médio por quantidade de categorias.
+- `category_comparison_seed_variation.png`: variação do MAE entre seeds por quantidade de categorias.
+- `category_comparison_weight_scatter_c4.png`, `c6`, `c8`: distribuição de pesos por fold.
+- `category_comparison_weight_heatmap_c4.png`, `c6`, `c8`: contagem por fold e categoria.
+
+Para rodadas rápidas, ajuste as variáveis do Makefile:
+
+```bash
+SEED_COUNT=2 PYTHON=.venv/bin/python make compare-categories
+```
+
 Rodar testes:
 
 ```bash

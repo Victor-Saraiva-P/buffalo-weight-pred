@@ -5,50 +5,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from buffalo_weight.stability import evaluate_split_stability, run_stability, split_random_states
+from buffalo_weight.category_comparison import run_category_comparison
 
 
-class StabilityTest(unittest.TestCase):
-    def test_evaluates_multiple_split_random_states(self) -> None:
-        rows = []
-        for index in range(40):
-            rows.append(
-                {
-                    "file_name": f"mask-{index:03d}",
-                    "farm": "A" if index % 2 == 0 else "B",
-                    "tag": "train",
-                    "weight": str(100 + index * 5),
-                    "area": str(50 + index),
-                    "perimeter": str(30 + index),
-                    "solidity": "0.9",
-                    "circularity": "0.8",
-                    "equivalent_diameter": str(20 + index),
-                    "hu_moment_1": "0.1",
-                    "hu_moment_2": "0.01",
-                }
-            )
-
-        fold_metrics, seed_summaries, overall, hard_examples = evaluate_split_stability(
-            rows,
-            ["area", "perimeter", "equivalent_diameter"],
-            k=5,
-            weight_category_count=4,
-            split_random_states=[0, 1, 2],
-            n_estimators=5,
-            training_random_state=42,
-        )
-
-        self.assertEqual(len(fold_metrics), 15)
-        self.assertEqual(len(seed_summaries), 3)
-        self.assertEqual(overall[0]["split_random_states"], "3")
-        self.assertEqual(len(hard_examples), 40)
-        self.assertEqual(set(fold_metrics[0]), {"split_random_state", "model", "fold", "mae", "rmse", "r2", "n_train", "n_validation"})
-
-    def test_rejects_empty_seed_count(self) -> None:
-        with self.assertRaisesRegex(ValueError, "--seed-count must be at least 1"):
-            split_random_states(start_seed=0, count=0)
-
-    def test_stability_uses_configured_weight_category_count(self) -> None:
+class CategoryComparisonTest(unittest.TestCase):
+    def test_compares_configured_weight_category_counts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             features_path = root / "features.csv"
@@ -74,7 +35,7 @@ class StabilityTest(unittest.TestCase):
                     writer.writerow(
                         {
                             "file_name": f"mask-{index:03d}",
-                            "farm": "A",
+                            "farm": "A" if index % 2 == 0 else "B",
                             "weight": str(100 + index * 5),
                             "tag": "train",
                             "area": str(50 + index),
@@ -93,7 +54,6 @@ class StabilityTest(unittest.TestCase):
                         f"  features_index_path: {features_path}",
                         "split:",
                         "  k: 5",
-                        "  weight_category_count: 8",
                         "training:",
                         "  n_estimators: 5",
                         "  random_state: 42",
@@ -105,14 +65,33 @@ class StabilityTest(unittest.TestCase):
                 )
             )
 
-            run_stability(config_path, start_seed=0, seed_count=1, output_dir=output_dir)
-
-            with (output_dir / "split_stability_hard_examples.csv").open() as file:
-                hard_examples = list(csv.DictReader(file))
-            self.assertEqual(
-                {row["weight_category"] for row in hard_examples},
-                {f"B{index}" for index in range(1, 9)},
+            run_category_comparison(
+                config_path,
+                category_counts=[4, 8],
+                start_seed=0,
+                seed_count=2,
+                output_dir=output_dir,
             )
+
+            with (output_dir / "category_comparison_overall.csv").open() as file:
+                overall = list(csv.DictReader(file))
+            with (output_dir / "category_comparison_fold_metrics.csv").open() as file:
+                fold_metrics = list(csv.DictReader(file))
+            with (output_dir / "category_comparison_split_balance.csv").open() as file:
+                split_balance = list(csv.DictReader(file))
+
+            self.assertEqual(
+                {row["weight_category_count"] for row in overall}, {"4", "8"}
+            )
+            self.assertEqual(len(fold_metrics), 20)
+            self.assertEqual(
+                {row["weight_category_count"] for row in split_balance}, {"4", "8"}
+            )
+            self.assertEqual(set(split_balance[0]), {"weight_category_count", "split_random_state", "fold", "weight_category", "n_validation", "weight_min", "weight_median", "weight_max"})
+            self.assertTrue((output_dir / "category_comparison_mae.png").exists())
+            self.assertTrue((output_dir / "category_comparison_seed_variation.png").exists())
+            self.assertTrue((output_dir / "category_comparison_weight_scatter_c4.png").exists())
+            self.assertTrue((output_dir / "category_comparison_weight_heatmap_c8.png").exists())
 
 
 if __name__ == "__main__":

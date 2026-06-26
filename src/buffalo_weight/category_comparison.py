@@ -9,6 +9,7 @@ from pathlib import Path
 from buffalo_weight.config import load_config
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, parse_weight, read_rows
 from buffalo_weight.stability import evaluate_split_stability, split_random_states
+from buffalo_weight.train import parse_model_names
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -24,18 +25,22 @@ def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> 
 def save_mae_plot(rows: list[dict[str, str]], path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    ordered = sorted(rows, key=lambda row: int(row["weight_category_count"]))
-    counts = [int(row["weight_category_count"]) for row in ordered]
-    means = [float(row["mae_mean"]) for row in ordered]
-    stds = [float(row["mae_std_between_seeds"]) for row in ordered]
-
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.errorbar(counts, means, yerr=stds, marker="o", capsize=5)
+    for model in sorted({row["model"] for row in rows}):
+        ordered = sorted(
+            [row for row in rows if row["model"] == model],
+            key=lambda row: int(row["weight_category_count"]),
+        )
+        counts = [int(row["weight_category_count"]) for row in ordered]
+        means = [float(row["mae_mean"]) for row in ordered]
+        stds = [float(row["mae_std_between_seeds"]) for row in ordered]
+        ax.errorbar(counts, means, yerr=stds, marker="o", capsize=5, label=model)
     ax.set_xlabel("Quantidade de Categorias de Peso")
     ax.set_ylabel("MAE medio (kg)")
     ax.set_title("MAE por granularidade da Categoria de Peso")
     ax.grid(axis="y", alpha=0.25)
+    ax.legend(title="Modelo")
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)
@@ -44,15 +49,18 @@ def save_mae_plot(rows: list[dict[str, str]], path: Path) -> None:
 def save_seed_variation_plot(rows: list[dict[str, str]], path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    ordered = sorted(rows, key=lambda row: int(row["weight_category_count"]))
-    counts = [int(row["weight_category_count"]) for row in ordered]
-    stds = [float(row["mae_std_between_seeds"]) for row in ordered]
-    ranges = [float(row["mae_range_between_seeds"]) for row in ordered]
-
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(counts, stds, marker="o", label="Desvio entre seeds")
-    ax.plot(counts, ranges, marker="o", label="Range entre seeds")
+    for model in sorted({row["model"] for row in rows}):
+        ordered = sorted(
+            [row for row in rows if row["model"] == model],
+            key=lambda row: int(row["weight_category_count"]),
+        )
+        counts = [int(row["weight_category_count"]) for row in ordered]
+        stds = [float(row["mae_std_between_seeds"]) for row in ordered]
+        ranges = [float(row["mae_range_between_seeds"]) for row in ordered]
+        ax.plot(counts, stds, marker="o", label=f"{model} desvio")
+        ax.plot(counts, ranges, marker="o", label=f"{model} range")
     ax.set_xlabel("Quantidade de Categorias de Peso")
     ax.set_ylabel("MAE (kg)")
     ax.set_title("Variação do MAE entre seeds")
@@ -192,6 +200,7 @@ def run_category_comparison(
             seeds,
             parse_int(training["n_estimators"], "training.n_estimators"),
             parse_int(training["random_state"], "training.random_state"),
+            parse_model_names(training),
         )
         for row in fold_metrics:
             fold_metric_rows.append({"weight_category_count": str(category_count), **row})
@@ -209,6 +218,7 @@ def run_category_comparison(
         output_dir / "category_comparison_overall.csv",
         [
             "weight_category_count",
+            "model",
             "split_random_states",
             "mae_mean",
             "mae_std_between_seeds",

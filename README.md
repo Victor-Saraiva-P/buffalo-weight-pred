@@ -50,7 +50,7 @@ Gerar divisão estratificada e gráfico de categorias de peso:
 PYTHON=.venv/bin/python make split
 ```
 
-Treinar baseline Random Forest com kfold estratificado:
+Treinar baseline com Random Forest e XGBoost usando kfold estratificado:
 
 ```bash
 PYTHON=.venv/bin/python make train
@@ -80,8 +80,8 @@ PYTHON=.venv/bin/python make compare-categories
 
 Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Use `CATEGORY_COUNTS` para explorar mais granularidades. Ele gera arquivos em `generated/diagnostics/`:
 
-- `category_comparison_overall.csv`: resumo por quantidade de categorias.
-- `category_comparison_fold_metrics.csv`: métricas por quantidade de categorias, seed e fold.
+- `category_comparison_overall.csv`: resumo por quantidade de categorias e modelo.
+- `category_comparison_fold_metrics.csv`: métricas por quantidade de categorias, modelo, seed e fold.
 - `category_comparison_split_balance.csv`: distribuição de validação por categoria, seed e fold.
 - `category_comparison_mae.png`: MAE médio por quantidade de categorias.
 - `category_comparison_seed_variation.png`: variação do MAE entre seeds por quantidade de categorias.

@@ -14,7 +14,9 @@ from buffalo_weight.config import load_config
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
-MODEL_NAME = "random_forest"
+RANDOM_FOREST_MODEL = "random_forest"
+XGBOOST_MODEL = "xgboost"
+DEFAULT_MODELS = [RANDOM_FOREST_MODEL]
 
 
 def parse_float(value: str, column: str, file_name: str) -> float:
@@ -56,8 +58,28 @@ def format_metric(value: float) -> str:
     return f"{value:.12g}"
 
 
-def evaluate_random_forest(
-    rows: list[dict[str, str]], feature_columns: list[str], n_estimators: int, random_state: int
+def build_model(model_name: str, n_estimators: int, random_state: int):
+    if model_name == RANDOM_FOREST_MODEL:
+        return RandomForestRegressor(n_estimators=n_estimators, random_state=random_state)
+    if model_name == XGBOOST_MODEL:
+        try:
+            from xgboost import XGBRegressor
+        except ImportError as error:
+            raise ValueError("xgboost dependency is required for training.models: xgboost") from error
+        return XGBRegressor(
+            n_estimators=n_estimators,
+            random_state=random_state,
+            objective="reg:squarederror",
+        )
+    raise ValueError(f"unsupported model: {model_name}")
+
+
+def evaluate_model(
+    rows: list[dict[str, str]],
+    feature_columns: list[str],
+    model_name: str,
+    n_estimators: int,
+    random_state: int,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     metrics = []
     predictions = []
@@ -69,7 +91,7 @@ def evaluate_random_forest(
         x_train, y_train = rows_to_arrays(train_rows, feature_columns)
         x_validation, y_validation = rows_to_arrays(validation_rows, feature_columns)
 
-        model = RandomForestRegressor(n_estimators=n_estimators, random_state=random_state)
+        model = build_model(model_name, n_estimators, random_state)
         model.fit(x_train, y_train)
         y_pred = model.predict(x_validation)
 
@@ -78,7 +100,7 @@ def evaluate_random_forest(
         r2 = r2_score(y_validation, y_pred) if len(validation_rows) > 1 else math.nan
         metrics.append(
             {
-                "model": MODEL_NAME,
+                "model": model_name,
                 "fold": str(fold),
                 "mae": format_metric(mae),
                 "rmse": format_metric(rmse),
@@ -92,7 +114,7 @@ def evaluate_random_forest(
             error = float(predicted - actual)
             predictions.append(
                 {
-                    "model": MODEL_NAME,
+                    "model": model_name,
                     "fold": str(fold),
                     "file_name": row["file_name"],
                     "weight": format_metric(float(actual)),
@@ -104,6 +126,37 @@ def evaluate_random_forest(
                 }
             )
     return metrics, predictions
+
+
+def evaluate_models(
+    rows: list[dict[str, str]],
+    feature_columns: list[str],
+    model_names: list[str],
+    n_estimators: int,
+    random_state: int,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    metrics = []
+    predictions = []
+    for model_name in model_names:
+        model_metrics, model_predictions = evaluate_model(
+            rows, feature_columns, model_name, n_estimators, random_state
+        )
+        metrics.extend(model_metrics)
+        predictions.extend(model_predictions)
+    return metrics, predictions
+
+
+def evaluate_random_forest(
+    rows: list[dict[str, str]], feature_columns: list[str], n_estimators: int, random_state: int
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    return evaluate_model(rows, feature_columns, RANDOM_FOREST_MODEL, n_estimators, random_state)
+
+
+def parse_model_names(training: dict[object, object]) -> list[str]:
+    models = training.get("models", DEFAULT_MODELS)
+    if not isinstance(models, list) or not models:
+        raise ValueError("config training.models must be a non-empty list")
+    return [str(model) for model in models]
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -158,9 +211,10 @@ def train(config_path: Path) -> None:
     feature_rows = read_rows(Path(str(output["features_index_path"])))
     split_rows = read_rows(Path(str(training["split_path"])))
     rows = join_rows(feature_rows, split_rows)
-    metrics, predictions = evaluate_random_forest(
+    metrics, predictions = evaluate_models(
         rows,
         [str(column) for column in feature_columns],
+        parse_model_names(training),
         parse_int(training["n_estimators"], "training.n_estimators"),
         parse_int(training["random_state"], "training.random_state"),
     )

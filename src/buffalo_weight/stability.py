@@ -9,7 +9,7 @@ from pathlib import Path
 
 from buffalo_weight.config import load_config
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, read_rows
-from buffalo_weight.train import evaluate_random_forest, format_metric
+from buffalo_weight.train import evaluate_models, format_metric, parse_model_names
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -25,16 +25,19 @@ def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> 
 def save_seed_mae_plot(seed_summaries: list[dict[str, str]], path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    rows = sorted(seed_summaries, key=lambda row: int(row["split_random_state"]))
-    seeds = [int(row["split_random_state"]) for row in rows]
-    mae_means = [float(row["mae_mean"]) for row in rows]
-    mae_mins = [float(row["mae_min"]) for row in rows]
-    mae_maxs = [float(row["mae_max"]) for row in rows]
-
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(seeds, mae_means, marker="o", linewidth=1.5, label="MAE medio")
-    ax.fill_between(seeds, mae_mins, mae_maxs, alpha=0.2, label="Min-max entre folds")
+    for model in sorted({row["model"] for row in seed_summaries}):
+        rows = sorted(
+            [row for row in seed_summaries if row["model"] == model],
+            key=lambda row: int(row["split_random_state"]),
+        )
+        seeds = [int(row["split_random_state"]) for row in rows]
+        mae_means = [float(row["mae_mean"]) for row in rows]
+        mae_mins = [float(row["mae_min"]) for row in rows]
+        mae_maxs = [float(row["mae_max"]) for row in rows]
+        ax.plot(seeds, mae_means, marker="o", linewidth=1.5, label=f"{model} MAE medio")
+        ax.fill_between(seeds, mae_mins, mae_maxs, alpha=0.15)
     ax.set_xlabel("split.random_state")
     ax.set_ylabel("MAE (kg)")
     ax.set_title("Estabilidade do MAE medio entre seeds")
@@ -51,18 +54,25 @@ def save_fold_mae_plot(fold_metrics: list[dict[str, str]], path: Path) -> None:
     folds = sorted({int(row["fold"]) for row in fold_metrics})
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(9, 5))
-    for fold in folds:
-        rows = sorted(
-            [row for row in fold_metrics if int(row["fold"]) == fold],
-            key=lambda row: int(row["split_random_state"]),
-        )
-        ax.plot(
-            [int(row["split_random_state"]) for row in rows],
-            [float(row["mae"]) for row in rows],
-            marker="o",
-            linewidth=1,
-            label=f"Fold {fold}",
-        )
+    for model in sorted({row["model"] for row in fold_metrics}):
+        for fold in folds:
+            rows = sorted(
+                [
+                    row
+                    for row in fold_metrics
+                    if int(row["fold"]) == fold and row["model"] == model
+                ],
+                key=lambda row: int(row["split_random_state"]),
+            )
+            if not rows:
+                continue
+            ax.plot(
+                [int(row["split_random_state"]) for row in rows],
+                [float(row["mae"]) for row in rows],
+                marker="o",
+                linewidth=1,
+                label=f"{model} Fold {fold}",
+            )
     ax.set_xlabel("split.random_state")
     ax.set_ylabel("MAE (kg)")
     ax.set_title("MAE por fold em cada seed")
@@ -97,12 +107,13 @@ def metric_values(rows: list[dict[str, str]], column: str) -> list[float]:
     return [float(row[column]) for row in rows if row[column] and not math.isnan(float(row[column]))]
 
 
-def summarize_seed(seed: int, metrics: list[dict[str, str]]) -> dict[str, str]:
+def summarize_seed(seed: int, model: str, metrics: list[dict[str, str]]) -> dict[str, str]:
     maes = metric_values(metrics, "mae")
     rmses = metric_values(metrics, "rmse")
     r2s = metric_values(metrics, "r2")
     return {
         "split_random_state": str(seed),
+        "model": model,
         "mae_mean": format_metric(statistics.mean(maes)),
         "mae_std": format_metric(statistics.pstdev(maes) if len(maes) > 1 else 0.0),
         "mae_min": format_metric(min(maes)),
@@ -114,30 +125,36 @@ def summarize_seed(seed: int, metrics: list[dict[str, str]]) -> dict[str, str]:
 
 
 def summarize_overall(seed_summaries: list[dict[str, str]]) -> list[dict[str, str]]:
-    maes = metric_values(seed_summaries, "mae_mean")
-    return [
-        {
-            "split_random_states": str(len(seed_summaries)),
-            "mae_mean": format_metric(statistics.mean(maes)),
-            "mae_std_between_seeds": format_metric(statistics.pstdev(maes) if len(maes) > 1 else 0.0),
-            "mae_min_seed": format_metric(min(maes)),
-            "mae_max_seed": format_metric(max(maes)),
-            "mae_range_between_seeds": format_metric(max(maes) - min(maes)),
-        }
-    ]
+    summaries = []
+    for model in sorted({row["model"] for row in seed_summaries}):
+        rows = [row for row in seed_summaries if row["model"] == model]
+        maes = metric_values(rows, "mae_mean")
+        summaries.append(
+            {
+                "model": model,
+                "split_random_states": str(len(rows)),
+                "mae_mean": format_metric(statistics.mean(maes)),
+                "mae_std_between_seeds": format_metric(statistics.pstdev(maes) if len(maes) > 1 else 0.0),
+                "mae_min_seed": format_metric(min(maes)),
+                "mae_max_seed": format_metric(max(maes)),
+                "mae_range_between_seeds": format_metric(max(maes) - min(maes)),
+            }
+        )
+    return summaries
 
 
 def summarize_predictions(prediction_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     grouped: dict[str, list[dict[str, str]]] = {}
     for row in prediction_rows:
-        grouped.setdefault(row["file_name"], []).append(row)
+        grouped.setdefault(f"{row['model']}\0{row['file_name']}", []).append(row)
 
     summaries = []
-    for file_name, rows in grouped.items():
+    for _, rows in grouped.items():
         abs_errors = metric_values(rows, "abs_error")
         summaries.append(
             {
-                "file_name": file_name,
+                "model": rows[0]["model"],
+                "file_name": rows[0]["file_name"],
                 "weight": rows[0]["weight"],
                 "weight_category": rows[0]["weight_category"],
                 "weight_category_label": rows[0]["weight_category_label"],
@@ -157,6 +174,7 @@ def evaluate_split_stability(
     split_random_states: list[int],
     n_estimators: int,
     training_random_state: int,
+    model_names: list[str] | None = None,
 ) -> tuple[
     list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]
 ]:
@@ -168,14 +186,21 @@ def evaluate_split_stability(
         seed_rows = [row.copy() for row in rows]
         assign_weight_categories(seed_rows, weight_category_count)
         assign_folds(seed_rows, k, seed)
-        metrics, seed_predictions = evaluate_random_forest(
-            seed_rows, feature_columns, n_estimators, training_random_state
+        metrics, seed_predictions = evaluate_models(
+            seed_rows,
+            feature_columns,
+            model_names or ["random_forest"],
+            n_estimators,
+            training_random_state,
         )
         for row in metrics:
             fold_metrics.append({"split_random_state": str(seed), **row})
         for row in seed_predictions:
             predictions.append({"split_random_state": str(seed), **row})
-        seed_summaries.append(summarize_seed(seed, metrics))
+        for model in sorted({row["model"] for row in metrics}):
+            seed_summaries.append(
+                summarize_seed(seed, model, [row for row in metrics if row["model"] == model])
+            )
 
     return fold_metrics, seed_summaries, summarize_overall(seed_summaries), summarize_predictions(predictions)
 
@@ -211,6 +236,7 @@ def run_stability(config_path: Path, start_seed: int, seed_count: int, output_di
         split_random_states(start_seed, seed_count),
         parse_int(training["n_estimators"], "training.n_estimators"),
         parse_int(training["random_state"], "training.random_state"),
+        parse_model_names(training),
     )
 
     write_csv(
@@ -232,6 +258,7 @@ def run_stability(config_path: Path, start_seed: int, seed_count: int, output_di
         output_dir / "split_stability_seed_summary.csv",
         [
             "split_random_state",
+            "model",
             "mae_mean",
             "mae_std",
             "mae_min",
@@ -246,6 +273,7 @@ def run_stability(config_path: Path, start_seed: int, seed_count: int, output_di
         output_dir / "split_stability_overall.csv",
         [
             "split_random_states",
+            "model",
             "mae_mean",
             "mae_std_between_seeds",
             "mae_min_seed",
@@ -258,6 +286,7 @@ def run_stability(config_path: Path, start_seed: int, seed_count: int, output_di
         output_dir / "split_stability_hard_examples.csv",
         [
             "file_name",
+            "model",
             "weight",
             "weight_category",
             "weight_category_label",

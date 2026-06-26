@@ -34,7 +34,7 @@ def load_config(path: Path) -> dict[str, object]:
             continue
 
         container: dict[str, object] | list[str]
-        container = [] if key in {"include", "columns", "feature_columns"} else {}
+        container = [] if key in {"include", "columns", "feature_columns", "models"} else {}
         if not isinstance(parent, dict):
             raise ValueError(f"Invalid section in config: {raw_line}")
         parent[key] = container

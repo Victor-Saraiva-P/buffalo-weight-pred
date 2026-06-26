@@ -57,6 +57,9 @@ class CategoryComparisonTest(unittest.TestCase):
                         "training:",
                         "  n_estimators: 5",
                         "  random_state: 42",
+                        "  models:",
+                        "    - random_forest",
+                        "    - xgboost",
                         "  feature_columns:",
                         "    - area",
                         "    - perimeter",
@@ -83,7 +86,9 @@ class CategoryComparisonTest(unittest.TestCase):
             self.assertEqual(
                 {row["weight_category_count"] for row in overall}, {"4", "8"}
             )
-            self.assertEqual(len(fold_metrics), 20)
+            self.assertEqual({row["model"] for row in overall}, {"random_forest", "xgboost"})
+            self.assertEqual(len(overall), 4)
+            self.assertEqual(len(fold_metrics), 40)
             self.assertEqual(
                 {row["weight_category_count"] for row in split_balance}, {"4", "8"}
             )

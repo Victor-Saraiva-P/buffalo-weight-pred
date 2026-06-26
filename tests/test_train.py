@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from buffalo_weight.train import evaluate_random_forest
+from buffalo_weight.train import evaluate_models, evaluate_random_forest
 
 
 class TrainTest(unittest.TestCase):
@@ -52,6 +52,35 @@ class TrainTest(unittest.TestCase):
                 "weight_category_label",
             },
         )
+
+    def test_evaluates_multiple_models(self) -> None:
+        rows = []
+        labels = ["Leves", "Medio-Leves", "Medio-Pesados", "Pesados"]
+        for index in range(20):
+            category = f"Q{(index % 4) + 1}"
+            rows.append(
+                {
+                    "file_name": f"mask-{index:03d}",
+                    "weight": str(100 + index * 10),
+                    "area": str(50 + index),
+                    "perimeter": str(30 + index),
+                    "weight_category": category,
+                    "weight_category_label": labels[index % 4],
+                    "fold": str((index % 5) + 1),
+                }
+            )
+
+        metrics, predictions = evaluate_models(
+            rows,
+            ["area", "perimeter"],
+            model_names=["random_forest", "xgboost"],
+            n_estimators=5,
+            random_state=42,
+        )
+
+        self.assertEqual(len(metrics), 10)
+        self.assertEqual(len(predictions), 40)
+        self.assertEqual({row["model"] for row in metrics}, {"random_forest", "xgboost"})
 
 
 if __name__ == "__main__":

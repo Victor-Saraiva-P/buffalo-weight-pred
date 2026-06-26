@@ -7,9 +7,47 @@ import statistics
 from pathlib import Path
 
 from buffalo_weight.config import load_config
+from buffalo_weight.models import parse_model_configs
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, parse_weight, read_rows
 from buffalo_weight.stability import evaluate_split_stability, split_random_states
-from buffalo_weight.train import parse_model_names
+
+
+OVERALL_FIELDS = [
+    "weight_category_count",
+    "split_random_states",
+    "mae_mean",
+    "mae_std_between_seeds",
+    "mae_min_seed",
+    "mae_max_seed",
+    "mae_range_between_seeds",
+]
+FOLD_METRIC_FIELDS = [
+    "weight_category_count",
+    "split_random_state",
+    "fold",
+    "mae",
+    "rmse",
+    "r2",
+    "n_train",
+    "n_validation",
+]
+SPLIT_BALANCE_FIELDS = [
+    "weight_category_count",
+    "split_random_state",
+    "fold",
+    "weight_category",
+    "n_validation",
+    "weight_min",
+    "weight_median",
+    "weight_max",
+]
+COMPARISON_FIELDS = [
+    "model_config",
+    "model",
+    "weight_category_count",
+    "mae_mean",
+    "mae_std_between_seeds",
+]
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -27,20 +65,20 @@ def save_mae_plot(rows: list[dict[str, str]], path: Path) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 5))
-    for model in sorted({row["model"] for row in rows}):
+    for model_config in sorted({row["model_config"] for row in rows}):
         ordered = sorted(
-            [row for row in rows if row["model"] == model],
+            [row for row in rows if row["model_config"] == model_config],
             key=lambda row: int(row["weight_category_count"]),
         )
         counts = [int(row["weight_category_count"]) for row in ordered]
         means = [float(row["mae_mean"]) for row in ordered]
         stds = [float(row["mae_std_between_seeds"]) for row in ordered]
-        ax.errorbar(counts, means, yerr=stds, marker="o", capsize=5, label=model)
+        ax.errorbar(counts, means, yerr=stds, marker="o", capsize=5, label=model_config)
     ax.set_xlabel("Quantidade de Categorias de Peso")
     ax.set_ylabel("MAE medio (kg)")
     ax.set_title("MAE por granularidade da Categoria de Peso")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(title="Modelo")
+    ax.legend(title="Configuração de Modelo")
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)
@@ -51,16 +89,16 @@ def save_seed_variation_plot(rows: list[dict[str, str]], path: Path) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 5))
-    for model in sorted({row["model"] for row in rows}):
+    for model_config in sorted({row["model_config"] for row in rows}):
         ordered = sorted(
-            [row for row in rows if row["model"] == model],
+            [row for row in rows if row["model_config"] == model_config],
             key=lambda row: int(row["weight_category_count"]),
         )
         counts = [int(row["weight_category_count"]) for row in ordered]
         stds = [float(row["mae_std_between_seeds"]) for row in ordered]
         ranges = [float(row["mae_range_between_seeds"]) for row in ordered]
-        ax.plot(counts, stds, marker="o", label=f"{model} desvio")
-        ax.plot(counts, ranges, marker="o", label=f"{model} range")
+        ax.plot(counts, stds, marker="o", label=f"{model_config} desvio")
+        ax.plot(counts, ranges, marker="o", label=f"{model_config} range")
     ax.set_xlabel("Quantidade de Categorias de Peso")
     ax.set_ylabel("MAE (kg)")
     ax.set_title("Variação do MAE entre seeds")
@@ -164,6 +202,10 @@ def summarize_split_balance(
     return summaries
 
 
+def without_identity(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [{key: value for key, value in row.items() if key not in {"model_config", "model"}} for row in rows]
+
+
 def run_category_comparison(
     config_path: Path,
     category_counts: list[int],
@@ -198,9 +240,7 @@ def run_category_comparison(
             parse_int(split["k"], "split.k"),
             category_count,
             seeds,
-            parse_int(training["n_estimators"], "training.n_estimators"),
-            parse_int(training["random_state"], "training.random_state"),
-            parse_model_names(training),
+            parse_model_configs(training),
         )
         for row in fold_metrics:
             fold_metric_rows.append({"weight_category_count": str(category_count), **row})
@@ -213,52 +253,33 @@ def run_category_comparison(
                 )
             )
 
-    write_csv(
-        overall_rows,
-        output_dir / "category_comparison_overall.csv",
-        [
-            "weight_category_count",
-            "model",
-            "split_random_states",
-            "mae_mean",
-            "mae_std_between_seeds",
-            "mae_min_seed",
-            "mae_max_seed",
-            "mae_range_between_seeds",
-        ],
-    )
-    write_csv(
-        fold_metric_rows,
-        output_dir / "category_comparison_fold_metrics.csv",
-        [
-            "weight_category_count",
-            "split_random_state",
-            "model",
-            "fold",
-            "mae",
-            "rmse",
-            "r2",
-            "n_train",
-            "n_validation",
-        ],
-    )
+    for model_config in sorted({row["model_config"] for row in overall_rows}):
+        config_dir = output_dir / model_config
+        config_overall = [row for row in overall_rows if row["model_config"] == model_config]
+        config_fold_metrics = [row for row in fold_metric_rows if row["model_config"] == model_config]
+        write_csv(without_identity(config_overall), config_dir / "overall.csv", OVERALL_FIELDS)
+        write_csv(without_identity(config_fold_metrics), config_dir / "fold_metrics.csv", FOLD_METRIC_FIELDS)
+        save_mae_plot(config_overall, config_dir / "mae.png")
+        save_seed_variation_plot(config_overall, config_dir / "seed_variation.png")
+
     write_csv(
         split_balance_rows,
-        output_dir / "category_comparison_split_balance.csv",
-        [
-            "weight_category_count",
-            "split_random_state",
-            "fold",
-            "weight_category",
-            "n_validation",
-            "weight_min",
-            "weight_median",
-            "weight_max",
-        ],
+        output_dir / "split_balance.csv",
+        SPLIT_BALANCE_FIELDS,
     )
-    save_mae_plot(overall_rows, output_dir / "category_comparison_mae.png")
-    save_seed_variation_plot(
-        overall_rows, output_dir / "category_comparison_seed_variation.png"
+    comparison = [
+        {
+            "model_config": row["model_config"],
+            "model": row["model"],
+            "weight_category_count": row["weight_category_count"],
+            "mae_mean": row["mae_mean"],
+            "mae_std_between_seeds": row["mae_std_between_seeds"],
+        }
+        for row in overall_rows
+    ]
+    write_csv(comparison, output_dir / "model_comparison.csv", COMPARISON_FIELDS)
+    save_mae_plot(
+        overall_rows, output_dir / "model_comparison.png"
     )
     for category_count in category_counts:
         split_rows = assign_split(
@@ -266,11 +287,11 @@ def run_category_comparison(
         )
         save_weight_scatter_plot(
             split_rows,
-            output_dir / f"category_comparison_weight_scatter_c{category_count}.png",
+            output_dir / f"weight_scatter_c{category_count}.png",
         )
         save_weight_heatmap_plot(
             split_rows,
-            output_dir / f"category_comparison_weight_heatmap_c{category_count}.png",
+            output_dir / f"weight_heatmap_c{category_count}.png",
         )
 
 
@@ -284,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--category-counts", default="4,6,8")
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--seed-count", type=int, default=30)
-    parser.add_argument("--output-dir", default="generated/diagnostics")
+    parser.add_argument("--output-dir", default="generated/compare-categories")
     args = parser.parse_args(argv)
 
     try:

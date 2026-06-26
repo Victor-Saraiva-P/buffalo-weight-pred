@@ -55,11 +55,17 @@ class CategoryComparisonTest(unittest.TestCase):
                         "split:",
                         "  k: 5",
                         "training:",
-                        "  n_estimators: 5",
-                        "  random_state: 42",
-                        "  models:",
-                        "    - random_forest",
-                        "    - xgboost",
+                        "  model_configs:",
+                        "    random_forest_baseline:",
+                        "      model: random_forest",
+                        "      params:",
+                        "        n_estimators: 5",
+                        "        random_state: 42",
+                        "    xgboost_baseline:",
+                        "      model: xgboost",
+                        "      params:",
+                        "        n_estimators: 5",
+                        "        random_state: 42",
                         "  feature_columns:",
                         "    - area",
                         "    - perimeter",
@@ -76,27 +82,31 @@ class CategoryComparisonTest(unittest.TestCase):
                 output_dir=output_dir,
             )
 
-            with (output_dir / "category_comparison_overall.csv").open() as file:
+            with (output_dir / "model_comparison.csv").open() as file:
                 overall = list(csv.DictReader(file))
-            with (output_dir / "category_comparison_fold_metrics.csv").open() as file:
+            with (output_dir / "random_forest_baseline" / "fold_metrics.csv").open() as file:
                 fold_metrics = list(csv.DictReader(file))
-            with (output_dir / "category_comparison_split_balance.csv").open() as file:
+            with (output_dir / "split_balance.csv").open() as file:
                 split_balance = list(csv.DictReader(file))
 
             self.assertEqual(
                 {row["weight_category_count"] for row in overall}, {"4", "8"}
             )
-            self.assertEqual({row["model"] for row in overall}, {"random_forest", "xgboost"})
+            self.assertEqual(
+                {row["model_config"] for row in overall},
+                {"random_forest_baseline", "xgboost_baseline"},
+            )
             self.assertEqual(len(overall), 4)
-            self.assertEqual(len(fold_metrics), 40)
+            self.assertEqual(len(fold_metrics), 20)
             self.assertEqual(
                 {row["weight_category_count"] for row in split_balance}, {"4", "8"}
             )
             self.assertEqual(set(split_balance[0]), {"weight_category_count", "split_random_state", "fold", "weight_category", "n_validation", "weight_min", "weight_median", "weight_max"})
-            self.assertTrue((output_dir / "category_comparison_mae.png").exists())
-            self.assertTrue((output_dir / "category_comparison_seed_variation.png").exists())
-            self.assertTrue((output_dir / "category_comparison_weight_scatter_c4.png").exists())
-            self.assertTrue((output_dir / "category_comparison_weight_heatmap_c8.png").exists())
+            self.assertTrue((output_dir / "model_comparison.png").exists())
+            self.assertTrue((output_dir / "random_forest_baseline" / "mae.png").exists())
+            self.assertTrue((output_dir / "random_forest_baseline" / "seed_variation.png").exists())
+            self.assertTrue((output_dir / "weight_scatter_c4.png").exists())
+            self.assertTrue((output_dir / "weight_heatmap_c8.png").exists())
 
 
 if __name__ == "__main__":

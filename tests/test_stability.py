@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from buffalo_weight.models import ModelConfig
 from buffalo_weight.stability import evaluate_split_stability, run_stability, split_random_states
 
 
@@ -34,15 +35,20 @@ class StabilityTest(unittest.TestCase):
             k=5,
             weight_category_count=4,
             split_random_states=[0, 1, 2],
-            n_estimators=5,
-            training_random_state=42,
+            model_configs=[
+                ModelConfig(
+                    "random_forest_baseline",
+                    "random_forest",
+                    {"n_estimators": 5, "random_state": 42},
+                )
+            ],
         )
 
         self.assertEqual(len(fold_metrics), 15)
         self.assertEqual(len(seed_summaries), 3)
         self.assertEqual(overall[0]["split_random_states"], "3")
         self.assertEqual(len(hard_examples), 40)
-        self.assertEqual(set(fold_metrics[0]), {"split_random_state", "model", "fold", "mae", "rmse", "r2", "n_train", "n_validation"})
+        self.assertEqual(set(fold_metrics[0]), {"split_random_state", "model_config", "model", "fold", "mae", "rmse", "r2", "n_train", "n_validation"})
 
     def test_rejects_empty_seed_count(self) -> None:
         with self.assertRaisesRegex(ValueError, "--seed-count must be at least 1"):
@@ -95,8 +101,12 @@ class StabilityTest(unittest.TestCase):
                         "  k: 5",
                         "  weight_category_count: 8",
                         "training:",
-                        "  n_estimators: 5",
-                        "  random_state: 42",
+                        "  model_configs:",
+                        "    random_forest_baseline:",
+                        "      model: random_forest",
+                        "      params:",
+                        "        n_estimators: 5",
+                        "        random_state: 42",
                         "  feature_columns:",
                         "    - area",
                         "    - perimeter",
@@ -107,7 +117,7 @@ class StabilityTest(unittest.TestCase):
 
             run_stability(config_path, start_seed=0, seed_count=1, output_dir=output_dir)
 
-            with (output_dir / "split_stability_hard_examples.csv").open() as file:
+            with (output_dir / "random_forest_baseline" / "hard_examples.csv").open() as file:
                 hard_examples = list(csv.DictReader(file))
             self.assertEqual(
                 {row["weight_category"] for row in hard_examples},

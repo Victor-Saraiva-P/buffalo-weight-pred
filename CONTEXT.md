@@ -32,6 +32,14 @@ _Avoid_: Banco de dados, tabela temporária
 Etapa que usa features geométricas extraídas de máscaras binarizadas para avaliar modelos de predição do peso vivo dos búfalos.
 _Avoid_: Avaliação de segmentação, treinamento de segmentação
 
+**Modelo Clássico de Predição**:
+Modelo supervisionado tradicional usado na Etapa de Predição de Peso para estimar peso vivo a partir de features geométricas.
+_Avoid_: IA, modelo de segmentação, rede neural quando o modelo avaliado não for uma rede neural
+
+**Configuração de Modelo**:
+Variação nomeada de um Modelo Clássico de Predição, usada para comparar diferentes hiperparâmetros ou tipos de modelo na mesma avaliação.
+_Avoid_: Modelo quando o texto se refere à variação nomeada, IA
+
 **Categoria de Peso**:
 Grupo definido por faixas quantílicas globais do peso dos animais no dataset inteiro, usado para balancear a avaliação entre faixas de peso absoluto.
 As categorias são nomeadas com códigos neutros (`B1`, `B2`, ...), acompanhados por rótulos como `Faixa 1`, `Faixa 2`, ... para evitar assumir quartis quando a quantidade de faixas é configurável.

@@ -28,7 +28,7 @@ train: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train --config $(CONFIG)
 
 stability: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --config $(CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --config $(CONFIG) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
 
 compare-categories: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.category_comparison --config $(CONFIG) --category-counts $(CATEGORY_COUNTS) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from buffalo_weight.models import ModelConfig
 from buffalo_weight.train import evaluate_models, evaluate_random_forest
 
 
@@ -32,16 +33,18 @@ class TrainTest(unittest.TestCase):
 
         self.assertEqual(len(metrics), 5)
         self.assertEqual(len(predictions), 20)
+        self.assertEqual({row["model_config"] for row in metrics}, {"random_forest"})
         self.assertEqual({row["model"] for row in metrics}, {"random_forest"})
         self.assertEqual({row["fold"] for row in metrics}, {"1", "2", "3", "4", "5"})
         self.assertEqual(
             set(metrics[0]),
-            {"model", "fold", "mae", "rmse", "r2", "n_train", "n_validation"},
+            {"model_config", "model", "fold", "mae", "rmse", "r2", "n_train", "n_validation"},
         )
         self.assertEqual(
             set(predictions[0]),
             {
                 "model",
+                "model_config",
                 "fold",
                 "file_name",
                 "weight",
@@ -73,13 +76,26 @@ class TrainTest(unittest.TestCase):
         metrics, predictions = evaluate_models(
             rows,
             ["area", "perimeter"],
-            model_names=["random_forest", "xgboost"],
-            n_estimators=5,
-            random_state=42,
+            model_configs=[
+                ModelConfig(
+                    "random_forest_baseline",
+                    "random_forest",
+                    {"n_estimators": 5, "random_state": 42},
+                ),
+                ModelConfig(
+                    "xgboost_baseline",
+                    "xgboost",
+                    {"n_estimators": 5, "random_state": 42},
+                ),
+            ],
         )
 
         self.assertEqual(len(metrics), 10)
         self.assertEqual(len(predictions), 40)
+        self.assertEqual(
+            {row["model_config"] for row in metrics},
+            {"random_forest_baseline", "xgboost_baseline"},
+        )
         self.assertEqual({row["model"] for row in metrics}, {"random_forest", "xgboost"})
 
 

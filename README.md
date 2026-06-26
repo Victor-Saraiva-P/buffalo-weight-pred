@@ -56,21 +56,24 @@ Treinar baseline com Random Forest e XGBoost usando kfold estratificado:
 PYTHON=.venv/bin/python make train
 ```
 
+O treino gera arquivos em `generated/train/`, com um diretório por Configuração de Modelo e `model_comparison.csv`/`model_comparison.png` na raiz para comparação geral.
+
 Medir estabilidade da divisão estratificada entre diferentes `split.random_state`:
 
 ```bash
 PYTHON=.venv/bin/python make stability
 ```
 
-Esse diagnóstico gera arquivos em `generated/diagnostics/`:
+Esse diagnóstico gera arquivos em `generated/stability/`:
 
-- `split_stability_fold_metrics.csv`: métricas por seed e fold.
-- `split_stability_seed_summary.csv`: média, desvio, mínimo e máximo de MAE por seed.
-- `split_stability_overall.csv`: variação do MAE médio entre seeds.
-- `split_stability_hard_examples.csv`: máscaras com maior erro absoluto médio quando aparecem em validação.
-- `split_stability_seed_mae.png`: gráfico do MAE médio por seed com faixa mínimo-máximo entre folds.
-- `split_stability_fold_mae.png`: gráfico do MAE de cada fold em cada seed.
-- `split_stability_hard_examples.png`: gráfico das máscaras com maior erro absoluto médio.
+- `<configuração_de_modelo>/fold_metrics.csv`: métricas por seed e fold.
+- `<configuração_de_modelo>/seed_summary.csv`: média, desvio, mínimo e máximo de MAE por seed.
+- `<configuração_de_modelo>/overall.csv`: variação do MAE médio entre seeds.
+- `<configuração_de_modelo>/hard_examples.csv`: máscaras com maior erro absoluto médio quando aparecem em validação.
+- `<configuração_de_modelo>/seed_mae.png`: gráfico do MAE médio por seed com faixa mínimo-máximo entre folds.
+- `<configuração_de_modelo>/fold_mae.png`: gráfico do MAE de cada fold em cada seed.
+- `<configuração_de_modelo>/hard_examples.png`: gráfico das máscaras com maior erro absoluto médio.
+- `model_comparison.csv` e `model_comparison.png`: comparação entre Configurações de Modelo.
 
 Comparar granularidades de `Categoria de Peso` na divisão estratificada:
 
@@ -78,15 +81,16 @@ Comparar granularidades de `Categoria de Peso` na divisão estratificada:
 PYTHON=.venv/bin/python make compare-categories
 ```
 
-Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Use `CATEGORY_COUNTS` para explorar mais granularidades. Ele gera arquivos em `generated/diagnostics/`:
+Por padrão, esse diagnóstico compara 4, 6 e 8 categorias com 30 seeds. Use `CATEGORY_COUNTS` para explorar mais granularidades. Ele gera arquivos em `generated/compare-categories/`:
 
-- `category_comparison_overall.csv`: resumo por quantidade de categorias e modelo.
-- `category_comparison_fold_metrics.csv`: métricas por quantidade de categorias, modelo, seed e fold.
-- `category_comparison_split_balance.csv`: distribuição de validação por categoria, seed e fold.
-- `category_comparison_mae.png`: MAE médio por quantidade de categorias.
-- `category_comparison_seed_variation.png`: variação do MAE entre seeds por quantidade de categorias.
-- `category_comparison_weight_scatter_c4.png`, `c6`, `c8`: distribuição de pesos por fold.
-- `category_comparison_weight_heatmap_c4.png`, `c6`, `c8`: contagem por fold e categoria.
+- `<configuração_de_modelo>/overall.csv`: resumo por quantidade de categorias.
+- `<configuração_de_modelo>/fold_metrics.csv`: métricas por quantidade de categorias, seed e fold.
+- `<configuração_de_modelo>/mae.png`: MAE médio por quantidade de categorias.
+- `<configuração_de_modelo>/seed_variation.png`: variação do MAE entre seeds por quantidade de categorias.
+- `split_balance.csv`: distribuição de validação por categoria, seed e fold.
+- `weight_scatter_c4.png`, `c6`, `c8`: distribuição de pesos por fold.
+- `weight_heatmap_c4.png`, `c6`, `c8`: contagem por fold e categoria.
+- `model_comparison.csv` e `model_comparison.png`: comparação entre Configurações de Modelo.
 
 Para rodadas rápidas, ajuste as variáveis do Makefile:
 

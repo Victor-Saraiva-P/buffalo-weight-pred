@@ -28,19 +28,25 @@ split:
   random_state: 42
   weight_category_count: 10
   split_path: generated/splits/baseline_kfold_split.csv
-  distribution_plot_data_path: generated/plots/baseline_weight_categories.csv
-  distribution_plot_path: generated/plots/baseline_weight_categories.png
+  distribution_plot_data_path: generated/splits/baseline_weight_categories.csv
+  distribution_plot_path: generated/splits/baseline_weight_categories.png
 
 training:
   split_path: generated/splits/baseline_kfold_split.csv
-  metrics_path: generated/plots/baseline_model_fold_metrics.csv
-  metrics_plot_path: generated/plots/baseline_model_fold_metrics.png
-  predictions_path: generated/predictions/baseline_model_predictions.csv
-  random_state: 42
-  n_estimators: 200
-  models:
-    - random_forest
-    - xgboost
+  output_dir: generated/train
+  model_configs:
+    random_forest_baseline:
+      model: random_forest
+      params:
+        n_estimators: 200
+        random_state: 42
+    xgboost_baseline:
+      model: xgboost
+      params:
+        n_estimators: 200
+        random_state: 42
+        learning_rate: 0.05
+        max_depth: 3
   feature_columns:
     - area
     - perimeter

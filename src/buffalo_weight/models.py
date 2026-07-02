@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestRegressor
 MODEL_CONFIG_PATTERN = re.compile(r"^[a-z0-9_]+$")
 RANDOM_FOREST_MODEL = "random_forest"
 XGBOOST_MODEL = "xgboost"
+CNN_MASK_MODEL = "cnn_mask"
 
 
 @dataclass(frozen=True)
@@ -37,10 +38,21 @@ ALLOWED_PARAMS = {
         "reg_lambda",
         "reg_alpha",
     },
+    CNN_MASK_MODEL: {
+        "epochs",
+        "batch_size",
+        "learning_rate",
+        "image_size",
+        "weight_decay",
+        "random_state",
+        "patience",
+        "augment",
+    },
 }
 REQUIRED_PARAMS = {
     RANDOM_FOREST_MODEL: {"n_estimators", "random_state"},
     XGBOOST_MODEL: {"n_estimators", "random_state"},
+    CNN_MASK_MODEL: {"epochs", "batch_size", "learning_rate", "image_size", "random_state"},
 }
 
 
@@ -93,4 +105,6 @@ def build_model(config: ModelConfig):
         except ImportError as error:
             raise ValueError("xgboost dependency is required for model xgboost") from error
         return XGBRegressor(**config.params, objective="reg:squarederror")
+    if config.model == CNN_MASK_MODEL:
+        raise ValueError("cnn_mask must be trained from mask rows, not feature arrays")
     raise ValueError(f"unsupported model: {config.model}")

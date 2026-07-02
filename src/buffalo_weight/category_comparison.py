@@ -217,6 +217,7 @@ def run_category_comparison(
     output = config["output"]
     split = config["split"]
     training = config["training"]
+    data = config.get("data")
     if not isinstance(output, dict):
         raise ValueError("config output section must be a map")
     if not isinstance(split, dict):
@@ -233,6 +234,7 @@ def run_category_comparison(
     fold_metric_rows = []
     split_balance_rows = []
     seeds = split_random_states(start_seed, seed_count)
+    masks_dir = Path(str(data["masks_dir"])) if isinstance(data, dict) and "masks_dir" in data else None
     for category_count in category_counts:
         fold_metrics, _, overall, _ = evaluate_split_stability(
             feature_rows,
@@ -241,6 +243,7 @@ def run_category_comparison(
             category_count,
             seeds,
             parse_model_configs(training),
+            masks_dir,
         )
         for row in fold_metrics:
             fold_metric_rows.append({"weight_category_count": str(category_count), **row})
@@ -295,13 +298,94 @@ def run_category_comparison(
         )
 
 
+def run_category_comparison_with_configs(
+    shared_config_path: Path,
+    models_config_path: Path,
+    category_counts: list[int],
+    start_seed: int,
+    seed_count: int,
+    output_dir: Path,
+) -> None:
+    shared_config = load_config(shared_config_path)
+    models_config = load_config(models_config_path)
+    features = shared_config["features"]
+    split = shared_config["split"]
+    data = shared_config.get("data")
+    if not isinstance(features, dict):
+        raise ValueError("shared config features section must be a map")
+    if not isinstance(split, dict):
+        raise ValueError("shared config split section must be a map")
+
+    feature_columns = models_config["feature_columns"]
+    if not isinstance(feature_columns, list):
+        raise ValueError("classical models config feature_columns must be a list")
+
+    feature_rows = read_rows(Path(str(features["features_index_path"])))
+    overall_rows = []
+    fold_metric_rows = []
+    split_balance_rows = []
+    seeds = split_random_states(start_seed, seed_count)
+    masks_dir = Path(str(data["masks_dir"])) if isinstance(data, dict) and "masks_dir" in data else None
+    for category_count in category_counts:
+        fold_metrics, _, overall, _ = evaluate_split_stability(
+            feature_rows,
+            [str(column) for column in feature_columns],
+            parse_int(split["k"], "split.k"),
+            category_count,
+            seeds,
+            parse_model_configs(models_config),
+            masks_dir,
+        )
+        for row in fold_metrics:
+            fold_metric_rows.append({"weight_category_count": str(category_count), **row})
+        for row in overall:
+            overall_rows.append({"weight_category_count": str(category_count), **row})
+        for seed in seeds:
+            split_balance_rows.extend(
+                summarize_split_balance(
+                    feature_rows, category_count, seed, parse_int(split["k"], "split.k")
+                )
+            )
+
+    for model_config in sorted({row["model_config"] for row in overall_rows}):
+        config_dir = output_dir / model_config
+        config_overall = [row for row in overall_rows if row["model_config"] == model_config]
+        config_fold_metrics = [row for row in fold_metric_rows if row["model_config"] == model_config]
+        write_csv(without_identity(config_overall), config_dir / "overall.csv", OVERALL_FIELDS)
+        write_csv(without_identity(config_fold_metrics), config_dir / "fold_metrics.csv", FOLD_METRIC_FIELDS)
+        save_mae_plot(config_overall, config_dir / "mae.png")
+        save_seed_variation_plot(config_overall, config_dir / "seed_variation.png")
+
+    write_csv(split_balance_rows, output_dir / "split_balance.csv", SPLIT_BALANCE_FIELDS)
+    comparison = [
+        {
+            "model_config": row["model_config"],
+            "model": row["model"],
+            "weight_category_count": row["weight_category_count"],
+            "mae_mean": row["mae_mean"],
+            "mae_std_between_seeds": row["mae_std_between_seeds"],
+        }
+        for row in overall_rows
+    ]
+    write_csv(comparison, output_dir / "model_comparison.csv", COMPARISON_FIELDS)
+    save_mae_plot(overall_rows, output_dir / "model_comparison.png")
+    for category_count in category_counts:
+        split_rows = assign_split(
+            feature_rows, category_count, start_seed, parse_int(split["k"], "split.k")
+        )
+        save_weight_scatter_plot(split_rows, output_dir / f"weight_scatter_c{category_count}.png")
+        save_weight_heatmap_plot(split_rows, output_dir / f"weight_heatmap_c{category_count}.png")
+
+
 def parse_category_counts(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--config")
+    parser.add_argument("--shared-config")
+    parser.add_argument("--models-config")
     parser.add_argument("--category-counts", default="4,6,8")
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--seed-count", type=int, default=30)
@@ -309,13 +393,25 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        run_category_comparison(
-            Path(args.config),
-            parse_category_counts(args.category_counts),
-            args.start_seed,
-            args.seed_count,
-            Path(args.output_dir),
-        )
+        if args.config:
+            run_category_comparison(
+                Path(args.config),
+                parse_category_counts(args.category_counts),
+                args.start_seed,
+                args.seed_count,
+                Path(args.output_dir),
+            )
+        elif args.shared_config and args.models_config:
+            run_category_comparison_with_configs(
+                Path(args.shared_config),
+                Path(args.models_config),
+                parse_category_counts(args.category_counts),
+                args.start_seed,
+                args.seed_count,
+                Path(args.output_dir),
+            )
+        else:
+            raise ValueError("provide --config or --shared-config with --models-config")
     except (KeyError, ValueError, FileNotFoundError) as error:
         print(error, file=sys.stderr)
         return 1

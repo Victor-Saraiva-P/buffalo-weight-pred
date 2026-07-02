@@ -17,15 +17,15 @@ Somente máscaras presentes no `indice.xlsx` devem ser usadas no treinamento.
 
 ## Configuração
 
-Cada experimento deve ter sua própria configuração em `configs/`.
+`configs/shared.yaml` define dados, Índice de Features, Divisão Estratificada e diretório de treino compartilhados.
 
-O primeiro experimento usa `configs/baseline.yaml`. Essa configuração define os caminhos dos dados, coluna-alvo e colunas do arquivo gerado com as features calculadas.
+`configs/classical_models.yaml` define Configurações de Modelo para Modelos Clássicos de Predição e as colunas de features usadas por eles.
 
-Essa separação permite gerar bases futuras com outras features sem misturar decisões entre experimentos.
+`configs/cnn_mask_models.yaml` define Configurações de Modelo para Modelos de Predição por Máscara. Essas configurações usam pixels da Máscara Binarizada diretamente e não usam `feature_columns`.
 
 ## Arquivos Gerados
 
-`generated/` deve conter artefatos derivados de `data/`, como índices de features calculadas a partir das máscaras binarizadas.
+`generated/` deve conter artefatos derivados de `data/`, como o Índice de Features e a Divisão Estratificada.
 
 Esses arquivos podem ser recriados a partir de `data/` e das configurações em `configs/`.
 
@@ -50,13 +50,40 @@ Gerar divisão estratificada e gráfico de categorias de peso:
 PYTHON=.venv/bin/python make split
 ```
 
-Treinar baseline com Random Forest e XGBoost usando kfold estratificado:
+Treinar modelos usando kfold estratificado:
 
 ```bash
 PYTHON=.venv/bin/python make train
 ```
 
-O treino gera arquivos em `generated/train/`, com um diretório por Configuração de Modelo e `model_comparison.csv`/`model_comparison.png` na raiz para comparação geral.
+`make train` valida os artefatos já gerados, treina primeiro os Modelos Clássicos de Predição, depois os Modelos de Predição por Máscara, e por fim recria `model_comparison.csv`/`model_comparison.png` em `generated/train/`.
+
+O treino gera um diretório por Configuração de Modelo em `generated/train/`. Cada diretório inclui `predicted_vs_actual.png`, que marca os maiores erros no gráfico de peso real vs predito.
+
+Também é possível testar um Modelo de Predição por Máscara com `model: cnn_mask`. Esse modelo usa a Máscara Binarizada diretamente e requer PyTorch instalado no ambiente. Exemplo de Configuração de Modelo:
+
+```yaml
+cnn_mask_baseline:
+  model: cnn_mask
+  params:
+    epochs: 80
+    batch_size: 16
+    learning_rate: 0.001
+    image_size: 128
+    random_state: 42
+    weight_decay: 0.0001
+    patience: 10
+    augment: true
+```
+
+Também é possível rodar cada família diretamente:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m buffalo_weight.train_classical --shared-config configs/shared.yaml --models-config configs/classical_models.yaml
+PYTHONPATH=src .venv/bin/python -m buffalo_weight.train_cnn_mask --shared-config configs/shared.yaml --models-config configs/cnn_mask_models.yaml
+```
+
+Antes do treino, os arquivos gerados devem estar consistentes com o Índice de Máscaras: o Índice de Features, a Divisão Estratificada e `data/conjunto-de-mascaras/` devem conter exatamente os mesmos nomes de arquivo definidos em `data/indice.xlsx`. Máscaras extras, faltantes, duplicadas por extensão ou com valores diferentes de `0/255` são rejeitadas.
 
 Medir estabilidade da divisão estratificada entre diferentes `split.random_state`:
 

@@ -121,7 +121,6 @@ class FeatureCliTest(unittest.TestCase):
             config_path.write_text(
                 "\n".join(
                     [
-                        "name: test_features",
                         "data:",
                         "  index_path: data/indice.xlsx",
                         "  masks_dir: data/conjunto-de-mascaras",
@@ -129,7 +128,7 @@ class FeatureCliTest(unittest.TestCase):
                         "  farm_column: Fazenda",
                         "  target_column: Peso",
                         "  tag_column: Tags",
-                        "output:",
+                        "features:",
                         "  features_index_path: generated/features.csv",
                         "  columns:",
                         "    - file_name",
@@ -144,7 +143,7 @@ class FeatureCliTest(unittest.TestCase):
             env = os.environ.copy()
             env["PYTHONPATH"] = str(Path.cwd() / "src")
             result = subprocess.run(
-                [sys.executable, "-m", "buffalo_weight.features", "--config", str(config_path)],
+                [sys.executable, "-m", "buffalo_weight.features", "--shared-config", str(config_path)],
                 cwd=root,
                 env=env,
                 text=True,
@@ -180,7 +179,6 @@ class FeatureCliTest(unittest.TestCase):
             config_path.write_text(
                 "\n".join(
                     [
-                        "name: test_features",
                         "data:",
                         "  index_path: data/indice.xlsx",
                         "  masks_dir: data/conjunto-de-mascaras",
@@ -188,7 +186,7 @@ class FeatureCliTest(unittest.TestCase):
                         "  farm_column: Fazenda",
                         "  target_column: Peso",
                         "  tag_column: Tags",
-                        "output:",
+                        "features:",
                         "  features_index_path: generated/features.csv",
                         "  columns:",
                         "    - file_name",
@@ -203,7 +201,7 @@ class FeatureCliTest(unittest.TestCase):
             env = os.environ.copy()
             env["PYTHONPATH"] = str(Path.cwd() / "src")
             result = subprocess.run(
-                [sys.executable, "-m", "buffalo_weight.features", "--config", str(config_path)],
+                [sys.executable, "-m", "buffalo_weight.features", "--shared-config", str(config_path)],
                 cwd=root,
                 env=env,
                 text=True,

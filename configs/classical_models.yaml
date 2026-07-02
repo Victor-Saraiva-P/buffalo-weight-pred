@@ -1,0 +1,31 @@
+model_configs:
+  random_forest_baseline:
+    model: random_forest
+    params:
+      n_estimators: 200
+      random_state: 42
+  xgboost_baseline:
+    model: xgboost
+    params:
+      n_estimators: 200
+      random_state: 42
+      learning_rate: 0.05
+      max_depth: 3
+
+feature_columns:
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2

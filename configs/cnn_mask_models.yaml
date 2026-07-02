@@ -1,0 +1,12 @@
+model_configs:
+  cnn_mask_baseline:
+    model: cnn_mask
+    params:
+      epochs: 220
+      batch_size: 16
+      learning_rate: 0.0005
+      image_size: 64
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 30
+      augment: true

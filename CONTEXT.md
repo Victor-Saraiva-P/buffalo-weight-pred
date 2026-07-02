@@ -40,6 +40,10 @@ _Avoid_: IA, modelo de segmentação, rede neural quando o modelo avaliado não 
 Variação nomeada de um Modelo Clássico de Predição, usada para comparar diferentes hiperparâmetros ou tipos de modelo na mesma avaliação.
 _Avoid_: Modelo quando o texto se refere à variação nomeada, IA
 
+**Modelo de Predição por Máscara**:
+Modelo supervisionado que estima peso vivo diretamente a partir da Máscara Binarizada, sem depender do Índice de Features como entrada principal.
+_Avoid_: Modelo Clássico de Predição quando o modelo lê pixels da máscara
+
 **Categoria de Peso**:
 Grupo definido por faixas quantílicas globais do peso dos animais no dataset inteiro, usado para balancear a avaliação entre faixas de peso absoluto.
 As categorias são nomeadas com códigos neutros (`B1`, `B2`, ...), acompanhados por rótulos como `Faixa 1`, `Faixa 2`, ... para evitar assumir quartis quando a quantidade de faixas é configurável.

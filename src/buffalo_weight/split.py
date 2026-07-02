@@ -124,14 +124,14 @@ def plot_weight_distribution(rows: list[dict[str, str]], path: Path) -> None:
 
 def generate_split(config_path: Path) -> None:
     config = load_config(config_path)
-    output = config["output"]
+    features = config["features"]
     split = config["split"]
-    if not isinstance(output, dict):
-        raise ValueError("config output section must be a map")
+    if not isinstance(features, dict):
+        raise ValueError("config features section must be a map")
     if not isinstance(split, dict):
         raise ValueError("config split section must be a map")
 
-    rows = read_rows(Path(str(output["features_index_path"])))
+    rows = read_rows(Path(str(features["features_index_path"])))
     if not rows:
         raise ValueError("feature index is empty")
 
@@ -147,11 +147,11 @@ def generate_split(config_path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--shared-config", required=True)
     args = parser.parse_args(argv)
 
     try:
-        generate_split(Path(args.config))
+        generate_split(Path(args.shared_config))
     except (KeyError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1

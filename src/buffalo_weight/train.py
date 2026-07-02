@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import math
 import sys
@@ -9,8 +8,8 @@ from pathlib import Path
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from buffalo_weight.config import load_config
-from buffalo_weight.models import ModelConfig, build_model, parse_model_configs
+from buffalo_weight.cnn_mask import CnnMaskRegressor
+from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, build_model, parse_model_configs
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
@@ -71,6 +70,7 @@ def evaluate_model(
     rows: list[dict[str, str]],
     feature_columns: list[str],
     model_config: ModelConfig,
+    masks_dir: Path | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     metrics = []
     predictions = []
@@ -79,12 +79,23 @@ def evaluate_model(
     for fold in folds:
         train_rows = [row for row in rows if int(row["fold"]) != fold]
         validation_rows = [row for row in rows if int(row["fold"]) == fold]
-        x_train, y_train = rows_to_arrays(train_rows, feature_columns)
-        x_validation, y_validation = rows_to_arrays(validation_rows, feature_columns)
+        y_validation = np.asarray(
+            [parse_weight(row["weight"], row.get("file_name", "")) for row in validation_rows],
+            dtype=float,
+        )
 
-        model = build_model(model_config)
-        model.fit(x_train, y_train)
-        y_pred = model.predict(x_validation)
+        if model_config.model == CNN_MASK_MODEL:
+            if masks_dir is None:
+                raise ValueError("cnn_mask requires data.masks_dir")
+            model = CnnMaskRegressor(masks_dir, model_config.params)
+            model.fit(train_rows, validation_rows)
+            y_pred = model.predict(validation_rows)
+        else:
+            x_train, y_train = rows_to_arrays(train_rows, feature_columns)
+            x_validation, _ = rows_to_arrays(validation_rows, feature_columns)
+            model = build_model(model_config)
+            model.fit(x_train, y_train)
+            y_pred = model.predict(x_validation)
 
         mae = mean_absolute_error(y_validation, y_pred)
         rmse = mean_squared_error(y_validation, y_pred) ** 0.5
@@ -125,11 +136,12 @@ def evaluate_models(
     rows: list[dict[str, str]],
     feature_columns: list[str],
     model_configs: list[ModelConfig],
+    masks_dir: Path | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     metrics = []
     predictions = []
     for model_config in model_configs:
-        model_metrics, model_predictions = evaluate_model(rows, feature_columns, model_config)
+        model_metrics, model_predictions = evaluate_model(rows, feature_columns, model_config, masks_dir)
         metrics.extend(model_metrics)
         predictions.extend(model_predictions)
     return metrics, predictions
@@ -220,33 +232,57 @@ def plot_model_comparison(rows: list[dict[str, str]], path: Path) -> None:
     plt.close(fig)
 
 
+def plot_predicted_vs_actual(
+    predictions: list[dict[str, str]], path: Path, title: str, hard_limit: int = 10
+) -> None:
+    import matplotlib.pyplot as plt
+
+    weights = [float(row["weight"]) for row in predictions]
+    predicted = [float(row["y_pred"]) for row in predictions]
+    hard_rows = sorted(predictions, key=lambda row: float(row["abs_error"]), reverse=True)[:hard_limit]
+    min_value = min(weights + predicted)
+    max_value = max(weights + predicted)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.scatter(weights, predicted, alpha=0.65, label="Predições")
+    ax.scatter(
+        [float(row["weight"]) for row in hard_rows],
+        [float(row["y_pred"]) for row in hard_rows],
+        color="#d95f02",
+        edgecolor="black",
+        linewidth=0.6,
+        label=f"Top {len(hard_rows)} erros",
+    )
+    for row in hard_rows:
+        ax.annotate(
+            row["file_name"][:8],
+            (float(row["weight"]), float(row["y_pred"])),
+            fontsize=7,
+            xytext=(4, 4),
+            textcoords="offset points",
+        )
+    ax.plot([min_value, max_value], [min_value, max_value], linestyle="--", color="black", linewidth=1)
+    ax.set_xlabel("Peso real (kg)")
+    ax.set_ylabel("Peso predito (kg)")
+    ax.set_title(title)
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
 def without_identity(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return [{key: value for key, value in row.items() if key not in {"model_config", "model"}} for row in rows]
 
 
-def train(config_path: Path) -> None:
-    config = load_config(config_path)
-    output = config["output"]
-    training = config["training"]
-    if not isinstance(output, dict):
-        raise ValueError("config output section must be a map")
-    if not isinstance(training, dict):
-        raise ValueError("config training section must be a map")
-    feature_columns = training["feature_columns"]
-    if not isinstance(feature_columns, list):
-        raise ValueError("config training.feature_columns must be a list")
-
-    feature_rows = read_rows(Path(str(output["features_index_path"])))
-    split_rows = read_rows(Path(str(training["split_path"])))
-    rows = join_rows(feature_rows, split_rows)
-    model_configs = parse_model_configs(training)
-    metrics, predictions = evaluate_models(
-        rows,
-        [str(column) for column in feature_columns],
-        model_configs,
-    )
-    output_dir = Path(str(training.get("output_dir", "generated/train")))
-
+def write_training_outputs(
+    output_dir: Path,
+    model_configs: list[ModelConfig],
+    metrics: list[dict[str, str]],
+    predictions: list[dict[str, str]],
+) -> None:
     for model_config in model_configs:
         config_dir = output_dir / model_config.name
         config_metrics = [row for row in metrics if row["model_config"] == model_config.name]
@@ -258,23 +294,31 @@ def train(config_path: Path) -> None:
             config_dir / "fold_mae.png",
             f"{model_config.name} ({model_config.model}) - MAE por fold",
         )
+        plot_predicted_vs_actual(
+            config_predictions,
+            config_dir / "predicted_vs_actual.png",
+            f"{model_config.name} ({model_config.model}) - Peso real vs predito",
+        )
 
+
+def write_model_comparison_from_outputs(output_dir: Path, model_configs: list[ModelConfig]) -> None:
+    metrics = []
+    by_name = {model_config.name: model_config for model_config in model_configs}
+    for model_config in model_configs:
+        path = output_dir / model_config.name / "fold_metrics.csv"
+        for row in read_rows(path):
+            metrics.append({"model_config": model_config.name, "model": by_name[model_config.name].model, **row})
     comparison = summarize_model_comparison(metrics)
     write_csv(comparison, output_dir / "model_comparison.csv", COMPARISON_FIELDS)
     plot_model_comparison(comparison, output_dir / "model_comparison.png")
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
-    args = parser.parse_args(argv)
-
-    try:
-        train(Path(args.config))
-    except (KeyError, ValueError) as error:
-        print(error, file=sys.stderr)
-        return 1
-    return 0
+def main() -> int:
+    print(
+        "buffalo_weight.train is a shared training library; use buffalo_weight.train_pipeline",
+        file=sys.stderr,
+    )
+    return 1
 
 
 if __name__ == "__main__":

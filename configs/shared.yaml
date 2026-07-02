@@ -1,0 +1,42 @@
+data:
+  index_path: data/indice.xlsx
+  masks_dir: data/conjunto-de-mascaras
+  file_name_column: Nome do arquivo
+  farm_column: Fazenda
+  target_column: Peso
+  tag_column: Tags
+
+features:
+  features_index_path: generated/features.csv
+  columns:
+    - file_name
+    - farm
+    - weight
+    - tag
+    - area
+    - perimeter
+    - solidity
+    - circularity
+    - equivalent_diameter
+    - bbox_width
+    - bbox_height
+    - bbox_area
+    - aspect_ratio
+    - extent
+    - convex_area
+    - convexity
+    - major_axis_length
+    - minor_axis_length
+    - hu_moment_1
+    - hu_moment_2
+
+split:
+  k: 5
+  random_state: 42
+  weight_category_count: 10
+  split_path: generated/splits/kfold_split.csv
+  distribution_plot_data_path: generated/splits/weight_categories.csv
+  distribution_plot_path: generated/splits/weight_categories.png
+
+training:
+  output_dir: generated/train

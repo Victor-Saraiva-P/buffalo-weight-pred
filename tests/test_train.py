@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from buffalo_weight.models import ModelConfig
+from buffalo_weight.train_classical import train_classical
+from buffalo_weight.train_cnn_mask import train_cnn_mask
 from buffalo_weight.train import evaluate_models, evaluate_random_forest
 
 
@@ -97,6 +100,14 @@ class TrainTest(unittest.TestCase):
             {"random_forest_baseline", "xgboost_baseline"},
         )
         self.assertEqual({row["model"] for row in metrics}, {"random_forest", "xgboost"})
+
+    def test_train_classical_rejects_mask_prediction_model(self) -> None:
+        with self.assertRaisesRegex(ValueError, "train_classical only supports classical prediction models"):
+            train_classical(Path("configs/shared.yaml"), Path("configs/cnn_mask_models.yaml"))
+
+    def test_train_cnn_mask_rejects_classical_prediction_model(self) -> None:
+        with self.assertRaisesRegex(ValueError, "train_cnn_mask only supports mask prediction models"):
+            train_cnn_mask(Path("configs/shared.yaml"), Path("configs/classical_models.yaml"))
 
 
 if __name__ == "__main__":

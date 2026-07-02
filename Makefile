@@ -1,4 +1,6 @@
-CONFIG ?= configs/baseline.yaml
+SHARED_CONFIG ?= configs/shared.yaml
+CLASSICAL_MODELS_CONFIG ?= configs/classical_models.yaml
+CNN_MASK_MODELS_CONFIG ?= configs/cnn_mask_models.yaml
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(PYTHON) -m pip
@@ -19,19 +21,19 @@ $(DEPS_STAMP): requirements.txt | $(PYTHON)
 	touch $(DEPS_STAMP)
 
 features: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.features --config $(CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.features --shared-config $(SHARED_CONFIG)
 
 split: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --config $(CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --shared-config $(SHARED_CONFIG)
 
 train: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train --config $(CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG)
 
 stability: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --config $(CONFIG) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --shared-config $(SHARED_CONFIG) --models-config $(CLASSICAL_MODELS_CONFIG) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
 
 compare-categories: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.category_comparison --config $(CONFIG) --category-counts $(CATEGORY_COUNTS) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.category_comparison --shared-config $(SHARED_CONFIG) --models-config $(CLASSICAL_MODELS_CONFIG) --category-counts $(CATEGORY_COUNTS) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
 
 test: setup
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests

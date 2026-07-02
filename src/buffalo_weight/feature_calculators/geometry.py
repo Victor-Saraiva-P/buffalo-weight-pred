@@ -1,13 +1,6 @@
 from __future__ import annotations
 
 
-def mask_pixels(mask: list[list[bool]]) -> list[tuple[int, int]]:
-    return [
-        (x, y)
-        for y, row in enumerate(mask)
-        for x, value in enumerate(row)
-        if value
-    ]
 
 
 def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -47,3 +40,13 @@ def polygon_area(points: list[tuple[float, float]]) -> float:
         next_point = points[(index + 1) % len(points)]
         total += point[0] * next_point[1] - next_point[0] * point[1]
     return abs(total) / 2.0
+
+
+def polygon_perimeter(points: list[tuple[float, float]]) -> float:
+    if len(points) < 2:
+        return 0.0
+    total = 0.0
+    for index, point in enumerate(points):
+        next_point = points[(index + 1) % len(points)]
+        total += ((point[0] - next_point[0]) ** 2 + (point[1] - next_point[1]) ** 2) ** 0.5
+    return total

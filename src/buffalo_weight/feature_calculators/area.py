@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from buffalo_weight.feature_calculators.context import FeatureContext
 
-def calculate_area(pixels: list[tuple[int, int]]) -> int:
-    return len(pixels)
+
+def calculate_area(ctx: FeatureContext) -> int:
+    return ctx.area

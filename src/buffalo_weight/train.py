@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import math
 import sys
 from pathlib import Path
@@ -9,7 +8,8 @@ import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, build_model, parse_model_configs
+from buffalo_weight.csv_io import write_csv_rows
+from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, build_model
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
@@ -66,6 +66,65 @@ def format_metric(value: float) -> str:
     return f"{value:.12g}"
 
 
+def predict_fold_weights(
+    train_rows: list[dict[str, str]],
+    validation_rows: list[dict[str, str]],
+    feature_columns: list[str],
+    model_config: ModelConfig,
+    masks_dir: Path | None,
+) -> np.ndarray:
+    if model_config.model == CNN_MASK_MODEL:
+        if masks_dir is None:
+            raise ValueError("cnn_mask requires data.masks_dir")
+        model = CnnMaskRegressor(masks_dir, model_config.params)
+        model.fit(train_rows, validation_rows)
+        return model.predict(validation_rows)
+    x_train, y_train = rows_to_arrays(train_rows, feature_columns)
+    x_validation, _ = rows_to_arrays(validation_rows, feature_columns)
+    model = build_model(model_config)
+    model.fit(x_train, y_train)
+    return model.predict(x_validation)
+
+
+def fold_metric_row(
+    fold: int,
+    model_config: ModelConfig,
+    n_train: int,
+    validation_rows: list[dict[str, str]],
+    y_validation: np.ndarray,
+    y_pred: np.ndarray,
+) -> dict[str, str]:
+    r2 = r2_score(y_validation, y_pred) if len(validation_rows) > 1 else math.nan
+    return {
+        "model_config": model_config.name,
+        "model": model_config.model,
+        "fold": str(fold),
+        "mae": format_metric(mean_absolute_error(y_validation, y_pred)),
+        "rmse": format_metric(mean_squared_error(y_validation, y_pred) ** 0.5),
+        "r2": format_metric(r2),
+        "n_train": str(n_train),
+        "n_validation": str(len(validation_rows)),
+    }
+
+
+def prediction_row(
+    row: dict[str, str], fold: int, model_config: ModelConfig, predicted: float, actual: float
+) -> dict[str, str]:
+    error = float(predicted - actual)
+    return {
+        "model_config": model_config.name,
+        "model": model_config.model,
+        "fold": str(fold),
+        "file_name": row["file_name"],
+        "weight": format_metric(float(actual)),
+        "y_pred": format_metric(float(predicted)),
+        "error": format_metric(error),
+        "abs_error": format_metric(abs(error)),
+        "weight_category": row["weight_category"],
+        "weight_category_label": row["weight_category_label"],
+    }
+
+
 def evaluate_model(
     rows: list[dict[str, str]],
     feature_columns: list[str],
@@ -83,52 +142,11 @@ def evaluate_model(
             [parse_weight(row["weight"], row.get("file_name", "")) for row in validation_rows],
             dtype=float,
         )
-
-        if model_config.model == CNN_MASK_MODEL:
-            if masks_dir is None:
-                raise ValueError("cnn_mask requires data.masks_dir")
-            model = CnnMaskRegressor(masks_dir, model_config.params)
-            model.fit(train_rows, validation_rows)
-            y_pred = model.predict(validation_rows)
-        else:
-            x_train, y_train = rows_to_arrays(train_rows, feature_columns)
-            x_validation, _ = rows_to_arrays(validation_rows, feature_columns)
-            model = build_model(model_config)
-            model.fit(x_train, y_train)
-            y_pred = model.predict(x_validation)
-
-        mae = mean_absolute_error(y_validation, y_pred)
-        rmse = mean_squared_error(y_validation, y_pred) ** 0.5
-        r2 = r2_score(y_validation, y_pred) if len(validation_rows) > 1 else math.nan
-        metrics.append(
-            {
-                "model_config": model_config.name,
-                "model": model_config.model,
-                "fold": str(fold),
-                "mae": format_metric(mae),
-                "rmse": format_metric(rmse),
-                "r2": format_metric(r2),
-                "n_train": str(len(train_rows)),
-                "n_validation": str(len(validation_rows)),
-            }
-        )
+        y_pred = predict_fold_weights(train_rows, validation_rows, feature_columns, model_config, masks_dir)
+        metrics.append(fold_metric_row(fold, model_config, len(train_rows), validation_rows, y_validation, y_pred))
 
         for row, predicted, actual in zip(validation_rows, y_pred, y_validation, strict=True):
-            error = float(predicted - actual)
-            predictions.append(
-                {
-                    "model_config": model_config.name,
-                    "model": model_config.model,
-                    "fold": str(fold),
-                    "file_name": row["file_name"],
-                    "weight": format_metric(float(actual)),
-                    "y_pred": format_metric(float(predicted)),
-                    "error": format_metric(error),
-                    "abs_error": format_metric(abs(error)),
-                    "weight_category": row["weight_category"],
-                    "weight_category_label": row["weight_category_label"],
-                }
-            )
+            predictions.append(prediction_row(row, fold, model_config, float(predicted), float(actual)))
     return metrics, predictions
 
 
@@ -159,13 +177,7 @@ def evaluate_random_forest(
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    with temp_path.open("w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-    temp_path.replace(path)
+    write_csv_rows(rows, path, fieldnames)
 
 
 def plot_fold_metrics(metrics: list[dict[str, str]], path: Path, title: str) -> None:

@@ -13,7 +13,7 @@ from buffalo_weight.feature_calculators.geometry import (
 
 
 class FeatureContext:
-    def __init__(self, mask: np.ndarray | Path | str):
+    def __init__(self, mask: np.ndarray | Path | str) -> None:
         if isinstance(mask, (Path, str)):
             from PIL import Image
 

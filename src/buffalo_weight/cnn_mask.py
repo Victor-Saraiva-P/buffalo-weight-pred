@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
 
+from buffalo_weight.models import ModelParam
 from buffalo_weight.split import parse_weight
+
+if TYPE_CHECKING:
+    import torch
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
@@ -32,7 +36,7 @@ def load_mask(path: Path, image_size: int) -> np.ndarray:
 
 
 class CnnMaskRegressor:
-    def __init__(self, masks_dir: Path, params: dict[str, Any]) -> None:
+    def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
         self.masks_dir = masks_dir
         self.image_size = int(params["image_size"])
         self.epochs = int(params["epochs"])
@@ -152,7 +156,7 @@ class CnnMaskRegressor:
         return prediction * self.y_std + self.y_mean
 
 
-def augment_batch(batch, generator):
+def augment_batch(batch: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
     import torch
 
     augmented = batch.clone()

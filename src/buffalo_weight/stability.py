@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 import statistics
 import sys
 from pathlib import Path
 
 from buffalo_weight.config import load_config
+from buffalo_weight.csv_io import write_csv_rows
 from buffalo_weight.models import ModelConfig, parse_model_configs
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, read_rows
 from buffalo_weight.train import evaluate_models, format_metric
@@ -45,13 +45,7 @@ COMPARISON_FIELDS = ["model_config", "model", "mae_mean", "mae_std_between_seeds
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    with temp_path.open("w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-    temp_path.replace(path)
+    write_csv_rows(rows, path, fieldnames)
 
 
 def save_seed_mae_plot(seed_summaries: list[dict[str, str]], path: Path) -> None:

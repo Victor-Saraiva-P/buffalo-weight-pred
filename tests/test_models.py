@@ -53,6 +53,19 @@ class ModelConfigTest(unittest.TestCase):
                 }
             )
 
+    def test_rejects_non_scalar_model_param(self) -> None:
+        with self.assertRaisesRegex(ValueError, "expected a scalar"):
+            parse_model_configs(
+                {
+                    "model_configs": {
+                        "random_forest_baseline": {
+                            "model": "random_forest",
+                            "params": {"n_estimators": [100], "random_state": 42},
+                        }
+                    }
+                }
+            )
+
 
 class CnnMaskTest(unittest.TestCase):
     def test_load_mask_accepts_binary_black_white_mask(self) -> None:

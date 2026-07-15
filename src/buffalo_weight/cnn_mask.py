@@ -11,9 +11,31 @@ from buffalo_weight.split import parse_weight
 
 if TYPE_CHECKING:
     import torch
+    from torch import nn
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
+
+
+class EarlyStopping:
+    def __init__(self, patience: int) -> None:
+        self.patience = patience
+        self.best_loss = float("inf")
+        self.stale_epochs = 0
+        self.best_state: dict[str, torch.Tensor] | None = None
+
+    def observe(self, model: nn.Module, loss: float) -> bool:
+        if loss < self.best_loss:
+            self.best_loss = loss
+            self.stale_epochs = 0
+            self.best_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
+            return False
+        self.stale_epochs += 1
+        return self.stale_epochs >= self.patience
+
+    def restore(self, model: nn.Module) -> None:
+        if self.best_state is not None:
+            model.load_state_dict(self.best_state)
 
 
 def find_mask_path(masks_dir: Path, stem: str) -> Path:
@@ -108,8 +130,7 @@ class CnnMaskRegressor:
         )
         loss_fn = nn.L1Loss()
 
-        best_loss = float("inf")
-        stale_epochs = 0
+        early_stopping = EarlyStopping(self.patience)
         generator = torch.Generator().manual_seed(self.random_state)
         for _ in range(self.epochs):
             order = torch.randperm(len(rows), generator=generator)
@@ -134,13 +155,10 @@ class CnnMaskRegressor:
                 self.model.eval()
                 with torch.no_grad():
                     monitored_loss = float(loss_fn(self.model(validation_x_tensor), validation_y_tensor).item())
-            if monitored_loss < best_loss:
-                best_loss = monitored_loss
-                stale_epochs = 0
-            else:
-                stale_epochs += 1
-                if stale_epochs >= self.patience:
-                    break
+            if early_stopping.observe(self.model, monitored_loss):
+                break
+        if self.patience > 0:
+            early_stopping.restore(self.model)
 
     def predict(self, rows: list[dict[str, str]]) -> np.ndarray:
         if self.model is None:

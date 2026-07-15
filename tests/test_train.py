@@ -2,14 +2,73 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from buffalo_weight.models import ModelConfig
+import numpy as np
+
+from buffalo_weight.models import ModelConfig, ModelParam
 from buffalo_weight.train_classical import train_classical
 from buffalo_weight.train_cnn_mask import train_cnn_mask
-from buffalo_weight.train import evaluate_models, evaluate_random_forest
+from buffalo_weight.train import evaluate_models, evaluate_random_forest, predict_fold_weights
+
+
+class FakeCnnMaskRegressor:
+    fit_rows: list[dict[str, str]] = []
+    early_stopping_rows: list[dict[str, str]] = []
+    predicted_rows: list[dict[str, str]] = []
+
+    def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
+        self.masks_dir = masks_dir
+        self.params = params
+
+    def fit(
+        self, rows: list[dict[str, str]], validation_rows: list[dict[str, str]] | None = None
+    ) -> None:
+        type(self).fit_rows = rows
+        type(self).early_stopping_rows = validation_rows or []
+
+    def predict(self, rows: list[dict[str, str]]) -> np.ndarray:
+        type(self).predicted_rows = rows
+        return np.zeros(len(rows), dtype=float)
 
 
 class TrainTest(unittest.TestCase):
+    def test_cnn_uses_internal_validation_without_exposing_external_fold(self) -> None:
+        train_rows = [
+            {
+                "file_name": f"train-{index}",
+                "weight": str(100 + index),
+                "weight_category": f"B{index % 4}",
+            }
+            for index in range(20)
+        ]
+        external_rows = [{"file_name": "external", "weight": "200", "weight_category": "B1"}]
+        config = ModelConfig(
+            "cnn_mask_baseline",
+            "cnn_mask",
+            {
+                "epochs": 5,
+                "batch_size": 4,
+                "learning_rate": 0.001,
+                "image_size": 64,
+                "random_state": 42,
+                "patience": 2,
+                "validation_fraction": 0.25,
+            },
+        )
+
+        with patch("buffalo_weight.train.CnnMaskRegressor", FakeCnnMaskRegressor):
+            predictions = predict_fold_weights(train_rows, external_rows, [], config, Path("masks"))
+
+        fitted_names = {row["file_name"] for row in FakeCnnMaskRegressor.fit_rows}
+        stopping_names = {row["file_name"] for row in FakeCnnMaskRegressor.early_stopping_rows}
+        self.assertEqual(len(FakeCnnMaskRegressor.early_stopping_rows), 5)
+        self.assertEqual(fitted_names | stopping_names, {row["file_name"] for row in train_rows})
+        self.assertFalse(fitted_names & stopping_names)
+        self.assertEqual(FakeCnnMaskRegressor.predicted_rows, external_rows)
+        self.assertNotIn("external", fitted_names | stopping_names)
+        np.testing.assert_array_equal(predictions, np.zeros(1))
+
     def test_evaluates_random_forest_by_fold(self) -> None:
         rows = []
         labels = ["Leves", "Medio-Leves", "Medio-Pesados", "Pesados"]

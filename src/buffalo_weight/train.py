@@ -6,10 +6,11 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
 from buffalo_weight.csv_io import write_csv_rows
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, build_model
+from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, ModelParam, build_model
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
@@ -66,6 +67,35 @@ def format_metric(value: float) -> str:
     return f"{value:.12g}"
 
 
+def _cnn_stratification_labels(rows: list[dict[str, str]], fraction: float) -> list[str] | None:
+    labels = [row["weight_category"] for row in rows]
+    category_count = len(set(labels))
+    validation_size = math.ceil(len(rows) * fraction)
+    training_size = len(rows) - validation_size
+    category_sizes = [labels.count(label) for label in set(labels)]
+    if min(category_sizes) >= 2 and min(validation_size, training_size) >= category_count:
+        return labels
+    return None
+
+
+def split_cnn_training_rows(
+    rows: list[dict[str, str]], params: dict[str, ModelParam]
+) -> tuple[list[dict[str, str]], list[dict[str, str]] | None]:
+    if int(params.get("patience", 0)) <= 0:
+        return rows, None
+    fraction = float(params.get("validation_fraction", 0.2))
+    if not 0.0 < fraction < 1.0 or len(rows) < 2:
+        raise ValueError(
+            f"cnn validation split was fraction={fraction}, rows={len(rows)}; "
+            "expected 0 < fraction < 1 and at least 2 rows"
+        )
+    labels = _cnn_stratification_labels(rows, fraction)
+    fit_rows, stopping_rows = train_test_split(
+        rows, test_size=fraction, random_state=int(params["random_state"]), stratify=labels
+    )
+    return list(fit_rows), list(stopping_rows)
+
+
 def predict_fold_weights(
     train_rows: list[dict[str, str]],
     validation_rows: list[dict[str, str]],
@@ -77,7 +107,8 @@ def predict_fold_weights(
         if masks_dir is None:
             raise ValueError("cnn_mask requires data.masks_dir")
         model = CnnMaskRegressor(masks_dir, model_config.params)
-        model.fit(train_rows, validation_rows)
+        fit_rows, early_stopping_rows = split_cnn_training_rows(train_rows, model_config.params)
+        model.fit(fit_rows, early_stopping_rows)
         return model.predict(validation_rows)
     x_train, y_train = rows_to_arrays(train_rows, feature_columns)
     x_validation, _ = rows_to_arrays(validation_rows, feature_columns)

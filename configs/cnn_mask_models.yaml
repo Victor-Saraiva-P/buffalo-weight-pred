@@ -9,4 +9,5 @@ model_configs:
       random_state: 42
       weight_decay: 0.0001
       patience: 30
+      validation_fraction: 0.2
       augment: true

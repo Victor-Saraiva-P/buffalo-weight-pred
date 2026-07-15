@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from buffalo_weight.cnn_mask import load_mask
+from buffalo_weight.cnn_mask import EarlyStopping, load_mask
 from buffalo_weight.models import parse_model_configs
 
 
@@ -84,6 +84,27 @@ class CnnMaskTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "mask must be binary black/white"):
                 load_mask(path, image_size=2)
+
+    def test_early_stopping_restores_parameters_from_lowest_loss(self) -> None:
+        import torch
+        from torch import nn
+
+        model = nn.Linear(1, 1, bias=False)
+        early_stopping = EarlyStopping(patience=2)
+        with torch.no_grad():
+            model.weight.fill_(1.0)
+        self.assertFalse(early_stopping.observe(model, loss=3.0))
+        with torch.no_grad():
+            model.weight.fill_(2.0)
+        self.assertFalse(early_stopping.observe(model, loss=2.0))
+        with torch.no_grad():
+            model.weight.fill_(9.0)
+        self.assertFalse(early_stopping.observe(model, loss=4.0))
+        self.assertTrue(early_stopping.observe(model, loss=5.0))
+
+        early_stopping.restore(model)
+
+        self.assertEqual(float(model.weight.item()), 2.0)
 
 
 if __name__ == "__main__":

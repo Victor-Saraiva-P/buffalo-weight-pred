@@ -55,6 +55,7 @@ ALLOWED_PARAMS = {
         "random_state",
         "patience",
         "augment",
+        "validation_fraction",
     },
 }
 REQUIRED_PARAMS = {

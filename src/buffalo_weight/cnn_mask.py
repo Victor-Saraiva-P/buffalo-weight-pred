@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image
 
+from buffalo_weight.cnn_architectures import build_mask_network
 from buffalo_weight.models import ModelParam
 from buffalo_weight.split import parse_weight
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
+RESIZE_MODES = frozenset({"letterbox", "stretch"})
 
 
 class EarlyStopping:
@@ -46,21 +48,47 @@ def find_mask_path(masks_dir: Path, stem: str) -> Path:
     raise FileNotFoundError(stem)
 
 
-def load_mask(path: Path, image_size: int) -> np.ndarray:
+def resize_mask(image: Image.Image, image_size: int, resize_mode: str) -> Image.Image:
+    if resize_mode == "stretch":
+        return image.resize((image_size, image_size), Image.Resampling.NEAREST)
+    if resize_mode not in RESIZE_MODES:
+        raise ValueError(f"resize mode was {resize_mode!r}; expected one of {sorted(RESIZE_MODES)}")
+    scale = min(image_size / image.width, image_size / image.height)
+    resized_size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    resized = image.resize(resized_size, Image.Resampling.NEAREST)
+    letterboxed = Image.new("L", (image_size, image_size), 0)
+    offset = ((image_size - resized.width) // 2, (image_size - resized.height) // 2)
+    letterboxed.paste(resized, offset)
+    return letterboxed
+
+
+def load_mask(path: Path, image_size: int, resize_mode: str = "letterbox") -> np.ndarray:
     image = Image.open(path).convert("L")
     values = np.unique(np.asarray(image))
     invalid_values = [int(value) for value in values if value not in (0, 255)]
     if invalid_values:
         preview = ", ".join(str(value) for value in invalid_values[:10])
         raise ValueError(f"mask must be binary black/white (0/255): {path}; found values: {preview}")
-    image = image.resize((image_size, image_size), Image.Resampling.NEAREST)
-    return (np.asarray(image, dtype=np.float32) > 0).astype(np.float32)
+    resized = resize_mask(image, image_size, resize_mode)
+    return (np.asarray(resized, dtype=np.float32) > 0).astype(np.float32)
+
+
+def load_masks(
+    masks_dir: Path, rows: list[dict[str, str]], image_size: int, resize_mode: str = "letterbox"
+) -> np.ndarray:
+    return np.stack(
+        [load_mask(find_mask_path(masks_dir, row["file_name"]), image_size, resize_mode) for row in rows]
+    )
 
 
 class CnnMaskRegressor:
     def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
         self.masks_dir = masks_dir
         self.image_size = int(params["image_size"])
+        self.resize_mode = str(params.get("resize_mode", "letterbox"))
+        self.architecture = str(params.get("architecture", "baseline"))
+        self.pretrained = bool(params.get("pretrained", False))
+        self.fine_tune_mode = str(params.get("fine_tune_mode", "head"))
         self.epochs = int(params["epochs"])
         self.batch_size = int(params["batch_size"])
         self.learning_rate = float(params["learning_rate"])
@@ -82,9 +110,7 @@ class CnnMaskRegressor:
             ) from error
 
         torch.manual_seed(self.random_state)
-        x = np.stack(
-            [load_mask(find_mask_path(self.masks_dir, row["file_name"]), self.image_size) for row in rows]
-        )[:, None, :, :]
+        x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
         y = np.asarray([parse_weight(row["weight"], row["file_name"]) for row in rows], dtype=np.float32)
         self.y_mean = float(y.mean())
         self.y_std = float(y.std() or 1.0)
@@ -94,11 +120,8 @@ class CnnMaskRegressor:
         y_tensor = torch.from_numpy(y_scaled[:, None])
         validation_x_tensor = validation_y_tensor = None
         if validation_rows:
-            validation_x = np.stack(
-                [
-                    load_mask(find_mask_path(self.masks_dir, row["file_name"]), self.image_size)
-                    for row in validation_rows
-                ]
+            validation_x = load_masks(
+                self.masks_dir, validation_rows, self.image_size, self.resize_mode
             )[:, None, :, :]
             validation_y = np.asarray(
                 [parse_weight(row["weight"], row["file_name"]) for row in validation_rows], dtype=np.float32
@@ -106,27 +129,10 @@ class CnnMaskRegressor:
             validation_y_scaled = (validation_y - self.y_mean) / self.y_std
             validation_x_tensor = torch.from_numpy(validation_x)
             validation_y_tensor = torch.from_numpy(validation_y_scaled[:, None])
-        self.model = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=5, padding=2),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d(4),
-            nn.Flatten(),
-            nn.Dropout(0.25),
-            nn.Linear(64 * 4 * 4, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-        )
+        self.model = build_mask_network(self.architecture, self.pretrained, self.fine_tune_mode)
+        trainable_parameters = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
+            trainable_parameters, lr=self.learning_rate, weight_decay=self.weight_decay
         )
         loss_fn = nn.L1Loss()
 
@@ -165,31 +171,40 @@ class CnnMaskRegressor:
             raise ValueError("cnn_mask model has not been fitted")
         import torch
 
-        x = np.stack(
-            [load_mask(find_mask_path(self.masks_dir, row["file_name"]), self.image_size) for row in rows]
-        )[:, None, :, :]
+        x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
         self.model.eval()
         with torch.no_grad():
             prediction = self.model(torch.from_numpy(x)).numpy().reshape(-1)
         return prediction * self.y_std + self.y_mean
 
 
+def _translate_mask(mask: torch.Tensor, shift_y: int, shift_x: int) -> torch.Tensor:
+    import torch
+
+    translated = torch.roll(mask, shifts=(shift_y, shift_x), dims=(1, 2))
+    if shift_y > 0:
+        translated[:, :shift_y, :] = 0
+    elif shift_y < 0:
+        translated[:, shift_y:, :] = 0
+    if shift_x > 0:
+        translated[:, :, :shift_x] = 0
+    elif shift_x < 0:
+        translated[:, :, shift_x:] = 0
+    return translated
+
+
+def _augment_mask(mask: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
+    import torch
+
+    augmented = mask.clone()
+    if torch.rand((), generator=generator) < 0.5:
+        augmented = torch.flip(augmented, dims=[2])
+    shift_y = int(torch.randint(-4, 5, (), generator=generator).item())
+    shift_x = int(torch.randint(-4, 5, (), generator=generator).item())
+    return _translate_mask(augmented, shift_y, shift_x)
+
+
 def augment_batch(batch: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
     import torch
 
-    augmented = batch.clone()
-    if torch.rand((), generator=generator) < 0.5:
-        augmented = torch.flip(augmented, dims=[3])
-    shift_y = int(torch.randint(-4, 5, (), generator=generator).item())
-    shift_x = int(torch.randint(-4, 5, (), generator=generator).item())
-    if shift_y or shift_x:
-        augmented = torch.roll(augmented, shifts=(shift_y, shift_x), dims=(2, 3))
-        if shift_y > 0:
-            augmented[:, :, :shift_y, :] = 0
-        elif shift_y < 0:
-            augmented[:, :, shift_y:, :] = 0
-        if shift_x > 0:
-            augmented[:, :, :, :shift_x] = 0
-        elif shift_x < 0:
-            augmented[:, :, :, shift_x:] = 0
-    return augmented
+    return torch.stack([_augment_mask(mask, generator) for mask in batch])

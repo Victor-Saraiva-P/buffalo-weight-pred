@@ -5,3 +5,4 @@ matplotlib
 xgboost
 pyyaml
 torch
+torchvision

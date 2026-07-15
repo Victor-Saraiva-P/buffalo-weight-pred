@@ -10,7 +10,8 @@ from sklearn.model_selection import train_test_split
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
 from buffalo_weight.csv_io import write_csv_rows
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, ModelParam, build_model
+from buffalo_weight.models import CNN_MASK_MODEL, PCA_SVR_MASK_MODEL, ModelConfig, ModelParam, build_model
+from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
@@ -109,6 +110,12 @@ def predict_fold_weights(
         model = CnnMaskRegressor(masks_dir, model_config.params)
         fit_rows, early_stopping_rows = split_cnn_training_rows(train_rows, model_config.params)
         model.fit(fit_rows, early_stopping_rows)
+        return model.predict(validation_rows)
+    if model_config.model == PCA_SVR_MASK_MODEL:
+        if masks_dir is None:
+            raise ValueError("pca_svr_mask requires data.masks_dir")
+        model = PcaSvrMaskRegressor(masks_dir, model_config.params)
+        model.fit(train_rows)
         return model.predict(validation_rows)
     x_train, y_train = rows_to_arrays(train_rows, feature_columns)
     x_validation, _ = rows_to_arrays(validation_rows, feature_columns)

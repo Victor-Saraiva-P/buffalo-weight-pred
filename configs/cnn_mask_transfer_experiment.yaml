@@ -1,0 +1,49 @@
+model_configs:
+  mobilenet_v3_pretrained_head:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: true
+      fine_tune_mode: head
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  mobilenet_v3_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  mobilenet_v3_random_last_block:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: false
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true

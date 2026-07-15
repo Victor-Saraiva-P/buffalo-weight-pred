@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from buffalo_weight.config import load_config
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, parse_model_configs
+from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
 from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
@@ -15,7 +15,7 @@ def train_cnn_mask(shared_config_path: Path, models_config_path: Path) -> list[M
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
     model_configs = parse_model_configs(models_config)
-    unsupported = [config.name for config in model_configs if config.model != CNN_MASK_MODEL]
+    unsupported = [config.name for config in model_configs if config.model not in MASK_PREDICTION_MODELS]
     if unsupported:
         raise ValueError("train_cnn_mask only supports mask prediction models")
 

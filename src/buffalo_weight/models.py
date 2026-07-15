@@ -12,6 +12,8 @@ MODEL_CONFIG_PATTERN = re.compile(r"^[a-z0-9_]+$")
 RANDOM_FOREST_MODEL = "random_forest"
 XGBOOST_MODEL = "xgboost"
 CNN_MASK_MODEL = "cnn_mask"
+PCA_SVR_MASK_MODEL = "pca_svr_mask"
+MASK_PREDICTION_MODELS = frozenset({CNN_MASK_MODEL, PCA_SVR_MASK_MODEL})
 ModelParam = bool | float | int | str
 
 
@@ -56,12 +58,26 @@ ALLOWED_PARAMS = {
         "patience",
         "augment",
         "validation_fraction",
+        "resize_mode",
+        "architecture",
+        "pretrained",
+        "fine_tune_mode",
+    },
+    PCA_SVR_MASK_MODEL: {
+        "image_size",
+        "n_components",
+        "random_state",
+        "c",
+        "epsilon",
+        "gamma",
+        "resize_mode",
     },
 }
 REQUIRED_PARAMS = {
     RANDOM_FOREST_MODEL: {"n_estimators", "random_state"},
     XGBOOST_MODEL: {"n_estimators", "random_state"},
     CNN_MASK_MODEL: {"epochs", "batch_size", "learning_rate", "image_size", "random_state"},
+    PCA_SVR_MASK_MODEL: {"image_size", "n_components", "random_state"},
 }
 
 
@@ -142,6 +158,6 @@ def build_model(config: ModelConfig) -> ClassicalRegressor:
         except ImportError as error:
             raise ValueError("xgboost dependency is required for model xgboost") from error
         return XGBRegressor(**config.params, objective="reg:squarederror")
-    if config.model == CNN_MASK_MODEL:
-        raise ValueError("cnn_mask must be trained from mask rows, not feature arrays")
+    if config.model in MASK_PREDICTION_MODELS:
+        raise ValueError(f"{config.model} must be trained from mask rows, not feature arrays")
     raise ValueError(f"unsupported model: {config.model}")

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from buffalo_weight.config import load_config
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, parse_model_configs
+from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
 from buffalo_weight.train import evaluate_models, join_rows, write_training_outputs
 from buffalo_weight.validation import validate_feature_index, validate_split
@@ -15,7 +15,7 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
     model_configs = parse_model_configs(models_config)
-    unsupported = [config.name for config in model_configs if config.model == CNN_MASK_MODEL]
+    unsupported = [config.name for config in model_configs if config.model in MASK_PREDICTION_MODELS]
     if unsupported:
         raise ValueError("train_classical only supports classical prediction models")
     feature_columns = models_config["feature_columns"]

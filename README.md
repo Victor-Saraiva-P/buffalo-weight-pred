@@ -21,7 +21,7 @@ Somente máscaras presentes no `indice.xlsx` devem ser usadas no treinamento.
 
 `configs/classical_models.yaml` define Configurações de Modelo para Modelos Clássicos de Predição e as colunas de features usadas por eles.
 
-`configs/cnn_mask_models.yaml` define Configurações de Modelo para Modelos de Predição por Máscara. Essas configurações usam pixels da Máscara Binarizada diretamente e não usam `feature_columns`.
+`configs/cnn_mask_models.yaml` define Configurações de Modelo para Modelos de Predição por Máscara. Essas configurações usam pixels da Máscara Binarizada diretamente e não usam `feature_columns`. O parâmetro `resize_mode` permite comparar `letterbox`, que preserva a proporção original, com `stretch`, que ocupa todo o quadro quadrado.
 
 ## Arquivos Gerados
 
@@ -66,14 +66,49 @@ Também é possível testar um Modelo de Predição por Máscara com `model: cnn
 cnn_mask_baseline:
   model: cnn_mask
   params:
+    architecture: baseline
     epochs: 80
     batch_size: 16
     learning_rate: 0.001
     image_size: 128
+    resize_mode: letterbox
     random_state: 42
     weight_decay: 0.0001
     patience: 10
     augment: true
+```
+
+`architecture` aceita `baseline`, `residual`, `mobilenet_v3_small`, `efficientnet_b0` ou `resnet18`. O experimento isolado de resolução e arquitetura está em `configs/cnn_mask_next_experiment.yaml` e pode ser executado sem alterar a configuração da ablação anterior:
+
+```bash
+CNN_MASK_MODELS_CONFIG=configs/cnn_mask_next_experiment.yaml make train
+```
+
+`architecture: mobilenet_v3_small` usa a MobileNetV3 Small do `torchvision`. A máscara é repetida nos três canais e normalizada como entrada ImageNet, mas nenhum dado RGB é adicionado. O experimento compara pesos pré-treinados com a cabeça congelada, fine-tuning do último bloco e um controle com pesos aleatórios:
+
+```bash
+CNN_MASK_MODELS_CONFIG=configs/cnn_mask_transfer_experiment.yaml make train
+```
+
+O comparativo seguinte mantém o fine-tuning do último estágio e avalia MobileNetV3 Small, EfficientNet-B0 e ResNet-18 sob o mesmo protocolo:
+
+```bash
+CNN_MASK_MODELS_CONFIG=configs/cnn_mask_pretrained_models_experiment.yaml make train
+```
+
+O modelo `pca_svr_mask` oferece um baseline não neural que aplica PCA diretamente aos pixels binários e usa SVR para regressão. A PCA e o SVR são ajustados novamente dentro do treino de cada fold:
+
+```yaml
+pca_svr_mask_baseline:
+  model: pca_svr_mask
+  params:
+    image_size: 128
+    resize_mode: letterbox
+    n_components: 32
+    random_state: 42
+    c: 10.0
+    epsilon: 0.1
+    gamma: scale
 ```
 
 Também é possível rodar cada família diretamente:

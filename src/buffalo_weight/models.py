@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
+
+if TYPE_CHECKING:
+    from xgboost import XGBRegressor
 
 
 MODEL_CONFIG_PATTERN = re.compile(r"^[a-z0-9_]+$")
@@ -21,6 +24,20 @@ class ClassicalRegressor(Protocol):
     def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> object: ...
 
     def predict(self, x_validation: np.ndarray) -> np.ndarray: ...
+
+
+class _XgboostRegressor:
+    def __init__(self, model: XGBRegressor) -> None:
+        self.model = model
+
+    def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> object:
+        self.model.fit(x_train, y_train)
+        return self
+
+    def predict(self, x_validation: np.ndarray) -> np.ndarray:
+        from xgboost import DMatrix
+
+        return self.model.get_booster().predict(DMatrix(x_validation))
 
 
 @dataclass(frozen=True)
@@ -149,15 +166,29 @@ def parse_model_configs(training: dict[object, object]) -> list[ModelConfig]:
     ]
 
 
+def xgboost_compute_params(cuda_available: bool, cuda_build: bool) -> dict[str, str]:
+    """Select XGBoost's accelerated histogram backend, preferring CUDA when usable.
+
+    Example: ``xgboost_compute_params(True, True)`` selects the CUDA device.
+    """
+    device = "cuda" if cuda_available and cuda_build else "cpu"
+    return {"device": device, "tree_method": "hist"}
+
+
 def build_model(config: ModelConfig) -> ClassicalRegressor:
     if config.model == RANDOM_FOREST_MODEL:
         return RandomForestRegressor(**config.params)
     if config.model == XGBOOST_MODEL:
         try:
-            from xgboost import XGBRegressor
+            import torch
+            import xgboost
         except ImportError as error:
-            raise ValueError("xgboost dependency is required for model xgboost") from error
-        return XGBRegressor(**config.params, objective="reg:squarederror")
+            raise ValueError("xgboost and torch dependencies are required for model xgboost") from error
+        compute_params = xgboost_compute_params(
+            torch.cuda.is_available(), bool(xgboost.build_info().get("USE_CUDA", False))
+        )
+        model = xgboost.XGBRegressor(**config.params, **compute_params, objective="reg:squarederror")
+        return _XgboostRegressor(model)
     if config.model in MASK_PREDICTION_MODELS:
         raise ValueError(f"{config.model} must be trained from mask rows, not feature arrays")
     raise ValueError(f"unsupported model: {config.model}")

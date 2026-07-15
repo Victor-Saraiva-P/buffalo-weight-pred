@@ -2,7 +2,7 @@ numpy
 pillow
 scikit-learn
 matplotlib
-xgboost
+xgboost>=2.0
 pyyaml
 torch
 torchvision

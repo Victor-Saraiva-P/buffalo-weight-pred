@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +17,44 @@ from buffalo_weight.cnn_mask import (
     load_masks,
     resolve_device,
 )
-from buffalo_weight.models import parse_model_configs
+from buffalo_weight.models import ModelConfig, build_model, parse_model_configs, xgboost_compute_params
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
 
 
 class ModelConfigTest(unittest.TestCase):
+    def test_xgboost_uses_cuda_histogram_when_available(self) -> None:
+        self.assertEqual(
+            xgboost_compute_params(cuda_available=True, cuda_build=True),
+            {"device": "cuda", "tree_method": "hist"},
+        )
+
+    def test_xgboost_falls_back_to_cpu_without_cuda(self) -> None:
+        self.assertEqual(
+            xgboost_compute_params(cuda_available=False, cuda_build=True),
+            {"device": "cpu", "tree_method": "hist"},
+        )
+
+    def test_xgboost_falls_back_to_cpu_without_cuda_build(self) -> None:
+        self.assertEqual(
+            xgboost_compute_params(cuda_available=True, cuda_build=False),
+            {"device": "cpu", "tree_method": "hist"},
+        )
+
+    def test_xgboost_prediction_avoids_mismatched_device_fallback(self) -> None:
+        model = build_model(
+            ModelConfig("xgboost_test", "xgboost", {"n_estimators": 2, "random_state": 42})
+        )
+        features = np.arange(20, dtype=float).reshape(10, 2)
+        targets = np.arange(10, dtype=float)
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+            model.fit(features, targets)
+            predictions = model.predict(features)
+
+        self.assertEqual(predictions.shape, (10,))
+        self.assertFalse(any("mismatched devices" in str(item.message) for item in caught_warnings))
+
     def test_parses_cnn_mask_model_config(self) -> None:
         configs = parse_model_configs(
             {

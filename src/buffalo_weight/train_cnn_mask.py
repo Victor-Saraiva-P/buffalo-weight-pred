@@ -11,7 +11,9 @@ from buffalo_weight.train import evaluate_models, pending_model_configs, write_t
 from buffalo_weight.validation import validate_mask_files, validate_split
 
 
-def train_cnn_mask(shared_config_path: Path, models_config_path: Path) -> list[ModelConfig]:
+def train_cnn_mask(
+    shared_config_path: Path, models_config_path: Path, device: str = "auto"
+) -> list[ModelConfig]:
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
     model_configs = parse_model_configs(models_config)
@@ -40,6 +42,7 @@ def train_cnn_mask(shared_config_path: Path, models_config_path: Path) -> list[M
             feature_columns=[],
             model_configs=pending_configs,
             masks_dir=Path(str(data["masks_dir"])),
+            device=device,
         )
         write_training_outputs(output_dir, pending_configs, metrics, predictions)
     skipped = [config.name for config in model_configs if config not in pending_configs]
@@ -52,10 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     args = parser.parse_args(argv)
 
     try:
-        train_cnn_mask(Path(args.shared_config), Path(args.models_config))
+        train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
     except (KeyError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1

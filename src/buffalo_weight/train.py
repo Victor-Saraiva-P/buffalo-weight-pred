@@ -112,11 +112,12 @@ def predict_fold_weights(
     feature_columns: list[str],
     model_config: ModelConfig,
     masks_dir: Path | None,
+    device: str = "auto",
 ) -> np.ndarray:
     if model_config.model == CNN_MASK_MODEL:
         if masks_dir is None:
             raise ValueError("cnn_mask requires data.masks_dir")
-        model = CnnMaskRegressor(masks_dir, model_config.params)
+        model = CnnMaskRegressor(masks_dir, model_config.params, device)
         fit_rows, early_stopping_rows = split_cnn_training_rows(train_rows, model_config.params)
         model.fit(fit_rows, early_stopping_rows)
         return model.predict(validation_rows)
@@ -177,6 +178,7 @@ def evaluate_model(
     feature_columns: list[str],
     model_config: ModelConfig,
     masks_dir: Path | None = None,
+    device: str = "auto",
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     metrics = []
     predictions = []
@@ -189,7 +191,7 @@ def evaluate_model(
             [parse_weight(row["weight"], row.get("file_name", "")) for row in validation_rows],
             dtype=float,
         )
-        y_pred = predict_fold_weights(train_rows, validation_rows, feature_columns, model_config, masks_dir)
+        y_pred = predict_fold_weights(train_rows, validation_rows, feature_columns, model_config, masks_dir, device)
         metrics.append(fold_metric_row(fold, model_config, len(train_rows), validation_rows, y_validation, y_pred))
 
         for row, predicted, actual in zip(validation_rows, y_pred, y_validation, strict=True):
@@ -202,11 +204,12 @@ def evaluate_models(
     feature_columns: list[str],
     model_configs: list[ModelConfig],
     masks_dir: Path | None = None,
+    device: str = "auto",
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     metrics = []
     predictions = []
     for model_config in model_configs:
-        model_metrics, model_predictions = evaluate_model(rows, feature_columns, model_config, masks_dir)
+        model_metrics, model_predictions = evaluate_model(rows, feature_columns, model_config, masks_dir, device)
         metrics.extend(model_metrics)
         predictions.extend(model_predictions)
     return metrics, predictions

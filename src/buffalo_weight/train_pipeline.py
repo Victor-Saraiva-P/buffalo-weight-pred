@@ -15,11 +15,12 @@ def train_pipeline(
     shared_config_path: Path,
     classical_models_config_path: Path,
     cnn_mask_models_config_path: Path,
+    device: str = "auto",
 ) -> None:
     shared_config = load_config(shared_config_path)
     validate_mask_files(shared_config)
     classical_configs = train_classical(shared_config_path, classical_models_config_path)
-    cnn_mask_configs = train_cnn_mask(shared_config_path, cnn_mask_models_config_path)
+    cnn_mask_configs = train_cnn_mask(shared_config_path, cnn_mask_models_config_path, device)
     training = shared_config["training"]
     if not isinstance(training, dict):
         raise ValueError("shared config training section must be a map")
@@ -34,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--classical-models-config", required=True)
     parser.add_argument("--cnn-mask-models-config", required=True)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     args = parser.parse_args(argv)
 
     try:
@@ -41,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.shared_config),
             Path(args.classical_models_config),
             Path(args.cnn_mask_models_config),
+            args.device,
         )
     except (KeyError, ValueError, FileNotFoundError) as error:
         print(error, file=sys.stderr)

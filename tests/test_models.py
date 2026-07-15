@@ -8,7 +8,14 @@ import numpy as np
 from PIL import Image
 
 from buffalo_weight.cnn_architectures import build_mask_network
-from buffalo_weight.cnn_mask import EarlyStopping, _translate_mask, augment_batch, load_mask, load_masks
+from buffalo_weight.cnn_mask import (
+    EarlyStopping,
+    _translate_mask,
+    augment_batch,
+    load_mask,
+    load_masks,
+    resolve_device,
+)
 from buffalo_weight.models import parse_model_configs
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
 
@@ -85,6 +92,16 @@ class ModelConfigTest(unittest.TestCase):
 
 
 class CnnMaskTest(unittest.TestCase):
+    def test_auto_device_uses_cuda_when_available(self) -> None:
+        self.assertEqual(resolve_device("auto", lambda: True), "cuda")
+
+    def test_auto_device_falls_back_to_cpu(self) -> None:
+        self.assertEqual(resolve_device("auto", lambda: False), "cpu")
+
+    def test_explicit_cuda_requires_available_device(self) -> None:
+        with self.assertRaisesRegex(ValueError, "CUDA is not available"):
+            resolve_device("cuda", lambda: False)
+
     def test_mask_network_architectures_predict_one_weight_per_mask(self) -> None:
         import torch
 

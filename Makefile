@@ -9,6 +9,7 @@ CATEGORY_COUNTS ?= 4,6,8
 START_SEED ?= 0
 SEED_COUNT ?= 30
 MODELS ?=
+DEVICE ?= auto
 
 .PHONY: setup features split train clean stability compare-categories analyze-features test
 
@@ -28,7 +29,7 @@ split: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --shared-config $(SHARED_CONFIG)
 
 train: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG) --device $(DEVICE)
 
 clean: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.clean_train --shared-config $(SHARED_CONFIG) --models $(MODELS)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,21 @@ if TYPE_CHECKING:
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 RESIZE_MODES = frozenset({"letterbox", "stretch"})
+DEVICES = frozenset({"auto", "cpu", "cuda"})
+
+
+def resolve_device(requested: str, cuda_available: Callable[[], bool]) -> str:
+    """Resolve a requested compute device, using CUDA for ``auto`` when available.
+
+    Example: ``resolve_device("auto", lambda: False)`` returns ``"cpu"``.
+    """
+    if requested not in DEVICES:
+        raise ValueError(f"device was {requested!r}; expected one of {sorted(DEVICES)}")
+    if requested == "auto":
+        return "cuda" if cuda_available() else "cpu"
+    if requested == "cuda" and not cuda_available():
+        raise ValueError("device was 'cuda', but CUDA is not available; expected an available CUDA device")
+    return requested
 
 
 class EarlyStopping:
@@ -82,7 +98,7 @@ def load_masks(
 
 
 class CnnMaskRegressor:
-    def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
+    def __init__(self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "auto") -> None:
         self.masks_dir = masks_dir
         self.image_size = int(params["image_size"])
         self.resize_mode = str(params.get("resize_mode", "letterbox"))
@@ -96,6 +112,8 @@ class CnnMaskRegressor:
         self.weight_decay = float(params.get("weight_decay", 0.0))
         self.patience = int(params.get("patience", 0))
         self.augment = bool(params.get("augment", False))
+        self.requested_device = requested_device
+        self.device = "cpu"
         self.model = None
         self.y_mean = 0.0
         self.y_std = 1.0
@@ -109,7 +127,10 @@ class CnnMaskRegressor:
                 "cnn_mask requires PyTorch. Install torch in the project environment before using model: cnn_mask"
             ) from error
 
+        self.device = resolve_device(self.requested_device, torch.cuda.is_available)
         torch.manual_seed(self.random_state)
+        if self.device == "cuda":
+            torch.cuda.manual_seed_all(self.random_state)
         x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
         y = np.asarray([parse_weight(row["weight"], row["file_name"]) for row in rows], dtype=np.float32)
         self.y_mean = float(y.mean())
@@ -129,7 +150,7 @@ class CnnMaskRegressor:
             validation_y_scaled = (validation_y - self.y_mean) / self.y_std
             validation_x_tensor = torch.from_numpy(validation_x)
             validation_y_tensor = torch.from_numpy(validation_y_scaled[:, None])
-        self.model = build_mask_network(self.architecture, self.pretrained, self.fine_tune_mode)
+        self.model = build_mask_network(self.architecture, self.pretrained, self.fine_tune_mode).to(self.device)
         trainable_parameters = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         optimizer = torch.optim.Adam(
             trainable_parameters, lr=self.learning_rate, weight_decay=self.weight_decay
@@ -147,8 +168,10 @@ class CnnMaskRegressor:
                 batch_x = x_tensor[indexes]
                 if self.augment:
                     batch_x = augment_batch(batch_x, generator)
+                batch_x = batch_x.to(self.device)
+                batch_y = y_tensor[indexes].to(self.device)
                 prediction = self.model(batch_x)
-                loss = loss_fn(prediction, y_tensor[indexes])
+                loss = loss_fn(prediction, batch_y)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -160,7 +183,8 @@ class CnnMaskRegressor:
             if validation_x_tensor is not None and validation_y_tensor is not None:
                 self.model.eval()
                 with torch.no_grad():
-                    monitored_loss = float(loss_fn(self.model(validation_x_tensor), validation_y_tensor).item())
+                    validation_prediction = self.model(validation_x_tensor.to(self.device))
+                    monitored_loss = float(loss_fn(validation_prediction, validation_y_tensor.to(self.device)).item())
             if early_stopping.observe(self.model, monitored_loss):
                 break
         if self.patience > 0:
@@ -174,7 +198,7 @@ class CnnMaskRegressor:
         x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
         self.model.eval()
         with torch.no_grad():
-            prediction = self.model(torch.from_numpy(x)).numpy().reshape(-1)
+            prediction = self.model(torch.from_numpy(x).to(self.device)).cpu().numpy().reshape(-1)
         return prediction * self.y_std + self.y_mean
 
 

@@ -23,9 +23,14 @@ class FakeCnnMaskRegressor:
     early_stopping_rows: list[dict[str, str]] = []
     predicted_rows: list[dict[str, str]] = []
 
-    def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
+    requested_device = ""
+
+    def __init__(
+        self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "auto"
+    ) -> None:
         self.masks_dir = masks_dir
         self.params = params
+        type(self).requested_device = requested_device
 
     def fit(
         self, rows: list[dict[str, str]], validation_rows: list[dict[str, str]] | None = None
@@ -93,6 +98,28 @@ class TrainTest(unittest.TestCase):
         self.assertEqual(FakeCnnMaskRegressor.predicted_rows, external_rows)
         self.assertNotIn("external", fitted_names | stopping_names)
         np.testing.assert_array_equal(predictions, np.zeros(1))
+
+    def test_cnn_receives_requested_device(self) -> None:
+        rows = [
+            {"file_name": "train", "weight": "100", "weight_category": "B1"},
+            {"file_name": "validation", "weight": "120", "weight_category": "B2"},
+        ]
+        config = ModelConfig(
+            "cnn_mask_baseline",
+            "cnn_mask",
+            {
+                "epochs": 1,
+                "batch_size": 1,
+                "learning_rate": 0.001,
+                "image_size": 16,
+                "random_state": 42,
+            },
+        )
+
+        with patch("buffalo_weight.train.CnnMaskRegressor", FakeCnnMaskRegressor):
+            predict_fold_weights(rows[:1], rows[1:], [], config, Path("masks"), device="cuda")
+
+        self.assertEqual(FakeCnnMaskRegressor.requested_device, "cuda")
 
     def test_evaluates_random_forest_by_fold(self) -> None:
         rows = []

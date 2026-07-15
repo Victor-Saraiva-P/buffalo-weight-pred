@@ -74,6 +74,8 @@ make clean MODELS="resnet18_pretrained_last_block mobilenet_v3_pretrained_last_b
 
 Também é possível separar os nomes por vírgula. A limpeza seletiva remove os diretórios indicados e invalida `model_comparison.csv`/`model_comparison.png`. Como o cache é identificado pelo nome da configuração, alterações nos parâmetros de uma configuração existente exigem sua limpeza manual antes de `make train`.
 
+O treino de `cnn_mask` usa CUDA automaticamente quando disponível e usa CPU como fallback. Para forçar um dispositivo, execute `DEVICE=cuda make train` ou `DEVICE=cpu make train`.
+
 O treino gera um diretório por Configuração de Modelo em `generated/train/`. Cada diretório inclui `predicted_vs_actual.png`, que marca os maiores erros no gráfico de peso real vs predito.
 
 Também é possível testar um Modelo de Predição por Máscara com `model: cnn_mask`. Esse modelo usa a Máscara Binarizada diretamente e requer PyTorch instalado no ambiente. Exemplo de Configuração de Modelo:

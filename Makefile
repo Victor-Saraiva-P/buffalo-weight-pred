@@ -8,8 +8,9 @@ DEPS_STAMP ?= $(VENV)/.deps.stamp
 CATEGORY_COUNTS ?= 4,6,8
 START_SEED ?= 0
 SEED_COUNT ?= 30
+MODELS ?=
 
-.PHONY: setup features split train stability compare-categories analyze-features test
+.PHONY: setup features split train clean stability compare-categories analyze-features test
 
 setup: $(DEPS_STAMP)
 
@@ -28,6 +29,9 @@ split: setup
 
 train: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG)
+
+clean: setup
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.clean_train --shared-config $(SHARED_CONFIG) --models $(MODELS)
 
 stability: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.stability --shared-config $(SHARED_CONFIG) --models-config $(CLASSICAL_MODELS_CONFIG) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)

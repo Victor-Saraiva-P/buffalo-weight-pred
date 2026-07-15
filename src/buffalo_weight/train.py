@@ -68,6 +68,15 @@ def format_metric(value: float) -> str:
     return f"{value:.12g}"
 
 
+def pending_model_configs(output_dir: Path, model_configs: list[ModelConfig]) -> list[ModelConfig]:
+    required_files = ("fold_metrics.csv", "predictions.csv")
+    return [
+        config
+        for config in model_configs
+        if not all((output_dir / config.name / file_name).is_file() for file_name in required_files)
+    ]
+
+
 def _cnn_stratification_labels(rows: list[dict[str, str]], fraction: float) -> list[str] | None:
     labels = [row["weight_category"] for row in rows]
     category_count = len(set(labels))

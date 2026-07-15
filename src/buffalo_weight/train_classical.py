@@ -7,7 +7,7 @@ from pathlib import Path
 from buffalo_weight.config import load_config
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
-from buffalo_weight.train import evaluate_models, join_rows, write_training_outputs
+from buffalo_weight.train import evaluate_models, join_rows, pending_model_configs, write_training_outputs
 from buffalo_weight.validation import validate_feature_index, validate_split
 
 
@@ -37,8 +37,14 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
     feature_rows = read_rows(Path(str(features["features_index_path"])))
     split_rows = read_rows(Path(str(split["split_path"])))
     rows = join_rows(feature_rows, split_rows)
-    metrics, predictions = evaluate_models(rows, [str(column) for column in feature_columns], model_configs)
-    write_training_outputs(Path(str(training["output_dir"])), model_configs, metrics, predictions)
+    output_dir = Path(str(training["output_dir"]))
+    pending_configs = pending_model_configs(output_dir, model_configs)
+    if pending_configs:
+        metrics, predictions = evaluate_models(rows, [str(column) for column in feature_columns], pending_configs)
+        write_training_outputs(output_dir, pending_configs, metrics, predictions)
+    skipped = [config.name for config in model_configs if config not in pending_configs]
+    if skipped:
+        print(f"Skipping completed model configs: {', '.join(skipped)}")
     return model_configs
 
 

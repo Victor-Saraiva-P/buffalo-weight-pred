@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,7 +10,12 @@ import numpy as np
 from buffalo_weight.models import ModelConfig, ModelParam
 from buffalo_weight.train_classical import train_classical
 from buffalo_weight.train_cnn_mask import train_cnn_mask
-from buffalo_weight.train import evaluate_models, evaluate_random_forest, predict_fold_weights
+from buffalo_weight.train import (
+    evaluate_models,
+    evaluate_random_forest,
+    pending_model_configs,
+    predict_fold_weights,
+)
 
 
 class FakeCnnMaskRegressor:
@@ -33,6 +39,25 @@ class FakeCnnMaskRegressor:
 
 
 class TrainTest(unittest.TestCase):
+    def test_only_models_with_complete_csv_outputs_are_cached(self) -> None:
+        configs = [
+            ModelConfig("complete", "random_forest", {"n_estimators": 5, "random_state": 42}),
+            ModelConfig("incomplete", "random_forest", {"n_estimators": 5, "random_state": 42}),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            complete_dir = output_dir / "complete"
+            complete_dir.mkdir()
+            (complete_dir / "fold_metrics.csv").touch()
+            (complete_dir / "predictions.csv").touch()
+            incomplete_dir = output_dir / "incomplete"
+            incomplete_dir.mkdir()
+            (incomplete_dir / "fold_metrics.csv").touch()
+
+            pending = pending_model_configs(output_dir, configs)
+
+        self.assertEqual([config.name for config in pending], ["incomplete"])
+
     def test_cnn_uses_internal_validation_without_exposing_external_fold(self) -> None:
         train_rows = [
             {

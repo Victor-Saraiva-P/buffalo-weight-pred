@@ -7,7 +7,7 @@ from pathlib import Path
 from buffalo_weight.config import load_config
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
-from buffalo_weight.train import evaluate_models, write_training_outputs
+from buffalo_weight.train import evaluate_models, pending_model_configs, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
 
 
@@ -32,13 +32,19 @@ def train_cnn_mask(shared_config_path: Path, models_config_path: Path) -> list[M
         raise ValueError("shared config training section must be a map")
 
     rows = read_rows(Path(str(split["split_path"])))
-    metrics, predictions = evaluate_models(
-        rows,
-        feature_columns=[],
-        model_configs=model_configs,
-        masks_dir=Path(str(data["masks_dir"])),
-    )
-    write_training_outputs(Path(str(training["output_dir"])), model_configs, metrics, predictions)
+    output_dir = Path(str(training["output_dir"]))
+    pending_configs = pending_model_configs(output_dir, model_configs)
+    if pending_configs:
+        metrics, predictions = evaluate_models(
+            rows,
+            feature_columns=[],
+            model_configs=pending_configs,
+            masks_dir=Path(str(data["masks_dir"])),
+        )
+        write_training_outputs(output_dir, pending_configs, metrics, predictions)
+    skipped = [config.name for config in model_configs if config not in pending_configs]
+    if skipped:
+        print(f"Skipping completed model configs: {', '.join(skipped)}")
     return model_configs
 
 

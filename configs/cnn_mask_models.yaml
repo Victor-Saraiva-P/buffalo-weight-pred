@@ -51,6 +51,114 @@ model_configs:
       patience: 30
       validation_fraction: 0.2
       augment: true
+  cnn_mask_stretch_128_augmented:
+    model: cnn_mask
+    params:
+      architecture: baseline
+      epochs: 220
+      batch_size: 16
+      learning_rate: 0.0005
+      image_size: 128
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 30
+      validation_fraction: 0.2
+      augment: true
+  cnn_mask_residual_stretch_64_augmented:
+    model: cnn_mask
+    params:
+      architecture: residual
+      epochs: 220
+      batch_size: 16
+      learning_rate: 0.0005
+      image_size: 64
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 30
+      validation_fraction: 0.2
+      augment: true
+  mobilenet_v3_pretrained_head:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: true
+      fine_tune_mode: head
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  mobilenet_v3_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  mobilenet_v3_random_last_block:
+    model: cnn_mask
+    params:
+      architecture: mobilenet_v3_small
+      pretrained: false
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  efficientnet_b0_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: efficientnet_b0
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  resnet18_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: resnet18
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
   pca_svr_mask_baseline:
     model: pca_svr_mask
     params:

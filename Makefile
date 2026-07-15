@@ -9,7 +9,7 @@ CATEGORY_COUNTS ?= 4,6,8
 START_SEED ?= 0
 SEED_COUNT ?= 30
 
-.PHONY: setup features split train stability compare-categories test
+.PHONY: setup features split train stability compare-categories analyze-features test
 
 setup: $(DEPS_STAMP)
 
@@ -34,6 +34,9 @@ stability: setup
 
 compare-categories: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.category_comparison --shared-config $(SHARED_CONFIG) --models-config $(CLASSICAL_MODELS_CONFIG) --category-counts $(CATEGORY_COUNTS) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
+
+analyze-features: setup
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.feature_analysis --shared-config $(SHARED_CONFIG) --models-config $(CLASSICAL_MODELS_CONFIG) --start-seed $(START_SEED) --seed-count $(SEED_COUNT)
 
 test: setup
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests

@@ -24,9 +24,29 @@ _Avoid_: Ground truth, anotação manual
 Planilha que define quais máscaras binarizadas têm rótulo válido para treinamento, associando nome do arquivo, fazenda, peso e tag de uso.
 _Avoid_: Lista de fotos, tabela de imagens
 
+**Máscara Válida**:
+Máscara binarizada representada por uma única linha do Índice de Máscaras, com peso válido e correspondendo a um único animal.
+_Avoid_: Duplicata do animal, múltiplas fotos do mesmo animal como amostras independentes
+
 **Índice de Features**:
 Arquivo derivado do índice de máscaras e do conjunto de máscaras, contendo uma linha por máscara válida e colunas com rótulos e features geométricas calculadas.
 _Avoid_: Banco de dados, tabela temporária
+
+**Feature Preditiva Útil**:
+Feature geométrica que contribui para estimar o peso vivo de forma estável em validação fora da amostra.
+_Avoid_: Feature correta, variável boa sem critério de validação
+
+**Seleção Manual de Features**:
+Decisão humana sobre quais features geométricas entram na avaliação de modelos, tomada a partir de evidências comparativas geradas pelo projeto.
+_Avoid_: Seleção automática, otimização automática de features
+
+**Evidência Comparativa de Feature**:
+Resultado usado para julgar uma feature geométrica comparando seu desempenho isolado, sua ausência no conjunto de features e o impacto de embaralhar seus valores fora da amostra.
+_Avoid_: Escolha automática de feature, importância sem validação
+
+**Redundância Entre Features**:
+Situação em que duas ou mais features geométricas carregam sinais semelhantes sobre a máscara válida, exigindo interpretação conjunta das evidências comparativas.
+_Avoid_: Feature duplicada como sinônimo de feature inútil
 
 **Etapa de Predição de Peso**:
 Etapa que usa features geométricas extraídas de máscaras binarizadas para avaliar modelos de predição do peso vivo dos búfalos.
@@ -52,3 +72,7 @@ _Avoid_: Categoria da fazenda, balde por fazenda, quartil quando a quantidade de
 **Divisão Estratificada**:
 Arquivo que associa cada máscara válida a uma categoria de peso e a um fold de avaliação, preservando a distribuição das categorias de peso entre folds.
 _Avoid_: Separação aleatória, split temporário
+
+**Estabilidade Entre Divisões**:
+Consistência do desempenho preditivo quando a avaliação é repetida em diferentes divisões estratificadas das mesmas máscaras válidas.
+_Avoid_: Resultado de uma única seed como evidência suficiente

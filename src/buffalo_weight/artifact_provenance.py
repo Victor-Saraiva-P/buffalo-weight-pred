@@ -76,12 +76,27 @@ def training_lock(output_dir: Path) -> Iterator[None]:
     try:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError as error:
-        raise ValueError(f"training output directory was locked by {lock_path}; expected one active run") from error
+        if _lock_owner_is_alive(lock_path):
+            raise ValueError(
+                f"training output directory was locked by {lock_path}; expected one active run"
+            ) from error
+        lock_path.unlink(missing_ok=True)
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     try:
+        os.write(descriptor, str(os.getpid()).encode())
         os.close(descriptor)
         yield
     finally:
         lock_path.unlink(missing_ok=True)
+
+
+def _lock_owner_is_alive(lock_path: Path) -> bool:
+    try:
+        pid = int(lock_path.read_text())
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def artifact_plan(output_dir: Path, config: ModelConfig, evidence: TrainingEvidence) -> ArtifactPlan:
@@ -158,6 +173,7 @@ def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
         names["torchvision"] = "torchvision"
     if config.model == "xgboost":
         names["xgboost"] = "xgboost"
+        names["torch"] = "torch"
     if config.model == "pca_feature_fusion":
         names["scipy"] = "scipy"
     return {name: _package_version(module) for name, module in names.items()}
@@ -277,15 +293,19 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
                 ("buffalo_weight.cnn_mask", "find_mask_path"),
             ]
         )
+    pairs.append(("buffalo_weight.split", "parse_weight"))
     if config.model == "mask_feature":
         pairs.extend(
             [
                 ("buffalo_weight.mask_classical", "shape_profile_features"),
+                ("buffalo_weight.mask_classical", "_regressor"),
                 ("buffalo_weight.mask_classical", "regression_pipeline"),
             ]
         )
     if config.model == "pretrained_mask_embedding":
         pairs.append(("buffalo_weight.pretrained_mask_embedding", "build_embedding_network"))
+    if config.model in {"random_forest", "extra_trees", "hist_gradient_boosting"}:
+        pairs.append(("buffalo_weight.models", "_build_sklearn_model"))
     return _source_bundle(pairs)
 
 

@@ -190,6 +190,15 @@ class ArtifactProvenanceTest(unittest.TestCase):
                     with training_lock(output_dir):
                         pass
 
+    def test_training_lock_recovers_dead_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            output_dir.mkdir(exist_ok=True)
+            (output_dir / ".train.lock").write_text("999999999")
+
+            with training_lock(output_dir):
+                self.assertTrue((output_dir / ".train.lock").exists())
+
     def test_dry_run_does_not_delete_stale_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)

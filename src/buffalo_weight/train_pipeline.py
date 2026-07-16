@@ -46,6 +46,7 @@ def _run_pipeline(
 
 
 def cnn_configs(path: Path) -> list[ModelConfig]:
+    """Load mask configurations for the final aggregate comparison."""
     return parse_model_configs(load_config(path))
 
 

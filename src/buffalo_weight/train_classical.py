@@ -47,7 +47,7 @@ def train_classical(
     output_dir = Path(str(training["output_dir"]))
     evidence = TrainingEvidence(
         split_rows,
-        feature_rows,
+        rows,
         [str(column) for column in feature_columns],
         Path(str(data["masks_dir"])),
         "auto",

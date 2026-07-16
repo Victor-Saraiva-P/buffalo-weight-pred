@@ -149,6 +149,39 @@ class ArtifactProvenanceTest(unittest.TestCase):
 
         self.assertEqual(plan.status, "reuse")
 
+    def test_selected_fusion_feature_change_makes_artifact_stale(self) -> None:
+        config = ModelConfig(
+            "fusion",
+            "pca_feature_fusion",
+            {"image_size": 8, "n_components": 2, "n_estimators": 2, "random_state": 1},
+        )
+        evidence = TrainingEvidence(
+            self.evidence.split_rows,
+            [{"file_name": "a", "weight": "10", "area": "2"}],
+            ["area"],
+            None,
+            "auto",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            model_dir = output_dir / config.name
+            model_dir.mkdir()
+            (model_dir / "fold_metrics.csv").write_text("fold,mae\n1,2\n")
+            (model_dir / "predictions.csv").write_text("file_name,y_pred\na,10\n")
+            write_manifest(output_dir, config, evidence)
+            changed = TrainingEvidence(
+                evidence.split_rows,
+                [{"file_name": "a", "weight": "10", "area": "3"}],
+                evidence.feature_columns,
+                None,
+                "auto",
+            )
+
+            plan = artifact_plan(output_dir, config, changed)
+
+        self.assertEqual(plan.status, "stale")
+        self.assertIn("input_hash", plan.reasons)
+
     def test_training_lock_rejects_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)

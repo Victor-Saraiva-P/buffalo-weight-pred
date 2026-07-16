@@ -154,6 +154,7 @@ def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
         if config.params.get("input_representation") == "geometry_channels":
             names["scipy"] = "scipy"
     if config.model == "pretrained_mask_embedding":
+        names["torch"] = "torch"
         names["torchvision"] = "torchvision"
     if config.model == "xgboost":
         names["xgboost"] = "xgboost"
@@ -175,7 +176,7 @@ def _resolved_device(config: ModelConfig, requested: str) -> str:
 def input_hash(config: ModelConfig, evidence: TrainingEvidence) -> str:
     rows = evidence.split_rows
     parts = [_canonical(_all_rows(rows))]
-    if config.model not in MASK_PREDICTION_MODELS and config.model not in FEATURE_FUSION_MODELS:
+    if config.model not in MASK_PREDICTION_MODELS:
         rows = evidence.feature_rows
     selected_rows = [_selected_row(row, evidence.feature_columns) for row in rows]
     parts.append(_canonical(selected_rows))
@@ -217,12 +218,21 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
         from buffalo_weight.cnn_architectures import MASK_NETWORK_RECIPE_SYMBOLS
 
         functions = MASK_NETWORK_RECIPE_SYMBOLS.get(architecture, ("build_mask_network",))
-        symbols = ["CnnMaskRegressor", "load_mask_inputs", "load_masks", "load_mask", "find_mask_path"]
+        architecture_symbols = ["build_mask_network", *functions]
+        symbols = [
+            "CnnMaskRegressor",
+            "load_mask_inputs",
+            "load_masks",
+            "load_mask",
+            "find_mask_path",
+            "resolve_device",
+        ]
         if config.params.get("input_representation") == "geometry_channels":
             symbols.append("geometry_channels")
         return _source_bundle(
             [
-                *[("buffalo_weight.cnn_architectures", symbol) for symbol in functions],
+                *[("buffalo_weight.cnn_architectures", symbol) for symbol in architecture_symbols],
+                ("buffalo_weight.cnn_architectures", "ImageNetMaskNetwork"),
                 *[("buffalo_weight.cnn_mask", symbol) for symbol in symbols],
             ]
         )
@@ -248,6 +258,7 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
     if config.model == "pca_feature_fusion":
         pairs.extend(
             [
+                ("buffalo_weight.cnn_mask", "load_masks"),
                 ("buffalo_weight.canonical_mask", "canonicalize_mask"),
                 ("buffalo_weight.canonical_mask", "principal_axis_angle"),
                 ("buffalo_weight.canonical_mask", "load_canonical_masks"),
@@ -266,6 +277,15 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
                 ("buffalo_weight.cnn_mask", "find_mask_path"),
             ]
         )
+    if config.model == "mask_feature":
+        pairs.extend(
+            [
+                ("buffalo_weight.mask_classical", "shape_profile_features"),
+                ("buffalo_weight.mask_classical", "regression_pipeline"),
+            ]
+        )
+    if config.model == "pretrained_mask_embedding":
+        pairs.append(("buffalo_weight.pretrained_mask_embedding", "build_embedding_network"))
     return _source_bundle(pairs)
 
 

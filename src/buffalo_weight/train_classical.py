@@ -27,12 +27,15 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
     features = shared_config["features"]
     split = shared_config["split"]
     training = shared_config["training"]
+    data = shared_config["data"]
     if not isinstance(features, dict):
         raise ValueError("shared config features section must be a map")
     if not isinstance(split, dict):
         raise ValueError("shared config split section must be a map")
     if not isinstance(training, dict):
         raise ValueError("shared config training section must be a map")
+    if not isinstance(data, dict):
+        raise ValueError("shared config data section must be a map")
 
     feature_rows = read_rows(Path(str(features["features_index_path"])))
     split_rows = read_rows(Path(str(split["split_path"])))
@@ -40,7 +43,12 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
     output_dir = Path(str(training["output_dir"]))
     pending_configs = pending_model_configs(output_dir, model_configs)
     if pending_configs:
-        metrics, predictions = evaluate_models(rows, [str(column) for column in feature_columns], pending_configs)
+        metrics, predictions = evaluate_models(
+            rows,
+            [str(column) for column in feature_columns],
+            pending_configs,
+            Path(str(data["masks_dir"])),
+        )
         write_training_outputs(output_dir, pending_configs, metrics, predictions)
     skipped = [config.name for config in model_configs if config not in pending_configs]
     if skipped:

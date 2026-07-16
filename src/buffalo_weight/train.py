@@ -10,8 +10,20 @@ from sklearn.model_selection import train_test_split
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
 from buffalo_weight.csv_io import write_csv_rows
-from buffalo_weight.models import CNN_MASK_MODEL, PCA_SVR_MASK_MODEL, ModelConfig, ModelParam, build_model
+from buffalo_weight.models import (
+    CNN_MASK_MODEL,
+    MASK_FEATURE_MODEL,
+    PCA_FEATURE_FUSION_MODEL,
+    PCA_SVR_MASK_MODEL,
+    PRETRAINED_MASK_EMBEDDING_MODEL,
+    ModelConfig,
+    ModelParam,
+    build_model,
+)
+from buffalo_weight.mask_classical import MaskFeatureRegressor
+from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
+from buffalo_weight.pretrained_mask_embedding import PretrainedMaskEmbeddingRegressor
 from buffalo_weight.split import parse_int, parse_weight, read_rows
 
 
@@ -127,6 +139,24 @@ def predict_fold_weights(
         model = PcaSvrMaskRegressor(masks_dir, model_config.params)
         model.fit(train_rows)
         return model.predict(validation_rows)
+    if model_config.model == MASK_FEATURE_MODEL:
+        if masks_dir is None:
+            raise ValueError("mask_feature requires data.masks_dir")
+        model = MaskFeatureRegressor(masks_dir, model_config.params)
+        model.fit(train_rows)
+        return model.predict(validation_rows)
+    if model_config.model == PRETRAINED_MASK_EMBEDDING_MODEL:
+        if masks_dir is None:
+            raise ValueError("pretrained_mask_embedding requires data.masks_dir")
+        model = PretrainedMaskEmbeddingRegressor(masks_dir, model_config.params, device)
+        model.fit(train_rows)
+        return model.predict(validation_rows)
+    if model_config.model == PCA_FEATURE_FUSION_MODEL:
+        if masks_dir is None:
+            raise ValueError("pca_feature_fusion requires data.masks_dir")
+        model = PcaFeatureFusionRegressor(masks_dir, model_config.params)
+        model.fit(train_rows, feature_columns)
+        return model.predict(validation_rows, feature_columns)
     x_train, y_train = rows_to_arrays(train_rows, feature_columns)
     x_validation, _ = rows_to_arrays(validation_rows, feature_columns)
     model = build_model(model_config)

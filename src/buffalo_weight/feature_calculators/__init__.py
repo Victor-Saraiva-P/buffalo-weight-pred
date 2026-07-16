@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from buffalo_weight.feature_calculators.area import calculate_area
+from buffalo_weight.feature_calculators.allometry import calculate_allometric_features
 from buffalo_weight.feature_calculators.axis import (
     calculate_major_axis_length,
     calculate_minor_axis_length,
@@ -51,6 +52,14 @@ def zero_features() -> dict[str, float]:
         "minor_axis_length": 0,
         "hu_moment_1": 0,
         "hu_moment_2": 0,
+        "area_power_1_5": 0,
+        "area_major_axis_product": 0,
+        "middle_thickness": 0,
+        "end_thickness_min": 0,
+        "end_thickness_max": 0,
+        "middle_to_end_ratio": 0,
+        "centroid_x_offset": 0,
+        "centroid_y_ratio": 0,
     }
 
 
@@ -60,6 +69,7 @@ def calculate_mask_features(mask: np.ndarray | Path | str) -> dict[str, float]:
     if ctx.area == 0:
         return zero_features()
 
+    major_axis_length = calculate_major_axis_length(ctx)
     return {
         "area": calculate_area(ctx),
         "perimeter": calculate_perimeter(ctx),
@@ -73,8 +83,9 @@ def calculate_mask_features(mask: np.ndarray | Path | str) -> dict[str, float]:
         "extent": calculate_extent(ctx),
         "convex_area": calculate_convex_area(ctx),
         "convexity": calculate_convexity(ctx),
-        "major_axis_length": calculate_major_axis_length(ctx),
+        "major_axis_length": major_axis_length,
         "minor_axis_length": calculate_minor_axis_length(ctx),
         "hu_moment_1": calculate_hu_moment_1(ctx),
         "hu_moment_2": calculate_hu_moment_2(ctx),
+        **calculate_allometric_features(ctx, major_axis_length),
     }

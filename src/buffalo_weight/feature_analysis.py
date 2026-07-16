@@ -18,7 +18,7 @@ from buffalo_weight.feature_analysis_reports import (
     summarize_by_model,
     summarize_features,
 )
-from buffalo_weight.models import CNN_MASK_MODEL, ModelConfig, parse_model_configs
+from buffalo_weight.models import FEATURE_FUSION_MODELS, MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import parse_int, read_rows
 from buffalo_weight.stability import split_random_states
 
@@ -35,10 +35,10 @@ def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> 
 
 def classical_model_configs(models_config: dict[object, object]) -> list[ModelConfig]:
     configs = parse_model_configs(models_config)
-    mask_configs = [config.name for config in configs if config.model == CNN_MASK_MODEL]
-    if not mask_configs:
-        return configs
-    raise ValueError(f"feature analysis only supports classical models; found: {', '.join(mask_configs)}")
+    mask_configs = [config.name for config in configs if config.model in MASK_PREDICTION_MODELS]
+    if mask_configs:
+        raise ValueError(f"feature analysis only supports classical models; found: {', '.join(mask_configs)}")
+    return [config for config in configs if config.model not in FEATURE_FUSION_MODELS]
 
 
 def feature_columns(models_config: dict[object, object]) -> list[str]:

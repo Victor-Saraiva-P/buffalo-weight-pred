@@ -33,10 +33,10 @@ class ResidualBlock(nn.Module):
 
 
 class ResidualMaskNetwork(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, input_channels: int = 1) -> None:
         super().__init__()
         self.stem = nn.Sequential(
-            nn.Conv2d(1, 16, 5, stride=2, padding=2, bias=False),
+            nn.Conv2d(input_channels, 16, 5, stride=2, padding=2, bias=False),
             nn.GroupNorm(8, 16),
             nn.ReLU(),
         )
@@ -90,7 +90,7 @@ class ImageNetMaskNetwork(nn.Module):
         return self
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        rgb_masks = inputs.repeat(1, 3, 1, 1)
+        rgb_masks = inputs.repeat(1, 3, 1, 1) if inputs.shape[1] == 1 else inputs
         normalized_masks = (rgb_masks - self.image_mean) / self.image_std
         return self.backbone(normalized_masks)
 
@@ -131,9 +131,9 @@ def _resnet18_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.Module:
     return ImageNetMaskNetwork(backbone, backbone.fc, backbone.layer4, fine_tune_mode)
 
 
-def _baseline_mask_network() -> nn.Module:
+def _baseline_mask_network(input_channels: int) -> nn.Module:
     return nn.Sequential(
-        nn.Conv2d(1, 16, kernel_size=5, padding=2),
+        nn.Conv2d(input_channels, 16, kernel_size=5, padding=2),
         nn.BatchNorm2d(16),
         nn.ReLU(),
         nn.MaxPool2d(2),
@@ -154,16 +154,19 @@ def _baseline_mask_network() -> nn.Module:
 
 
 def build_mask_network(
-    architecture: str, pretrained: bool = False, fine_tune_mode: str = "head"
+    architecture: str,
+    pretrained: bool = False,
+    fine_tune_mode: str = "head",
+    input_channels: int = 1,
 ) -> nn.Module:
     if architecture == "baseline":
-        return _baseline_mask_network()
+        return _baseline_mask_network(input_channels)
     if architecture == "efficientnet_b0":
         return _efficientnet_b0_mask_network(pretrained, fine_tune_mode)
     if architecture == "mobilenet_v3_small":
         return _mobilenet_v3_mask_network(pretrained, fine_tune_mode)
     if architecture == "residual":
-        return ResidualMaskNetwork()
+        return ResidualMaskNetwork(input_channels)
     if architecture == "resnet18":
         return _resnet18_mask_network(pretrained, fine_tune_mode)
     raise ValueError(

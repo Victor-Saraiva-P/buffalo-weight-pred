@@ -1,0 +1,96 @@
+model_configs:
+  tuned_pca16:
+    model: pca_feature_fusion
+    params: &defaults
+      image_size: 128
+      resize_mode: stretch
+      n_components: 16
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+  tuned_pca20:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 20
+  tuned_pca28:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 28
+  tuned_96_pca20:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      image_size: 96
+      n_components: 20
+  tuned_96_pca24:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      image_size: 96
+      n_components: 24
+  tuned_max_features_05:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      max_features: 0.5
+  tuned_max_features_075:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      max_features: 0.75
+  tuned_max_features_sqrt:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      max_features: sqrt
+  tuned_leaf1:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      min_samples_leaf: 1
+  tuned_leaf3:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      min_samples_leaf: 3
+  tuned_target_power_025:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      target_transform: identity
+      target_power: 0.25
+  tuned_target_power_05:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      n_components: 24
+      target_transform: identity
+      target_power: 0.5
+
+feature_columns: &original_features
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2

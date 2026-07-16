@@ -1,0 +1,41 @@
+model_configs:
+  fusion_original_stretch_cube_root:
+    model: pca_feature_fusion
+    params:
+      image_size: 128
+      resize_mode: stretch
+      n_components: 24
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: cube_root
+  fusion_original_stretch_log:
+    model: pca_feature_fusion
+    params:
+      image_size: 128
+      resize_mode: stretch
+      n_components: 24
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+
+feature_columns:
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2

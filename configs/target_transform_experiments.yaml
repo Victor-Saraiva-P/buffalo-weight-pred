@@ -1,60 +1,21 @@
 model_configs:
-  random_forest_baseline:
-    model: random_forest
-    params:
-      n_estimators: 200
-      random_state: 42
-  xgboost_baseline:
-    model: xgboost
-    params:
-      n_estimators: 200
-      random_state: 42
-      learning_rate: 0.05
-      max_depth: 3
-  random_forest_regularized:
-    model: random_forest
-    params:
-      n_estimators: 500
-      random_state: 42
-      min_samples_leaf: 3
-      max_features: sqrt
-  extra_trees_baseline:
+  extra_trees_original_cube_root:
     model: extra_trees
     params:
       n_estimators: 500
       random_state: 42
       min_samples_leaf: 2
       max_features: 1.0
-  hist_gradient_boosting_baseline:
-    model: hist_gradient_boosting
+      target_transform: cube_root
+  extra_trees_original_log:
+    model: extra_trees
     params:
-      random_state: 42
-      learning_rate: 0.05
-      max_iter: 300
-      max_leaf_nodes: 15
-      min_samples_leaf: 10
-      l2_regularization: 1.0
-  pca_feature_fusion_extra_trees:
-    model: pca_feature_fusion
-    params:
-      image_size: 128
-      resize_mode: letterbox
-      n_components: 24
       n_estimators: 500
       random_state: 42
       min_samples_leaf: 2
       max_features: 1.0
-  fusion_pca24_letterbox_leaf1:
-    model: pca_feature_fusion
-    params:
-      image_size: 128
-      resize_mode: letterbox
-      n_components: 24
-      n_estimators: 500
-      random_state: 42
-      min_samples_leaf: 1
-      max_features: 1.0
-  fusion_pca24_stretch_leaf2:
+      target_transform: log
+  fusion_original_stretch_cube_root:
     model: pca_feature_fusion
     params:
       image_size: 128
@@ -64,6 +25,7 @@ model_configs:
       random_state: 42
       min_samples_leaf: 2
       max_features: 1.0
+      target_transform: cube_root
   fusion_original_stretch_log:
     model: pca_feature_fusion
     params:
@@ -75,27 +37,25 @@ model_configs:
       min_samples_leaf: 2
       max_features: 1.0
       target_transform: log
-  tuned_96_pca24:
-    model: pca_feature_fusion
-    params:
-      image_size: 96
-      resize_mode: stretch
-      n_components: 24
-      n_estimators: 500
-      random_state: 42
-      min_samples_leaf: 2
-      max_features: 1.0
-      target_transform: log
-  dual_pca24_canonical16:
+  fusion_original_stretch_log_seed7:
     model: pca_feature_fusion
     params:
       image_size: 128
       resize_mode: stretch
-      canonical_resize_mode: letterbox
       n_components: 24
-      canonical_components: 16
       n_estimators: 500
-      random_state: 42
+      random_state: 7
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+  fusion_original_stretch_log_seed21:
+    model: pca_feature_fusion
+    params:
+      image_size: 128
+      resize_mode: stretch
+      n_components: 24
+      n_estimators: 500
+      random_state: 21
       min_samples_leaf: 2
       max_features: 1.0
       target_transform: log

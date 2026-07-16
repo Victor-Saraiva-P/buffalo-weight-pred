@@ -1,0 +1,49 @@
+model_configs:
+  dual_pca24_canonical8:
+    model: pca_feature_fusion
+    params: &dual_defaults
+      image_size: 128
+      resize_mode: stretch
+      canonical_resize_mode: letterbox
+      n_components: 24
+      canonical_components: 8
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+  dual_pca24_canonical16:
+    model: pca_feature_fusion
+    params:
+      <<: *dual_defaults
+      canonical_components: 16
+  dual_pca16_canonical16:
+    model: pca_feature_fusion
+    params:
+      <<: *dual_defaults
+      n_components: 16
+      canonical_components: 16
+  dual_pca24_canonical16_stretch:
+    model: pca_feature_fusion
+    params:
+      <<: *dual_defaults
+      canonical_components: 16
+      canonical_resize_mode: stretch
+
+feature_columns:
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2

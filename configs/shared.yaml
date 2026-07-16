@@ -29,6 +29,14 @@ features:
     - minor_axis_length
     - hu_moment_1
     - hu_moment_2
+    - area_power_1_5
+    - area_major_axis_product
+    - middle_thickness
+    - end_thickness_min
+    - end_thickness_max
+    - middle_to_end_ratio
+    - centroid_x_offset
+    - centroid_y_ratio
 
 split:
   k: 5

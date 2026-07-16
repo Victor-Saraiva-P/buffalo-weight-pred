@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 RESIZE_MODES = frozenset({"letterbox", "stretch"})
 DEVICES = frozenset({"auto", "cpu", "cuda"})
+INPUT_REPRESENTATIONS = frozenset({"binary", "geometry_channels"})
 
 
 def resolve_device(requested: str, cuda_available: Callable[[], bool]) -> str:
@@ -97,6 +98,37 @@ def load_masks(
     )
 
 
+def geometry_channels(masks: np.ndarray) -> np.ndarray:
+    """Expand binary masks into mask, edge and distance channels; for example, ``geometry_channels(masks)``."""
+    from scipy.ndimage import binary_erosion, distance_transform_edt
+
+    channels = []
+    for mask in masks:
+        edge = mask - binary_erosion(mask).astype(np.float32)
+        distance = distance_transform_edt(mask).astype(np.float32)
+        distance /= float(distance.max() or 1.0)
+        channels.append(np.stack((mask, edge, distance)))
+    return np.stack(channels).astype(np.float32)
+
+
+def load_mask_inputs(
+    masks_dir: Path,
+    rows: list[dict[str, str]],
+    image_size: int,
+    resize_mode: str,
+    representation: str,
+) -> np.ndarray:
+    """Load CNN channels from binary masks; for example, ``load_mask_inputs(path, rows, 64, "stretch", "binary")``."""
+    masks = load_masks(masks_dir, rows, image_size, resize_mode)
+    if representation == "binary":
+        return masks[:, None]
+    if representation == "geometry_channels":
+        return geometry_channels(masks)
+    raise ValueError(
+        f"input representation was {representation!r}; expected one of {sorted(INPUT_REPRESENTATIONS)}"
+    )
+
+
 class CnnMaskRegressor:
     def __init__(self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "auto") -> None:
         self.masks_dir = masks_dir
@@ -105,6 +137,7 @@ class CnnMaskRegressor:
         self.architecture = str(params.get("architecture", "baseline"))
         self.pretrained = bool(params.get("pretrained", False))
         self.fine_tune_mode = str(params.get("fine_tune_mode", "head"))
+        self.input_representation = str(params.get("input_representation", "binary"))
         self.epochs = int(params["epochs"])
         self.batch_size = int(params["batch_size"])
         self.learning_rate = float(params["learning_rate"])
@@ -131,7 +164,9 @@ class CnnMaskRegressor:
         torch.manual_seed(self.random_state)
         if self.device == "cuda":
             torch.cuda.manual_seed_all(self.random_state)
-        x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
+        x = load_mask_inputs(
+            self.masks_dir, rows, self.image_size, self.resize_mode, self.input_representation
+        )
         y = np.asarray([parse_weight(row["weight"], row["file_name"]) for row in rows], dtype=np.float32)
         self.y_mean = float(y.mean())
         self.y_std = float(y.std() or 1.0)
@@ -141,16 +176,22 @@ class CnnMaskRegressor:
         y_tensor = torch.from_numpy(y_scaled[:, None])
         validation_x_tensor = validation_y_tensor = None
         if validation_rows:
-            validation_x = load_masks(
-                self.masks_dir, validation_rows, self.image_size, self.resize_mode
-            )[:, None, :, :]
+            validation_x = load_mask_inputs(
+                self.masks_dir,
+                validation_rows,
+                self.image_size,
+                self.resize_mode,
+                self.input_representation,
+            )
             validation_y = np.asarray(
                 [parse_weight(row["weight"], row["file_name"]) for row in validation_rows], dtype=np.float32
             )
             validation_y_scaled = (validation_y - self.y_mean) / self.y_std
             validation_x_tensor = torch.from_numpy(validation_x)
             validation_y_tensor = torch.from_numpy(validation_y_scaled[:, None])
-        self.model = build_mask_network(self.architecture, self.pretrained, self.fine_tune_mode).to(self.device)
+        self.model = build_mask_network(
+            self.architecture, self.pretrained, self.fine_tune_mode, x.shape[1]
+        ).to(self.device)
         trainable_parameters = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         optimizer = torch.optim.Adam(
             trainable_parameters, lr=self.learning_rate, weight_decay=self.weight_decay
@@ -195,7 +236,9 @@ class CnnMaskRegressor:
             raise ValueError("cnn_mask model has not been fitted")
         import torch
 
-        x = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None, :, :]
+        x = load_mask_inputs(
+            self.masks_dir, rows, self.image_size, self.resize_mode, self.input_representation
+        )
         self.model.eval()
         with torch.no_grad():
             prediction = self.model(torch.from_numpy(x).to(self.device)).cpu().numpy().reshape(-1)

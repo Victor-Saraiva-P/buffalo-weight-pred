@@ -169,3 +169,20 @@ model_configs:
       c: 10.0
       epsilon: 0.1
       gamma: scale
+  geometry_resnet18_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: resnet18
+      input_representation: geometry_channels
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true

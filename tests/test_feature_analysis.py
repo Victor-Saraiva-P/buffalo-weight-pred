@@ -42,6 +42,29 @@ class FeatureAnalysisTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only supports classical models"):
             classical_model_configs(config)
 
+    def test_excludes_feature_fusion_from_tabular_feature_analysis(self) -> None:
+        config = {
+            "model_configs": {
+                "forest": {
+                    "model": "random_forest",
+                    "params": {"n_estimators": 5, "random_state": 42},
+                },
+                "fusion": {
+                    "model": "pca_feature_fusion",
+                    "params": {
+                        "image_size": 8,
+                        "n_components": 2,
+                        "n_estimators": 5,
+                        "random_state": 42,
+                    },
+                },
+            }
+        }
+
+        configs = classical_model_configs(config)
+
+        self.assertEqual([model.name for model in configs], ["forest"])
+
     def test_summarizes_feature_impacts_by_model(self) -> None:
         rows = [
             metric("random_forest_baseline", "all_features", "", "10"),

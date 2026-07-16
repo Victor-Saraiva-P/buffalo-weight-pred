@@ -1,0 +1,124 @@
+model_configs:
+  mask_profile_ridge:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: shape_profile
+      estimator: ridge
+      alpha: 10.0
+      random_state: 42
+  mask_profile_svr_c10:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: shape_profile
+      estimator: svr
+      c: 10.0
+      epsilon: 0.1
+      gamma: scale
+      random_state: 42
+  mask_profile_svr_c100:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: shape_profile
+      estimator: svr
+      c: 100.0
+      epsilon: 0.1
+      gamma: scale
+      random_state: 42
+  mask_profile_extra_trees:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: shape_profile
+      estimator: extra_trees
+      n_estimators: 500
+      min_samples_leaf: 2
+      max_features: 1.0
+      random_state: 42
+  mask_pixels_pca32_ridge:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: pixels_pca
+      estimator: ridge
+      n_components: 32
+      alpha: 10.0
+      random_state: 42
+  mask_pixels_pca32_kernel_ridge:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: pixels_pca
+      estimator: kernel_ridge
+      n_components: 32
+      alpha: 1.0
+      gamma: 0.01
+      random_state: 42
+  mask_pixels_pca16_svr_c100:
+    model: mask_feature
+    params:
+      image_size: 64
+      resize_mode: letterbox
+      representation: pixels_pca
+      estimator: svr
+      n_components: 16
+      c: 100.0
+      epsilon: 0.1
+      gamma: scale
+      random_state: 42
+  resnet18_embedding_pca32_ridge:
+    model: pretrained_mask_embedding
+    params:
+      image_size: 224
+      resize_mode: letterbox
+      architecture: resnet18
+      estimator: ridge
+      n_components: 32
+      alpha: 10.0
+      batch_size: 16
+      random_state: 42
+  resnet18_embedding_pca32_svr:
+    model: pretrained_mask_embedding
+    params:
+      image_size: 224
+      resize_mode: letterbox
+      architecture: resnet18
+      estimator: svr
+      n_components: 32
+      c: 10.0
+      epsilon: 0.1
+      gamma: scale
+      batch_size: 16
+      random_state: 42
+  mobilenet_embedding_pca32_ridge:
+    model: pretrained_mask_embedding
+    params:
+      image_size: 224
+      resize_mode: letterbox
+      architecture: mobilenet_v3_small
+      estimator: ridge
+      n_components: 32
+      alpha: 10.0
+      batch_size: 16
+      random_state: 42
+  mobilenet_embedding_pca32_svr:
+    model: pretrained_mask_embedding
+    params:
+      image_size: 224
+      resize_mode: letterbox
+      architecture: mobilenet_v3_small
+      estimator: svr
+      n_components: 32
+      c: 10.0
+      epsilon: 0.1
+      gamma: scale
+      batch_size: 16
+      random_state: 42

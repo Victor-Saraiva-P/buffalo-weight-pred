@@ -1,0 +1,96 @@
+model_configs:
+  extra_trees_allometric:
+    model: extra_trees
+    params:
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+  extra_trees_allometric_cube_root:
+    model: extra_trees
+    params:
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: cube_root
+  extra_trees_allometric_log:
+    model: extra_trees
+    params:
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+  random_forest_allometric:
+    model: random_forest
+    params:
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+  hist_gradient_boosting_allometric:
+    model: hist_gradient_boosting
+    params:
+      random_state: 42
+      learning_rate: 0.05
+      max_iter: 300
+      max_leaf_nodes: 15
+      min_samples_leaf: 10
+      l2_regularization: 1.0
+  fusion_allometric_stretch:
+    model: pca_feature_fusion
+    params: &fusion_defaults
+      image_size: 128
+      resize_mode: stretch
+      n_components: 24
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+  fusion_allometric_stretch_cube_root:
+    model: pca_feature_fusion
+    params:
+      <<: *fusion_defaults
+      target_transform: cube_root
+  fusion_allometric_stretch_log:
+    model: pca_feature_fusion
+    params:
+      <<: *fusion_defaults
+      target_transform: log
+  fusion_allometric_stretch_seed7:
+    model: pca_feature_fusion
+    params:
+      <<: *fusion_defaults
+      random_state: 7
+  fusion_allometric_stretch_seed21:
+    model: pca_feature_fusion
+    params:
+      <<: *fusion_defaults
+      random_state: 21
+
+feature_columns:
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2
+  - area_power_1_5
+  - area_major_axis_product
+  - middle_thickness
+  - end_thickness_min
+  - end_thickness_max
+  - middle_to_end_ratio
+  - centroid_x_offset
+  - centroid_y_ratio

@@ -1,0 +1,65 @@
+model_configs:
+  geometry_residual_stretch64_seed42:
+    model: cnn_mask
+    params:
+      architecture: residual
+      input_representation: geometry_channels
+      epochs: 220
+      batch_size: 16
+      learning_rate: 0.0005
+      image_size: 64
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 30
+      validation_fraction: 0.2
+      augment: true
+  geometry_residual_stretch64_seed7:
+    model: cnn_mask
+    params:
+      architecture: residual
+      input_representation: geometry_channels
+      epochs: 220
+      batch_size: 16
+      learning_rate: 0.0005
+      image_size: 64
+      resize_mode: stretch
+      random_state: 7
+      weight_decay: 0.0001
+      patience: 30
+      validation_fraction: 0.2
+      augment: true
+  geometry_resnet18_pretrained_last_block:
+    model: cnn_mask
+    params:
+      architecture: resnet18
+      input_representation: geometry_channels
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 42
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true
+  geometry_resnet18_pretrained_last_block_seed7:
+    model: cnn_mask
+    params:
+      architecture: resnet18
+      input_representation: geometry_channels
+      pretrained: true
+      fine_tune_mode: last_block
+      epochs: 120
+      batch_size: 8
+      learning_rate: 0.0001
+      image_size: 224
+      resize_mode: stretch
+      random_state: 7
+      weight_decay: 0.0001
+      patience: 20
+      validation_fraction: 0.2
+      augment: true

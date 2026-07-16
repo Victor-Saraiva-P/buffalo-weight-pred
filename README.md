@@ -180,6 +180,63 @@ SEED_COUNT=2 PYTHON=.venv/bin/python make compare-categories
 
 A configuração baseline usa 10 `Categorias de Peso`; veja `docs/weight-category-count.md` para a justificativa.
 
+Comparar combinações de predições OOF com pesos iguais:
+
+```bash
+PYTHON=.venv/bin/python make ensemble
+```
+
+O resultado fica em `generated/ensemble/model_comparison.csv`. Use `ENSEMBLE_MODELS` para informar uma lista de configurações separadas por vírgula. A comparação inclui os modelos individuais e ensembles de até três modelos, sempre alinhados pelo nome do arquivo e fold.
+
+O experimento reproduzível com o subconjunto de features menos redundante pode ser executado separadamente:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m buffalo_weight.train_classical --shared-config configs/shared.yaml --models-config configs/exploratory_reduced_features.yaml
+```
+
+Explorar representações derivadas somente das máscaras binárias:
+
+```bash
+PYTHON=.venv/bin/python make train-mask-experiments
+PYTHON=.venv/bin/python make train-fusion-experiments
+```
+
+O primeiro comando compara perfis da silhueta, pixels comprimidos por PCA e embeddings congelados de MobileNet/ResNet. O segundo varia componentes, resolução, resize e regularização da fusão entre a máscara e suas descrições geométricas. As configurações ficam em `configs/mask_classical_experiments.yaml` e `configs/pca_feature_fusion_experiments.yaml`.
+
+Executar a segunda rodada dirigida:
+
+```bash
+PYTHON=.venv/bin/python make train-allometric-experiments
+PYTHON=.venv/bin/python make train-geometry-channel-experiments
+PYTHON=.venv/bin/python make train-target-transform-experiments
+```
+
+Esses experimentos testam proxies de volume e espessura corporal, CNN com canais de máscara/contorno/distância e transformações alométricas do peso. Todos os canais e descritores são calculados somente a partir da máscara binária.
+
+Executar o tuning dirigido e a fusão com máscara canônica:
+
+```bash
+PYTHON=.venv/bin/python make train-fusion-tuning
+PYTHON=.venv/bin/python make train-canonical-fusion
+```
+
+A máscara canônica é centralizada, alinhada pelo eixo principal e recortada antes do PCA. O modelo de dois ramos combina essa forma normalizada com a máscara no enquadramento original e as medidas geométricas que preservam escala.
+
+Executar a investigação empírica do limite de erro:
+
+```bash
+PYTHON=.venv/bin/python make diagnostics
+```
+
+O comando gera learning curves repetidas, intervalos bootstrap, métricas por peso/fazenda/resolução, testes de domínio e transferência, auditoria morfológica, robustez a perturbações e vizinhos visuais contraditórios em `generated/diagnostics/`. O relatório consolidado fica em `generated/diagnostics/report.md`.
+
+As tentativas finais de corrigir a subestimação dos animais pesados são reproduzidas com:
+
+```bash
+PYTHON=.venv/bin/python make train-heavy-weighting
+PYTHON=.venv/bin/python make calibrate
+```
+
 Rodar testes:
 
 ```bash

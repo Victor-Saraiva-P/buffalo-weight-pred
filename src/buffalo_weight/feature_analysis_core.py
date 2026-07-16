@@ -14,6 +14,9 @@ NON_NEGATIVE_FEATURES = {
     "area", "perimeter", "solidity", "circularity", "equivalent_diameter",
     "bbox_width", "bbox_height", "bbox_area", "aspect_ratio", "extent",
     "convex_area", "convexity", "major_axis_length", "minor_axis_length",
+    "area_power_1_5", "area_major_axis_product", "middle_thickness",
+    "end_thickness_min", "end_thickness_max", "middle_to_end_ratio",
+    "centroid_x_offset", "centroid_y_ratio",
 }
 
 

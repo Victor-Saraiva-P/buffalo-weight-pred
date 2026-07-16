@@ -1,0 +1,44 @@
+model_configs:
+  canonical_heavy_weight2:
+    model: pca_feature_fusion
+    params: &defaults
+      image_size: 128
+      resize_mode: stretch
+      canonical_resize_mode: letterbox
+      n_components: 24
+      canonical_components: 16
+      n_estimators: 500
+      random_state: 42
+      min_samples_leaf: 2
+      max_features: 1.0
+      target_transform: log
+      heavy_quantile: 0.8
+      heavy_sample_weight: 2.0
+  canonical_heavy_weight4:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      heavy_sample_weight: 4.0
+  canonical_heavy_weight8:
+    model: pca_feature_fusion
+    params:
+      <<: *defaults
+      heavy_sample_weight: 8.0
+
+feature_columns:
+  - area
+  - perimeter
+  - solidity
+  - circularity
+  - equivalent_diameter
+  - bbox_width
+  - bbox_height
+  - bbox_area
+  - aspect_ratio
+  - extent
+  - convex_area
+  - convexity
+  - major_axis_length
+  - minor_axis_length
+  - hu_moment_1
+  - hu_moment_2

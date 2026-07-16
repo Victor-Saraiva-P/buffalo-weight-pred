@@ -5,7 +5,10 @@ import re
 from typing import Protocol, TYPE_CHECKING
 
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.compose import TransformedTargetRegressor
+
+from buffalo_weight.target_transform import inverse_target, transform_target
 
 if TYPE_CHECKING:
     from xgboost import XGBRegressor
@@ -13,10 +16,18 @@ if TYPE_CHECKING:
 
 MODEL_CONFIG_PATTERN = re.compile(r"^[a-z0-9_]+$")
 RANDOM_FOREST_MODEL = "random_forest"
+EXTRA_TREES_MODEL = "extra_trees"
+HIST_GRADIENT_BOOSTING_MODEL = "hist_gradient_boosting"
 XGBOOST_MODEL = "xgboost"
 CNN_MASK_MODEL = "cnn_mask"
 PCA_SVR_MASK_MODEL = "pca_svr_mask"
-MASK_PREDICTION_MODELS = frozenset({CNN_MASK_MODEL, PCA_SVR_MASK_MODEL})
+MASK_FEATURE_MODEL = "mask_feature"
+PRETRAINED_MASK_EMBEDDING_MODEL = "pretrained_mask_embedding"
+PCA_FEATURE_FUSION_MODEL = "pca_feature_fusion"
+MASK_PREDICTION_MODELS = frozenset(
+    {CNN_MASK_MODEL, MASK_FEATURE_MODEL, PCA_SVR_MASK_MODEL, PRETRAINED_MASK_EMBEDDING_MODEL}
+)
+FEATURE_FUSION_MODELS = frozenset({PCA_FEATURE_FUSION_MODEL})
 ModelParam = bool | float | int | str
 
 
@@ -54,6 +65,26 @@ ALLOWED_PARAMS = {
         "max_depth",
         "min_samples_split",
         "min_samples_leaf",
+        "max_features",
+        "target_transform",
+    },
+    EXTRA_TREES_MODEL: {
+        "n_estimators",
+        "random_state",
+        "max_depth",
+        "min_samples_split",
+        "min_samples_leaf",
+        "max_features",
+        "target_transform",
+    },
+    HIST_GRADIENT_BOOSTING_MODEL: {
+        "random_state",
+        "learning_rate",
+        "max_iter",
+        "max_leaf_nodes",
+        "min_samples_leaf",
+        "l2_regularization",
+        "target_transform",
     },
     XGBOOST_MODEL: {
         "n_estimators",
@@ -79,6 +110,7 @@ ALLOWED_PARAMS = {
         "architecture",
         "pretrained",
         "fine_tune_mode",
+        "input_representation",
     },
     PCA_SVR_MASK_MODEL: {
         "image_size",
@@ -89,12 +121,66 @@ ALLOWED_PARAMS = {
         "gamma",
         "resize_mode",
     },
+    MASK_FEATURE_MODEL: {
+        "image_size",
+        "resize_mode",
+        "representation",
+        "estimator",
+        "n_components",
+        "random_state",
+        "alpha",
+        "c",
+        "epsilon",
+        "gamma",
+        "n_estimators",
+        "min_samples_leaf",
+        "max_features",
+    },
+    PRETRAINED_MASK_EMBEDDING_MODEL: {
+        "image_size",
+        "resize_mode",
+        "architecture",
+        "estimator",
+        "n_components",
+        "random_state",
+        "alpha",
+        "c",
+        "epsilon",
+        "gamma",
+        "batch_size",
+    },
+    PCA_FEATURE_FUSION_MODEL: {
+        "image_size",
+        "resize_mode",
+        "n_components",
+        "random_state",
+        "n_estimators",
+        "max_depth",
+        "min_samples_leaf",
+        "max_features",
+        "target_transform",
+        "target_power",
+        "canonical_components",
+        "canonical_resize_mode",
+        "heavy_sample_weight",
+        "heavy_quantile",
+    },
 }
 REQUIRED_PARAMS = {
     RANDOM_FOREST_MODEL: {"n_estimators", "random_state"},
+    EXTRA_TREES_MODEL: {"n_estimators", "random_state"},
+    HIST_GRADIENT_BOOSTING_MODEL: {"random_state"},
     XGBOOST_MODEL: {"n_estimators", "random_state"},
     CNN_MASK_MODEL: {"epochs", "batch_size", "learning_rate", "image_size", "random_state"},
     PCA_SVR_MASK_MODEL: {"image_size", "n_components", "random_state"},
+    MASK_FEATURE_MODEL: {"image_size", "representation", "estimator", "random_state"},
+    PRETRAINED_MASK_EMBEDDING_MODEL: {
+        "image_size",
+        "architecture",
+        "estimator",
+        "random_state",
+    },
+    PCA_FEATURE_FUSION_MODEL: {"image_size", "n_components", "n_estimators", "random_state"},
 }
 
 
@@ -176,8 +262,14 @@ def xgboost_compute_params(cuda_available: bool, cuda_build: bool) -> dict[str, 
 
 
 def build_model(config: ModelConfig) -> ClassicalRegressor:
+    params = dict(config.params)
+    target_transform = str(params.pop("target_transform", "identity"))
     if config.model == RANDOM_FOREST_MODEL:
-        return RandomForestRegressor(**config.params)
+        return _target_regressor(RandomForestRegressor(**params), target_transform)
+    if config.model == EXTRA_TREES_MODEL:
+        return _target_regressor(ExtraTreesRegressor(**params), target_transform)
+    if config.model == HIST_GRADIENT_BOOSTING_MODEL:
+        return _target_regressor(HistGradientBoostingRegressor(**params), target_transform)
     if config.model == XGBOOST_MODEL:
         try:
             import torch
@@ -189,6 +281,18 @@ def build_model(config: ModelConfig) -> ClassicalRegressor:
         )
         model = xgboost.XGBRegressor(**config.params, **compute_params, objective="reg:squarederror")
         return _XgboostRegressor(model)
-    if config.model in MASK_PREDICTION_MODELS:
+    if config.model in MASK_PREDICTION_MODELS | FEATURE_FUSION_MODELS:
         raise ValueError(f"{config.model} must be trained from mask rows, not feature arrays")
     raise ValueError(f"unsupported model: {config.model}")
+
+
+def _target_regressor(regressor: ClassicalRegressor, transform: str) -> ClassicalRegressor:
+    if transform == "identity":
+        return regressor
+    transform_target(np.asarray([1.0]), transform)
+    return TransformedTargetRegressor(
+        regressor=regressor,
+        func=lambda values: transform_target(values, transform),
+        inverse_func=lambda values: inverse_target(values, transform),
+        check_inverse=False,
+    )

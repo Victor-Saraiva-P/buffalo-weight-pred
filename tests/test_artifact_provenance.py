@@ -128,6 +128,27 @@ class ArtifactProvenanceTest(unittest.TestCase):
         self.assertEqual(plan.status, "stale")
         self.assertIn("input_hash", plan.reasons)
 
+    def test_unselected_feature_change_does_not_make_artifact_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            model_dir = output_dir / self.config.name
+            model_dir.mkdir()
+            (model_dir / "fold_metrics.csv").write_text("fold,mae\n1,2\n")
+            (model_dir / "predictions.csv").write_text("file_name,y_pred\na,10\n")
+            write_manifest(output_dir, self.config, self.evidence)
+            changed_features = [{**self.evidence.feature_rows[0], "perimeter": "changed"}]
+            evidence = TrainingEvidence(
+                self.evidence.split_rows,
+                changed_features,
+                self.evidence.feature_columns,
+                None,
+                "auto",
+            )
+
+            plan = artifact_plan(output_dir, self.config, evidence)
+
+        self.assertEqual(plan.status, "reuse")
+
     def test_training_lock_rejects_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)

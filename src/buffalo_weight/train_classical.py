@@ -46,7 +46,11 @@ def train_classical(
     rows = join_rows(feature_rows, split_rows)
     output_dir = Path(str(training["output_dir"]))
     evidence = TrainingEvidence(
-        rows, rows, [str(column) for column in feature_columns], Path(str(data["masks_dir"])), "auto"
+        split_rows,
+        feature_rows,
+        [str(column) for column in feature_columns],
+        Path(str(data["masks_dir"])),
+        "auto",
     )
     plans, pending_configs = prepare_artifacts(output_dir, model_configs, evidence, dry_run)
     print_artifact_plan(plans)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from collections.abc import Callable
 
 
 MASK_NETWORK_ARCHITECTURES = frozenset(
@@ -159,16 +160,47 @@ def build_mask_network(
     fine_tune_mode: str = "head",
     input_channels: int = 1,
 ) -> nn.Module:
-    if architecture == "baseline":
-        return _baseline_mask_network(input_channels)
-    if architecture == "efficientnet_b0":
-        return _efficientnet_b0_mask_network(pretrained, fine_tune_mode)
-    if architecture == "mobilenet_v3_small":
-        return _mobilenet_v3_mask_network(pretrained, fine_tune_mode)
-    if architecture == "residual":
-        return ResidualMaskNetwork(input_channels)
-    if architecture == "resnet18":
-        return _resnet18_mask_network(pretrained, fine_tune_mode)
-    raise ValueError(
-        f"mask network architecture was {architecture!r}; expected one of {sorted(MASK_NETWORK_ARCHITECTURES)}"
-    )
+    try:
+        builder = MASK_NETWORK_BUILDERS[architecture]
+    except KeyError as error:
+        raise ValueError(
+            f"mask network architecture was {architecture!r}; expected one of {sorted(MASK_NETWORK_ARCHITECTURES)}"
+        ) from error
+    return builder(pretrained, fine_tune_mode, input_channels)
+
+
+def _build_baseline_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
+    return _baseline_mask_network(input_channels)
+
+
+def _build_efficientnet_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
+    return _efficientnet_b0_mask_network(pretrained, fine_tune_mode)
+
+
+def _build_mobilenet_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
+    return _mobilenet_v3_mask_network(pretrained, fine_tune_mode)
+
+
+def _build_residual_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
+    return ResidualMaskNetwork(input_channels)
+
+
+def _build_resnet_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
+    return _resnet18_mask_network(pretrained, fine_tune_mode)
+
+
+MASK_NETWORK_BUILDERS: dict[str, Callable[[bool, str, int], nn.Module]] = {
+    "baseline": _build_baseline_network,
+    "efficientnet_b0": _build_efficientnet_network,
+    "mobilenet_v3_small": _build_mobilenet_network,
+    "residual": _build_residual_network,
+    "resnet18": _build_resnet_network,
+}
+
+MASK_NETWORK_RECIPE_SYMBOLS: dict[str, tuple[str, ...]] = {
+    "baseline": ("_build_baseline_network", "_baseline_mask_network"),
+    "efficientnet_b0": ("_build_efficientnet_network", "_efficientnet_b0_mask_network"),
+    "mobilenet_v3_small": ("_build_mobilenet_network", "_mobilenet_v3_mask_network"),
+    "residual": ("_build_residual_network", "ResidualMaskNetwork", "ResidualBlock"),
+    "resnet18": ("_build_resnet_network", "_resnet18_mask_network"),
+}

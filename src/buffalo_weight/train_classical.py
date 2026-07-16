@@ -5,13 +5,17 @@ import sys
 from pathlib import Path
 
 from buffalo_weight.config import load_config
+from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
+from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
-from buffalo_weight.train import evaluate_models, join_rows, pending_model_configs, write_training_outputs
+from buffalo_weight.train import evaluate_models, join_rows, write_training_outputs
 from buffalo_weight.validation import validate_feature_index, validate_split
 
 
-def train_classical(shared_config_path: Path, models_config_path: Path) -> list[ModelConfig]:
+def train_classical(
+    shared_config_path: Path, models_config_path: Path, dry_run: bool = False
+) -> list[ModelConfig]:
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
     model_configs = parse_model_configs(models_config)
@@ -41,7 +45,13 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
     split_rows = read_rows(Path(str(split["split_path"])))
     rows = join_rows(feature_rows, split_rows)
     output_dir = Path(str(training["output_dir"]))
-    pending_configs = pending_model_configs(output_dir, model_configs)
+    evidence = TrainingEvidence(
+        rows, rows, [str(column) for column in feature_columns], Path(str(data["masks_dir"])), "auto"
+    )
+    plans, pending_configs = prepare_artifacts(output_dir, model_configs, evidence, dry_run)
+    print_artifact_plan(plans)
+    if dry_run:
+        return model_configs
     if pending_configs:
         metrics, predictions = evaluate_models(
             rows,
@@ -49,7 +59,7 @@ def train_classical(shared_config_path: Path, models_config_path: Path) -> list[
             pending_configs,
             Path(str(data["masks_dir"])),
         )
-        write_training_outputs(output_dir, pending_configs, metrics, predictions)
+        write_training_outputs(output_dir, pending_configs, metrics, predictions, evidence)
     skipped = [config.name for config in model_configs if config not in pending_configs]
     if skipped:
         print(f"Skipping completed model configs: {', '.join(skipped)}")
@@ -60,10 +70,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        train_classical(Path(args.shared_config), Path(args.models_config))
+        shared_config = load_config(Path(args.shared_config))
+        training = shared_config["training"]
+        if not isinstance(training, dict):
+            raise ValueError("shared config training section must be a map")
+        output_dir = Path(str(training["output_dir"]))
+        if args.dry_run:
+            train_classical(Path(args.shared_config), Path(args.models_config), True)
+        else:
+            with training_lock(output_dir):
+                train_classical(Path(args.shared_config), Path(args.models_config))
     except (KeyError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1

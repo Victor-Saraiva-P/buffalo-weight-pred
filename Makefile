@@ -19,6 +19,11 @@ START_SEED ?= 0
 SEED_COUNT ?= 30
 MODELS ?=
 DEVICE ?= auto
+DRY_RUN ?= false
+TRAIN_DRY_RUN =
+ifeq ($(DRY_RUN),true)
+TRAIN_DRY_RUN = --dry-run
+endif
 ENSEMBLE_MODELS ?= dual_pca24_canonical16,tuned_96_pca24,fusion_original_stretch_log,fusion_original_stretch_cube_root,geometry_resnet18_pretrained_last_block,hist_gradient_boosting_baseline
 
 .PHONY: setup features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
@@ -39,31 +44,31 @@ split: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --shared-config $(SHARED_CONFIG)
 
 train: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG) --device $(DEVICE)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG) --device $(DEVICE) $(TRAIN_DRY_RUN)
 
 train-mask-experiments: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_cnn_mask --shared-config $(SHARED_CONFIG) --models-config $(MASK_CLASSICAL_EXPERIMENTS_CONFIG) --device $(DEVICE)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_cnn_mask --shared-config $(SHARED_CONFIG) --models-config $(MASK_CLASSICAL_EXPERIMENTS_CONFIG) --device $(DEVICE) $(TRAIN_DRY_RUN)
 
 train-fusion-experiments: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(FUSION_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(FUSION_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 train-allometric-experiments: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(ALLOMETRIC_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(ALLOMETRIC_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 train-geometry-channel-experiments: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_cnn_mask --shared-config $(SHARED_CONFIG) --models-config $(GEOMETRY_CHANNELS_EXPERIMENTS_CONFIG) --device $(DEVICE)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_cnn_mask --shared-config $(SHARED_CONFIG) --models-config $(GEOMETRY_CHANNELS_EXPERIMENTS_CONFIG) --device $(DEVICE) $(TRAIN_DRY_RUN)
 
 train-target-transform-experiments: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(TARGET_TRANSFORM_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(TARGET_TRANSFORM_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 train-fusion-tuning: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(FUSION_TUNING_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(FUSION_TUNING_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 train-canonical-fusion: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(CANONICAL_FUSION_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(CANONICAL_FUSION_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 train-heavy-weighting: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(HEAVY_WEIGHTING_EXPERIMENTS_CONFIG)
+	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_classical --shared-config $(SHARED_CONFIG) --models-config $(HEAVY_WEIGHTING_EXPERIMENTS_CONFIG) $(TRAIN_DRY_RUN)
 
 calibrate: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.prediction_calibration --predictions $(CALIBRATION_PREDICTIONS)

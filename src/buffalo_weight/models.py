@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Protocol, TYPE_CHECKING
+from typing import Callable, Protocol, TYPE_CHECKING
 
 import numpy as np
 from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingRegressor, RandomForestRegressor
@@ -252,6 +252,14 @@ def parse_model_configs(training: dict[object, object]) -> list[ModelConfig]:
     ]
 
 
+def validate_unique_model_configs(configs: list[ModelConfig]) -> None:
+    names = [config.name for config in configs]
+    if len(names) == len(set(names)):
+        return
+    duplicates = sorted(name for name in set(names) if names.count(name) > 1)
+    raise ValueError(f"duplicate model configuration names were {duplicates!r}; expected unique names")
+
+
 def xgboost_compute_params(cuda_available: bool, cuda_build: bool) -> dict[str, str]:
     """Select XGBoost's accelerated histogram backend, preferring CUDA when usable.
 
@@ -262,28 +270,50 @@ def xgboost_compute_params(cuda_available: bool, cuda_build: bool) -> dict[str, 
 
 
 def build_model(config: ModelConfig) -> ClassicalRegressor:
-    params = dict(config.params)
-    target_transform = str(params.pop("target_transform", "identity"))
-    if config.model == RANDOM_FOREST_MODEL:
-        return _target_regressor(RandomForestRegressor(**params), target_transform)
-    if config.model == EXTRA_TREES_MODEL:
-        return _target_regressor(ExtraTreesRegressor(**params), target_transform)
-    if config.model == HIST_GRADIENT_BOOSTING_MODEL:
-        return _target_regressor(HistGradientBoostingRegressor(**params), target_transform)
-    if config.model == XGBOOST_MODEL:
-        try:
-            import torch
-            import xgboost
-        except ImportError as error:
-            raise ValueError("xgboost and torch dependencies are required for model xgboost") from error
-        compute_params = xgboost_compute_params(
-            torch.cuda.is_available(), bool(xgboost.build_info().get("USE_CUDA", False))
-        )
-        model = xgboost.XGBRegressor(**config.params, **compute_params, objective="reg:squarederror")
-        return _XgboostRegressor(model)
+    builders = {
+        RANDOM_FOREST_MODEL: _build_random_forest,
+        EXTRA_TREES_MODEL: _build_extra_trees,
+        HIST_GRADIENT_BOOSTING_MODEL: _build_hist_gradient_boosting,
+        XGBOOST_MODEL: _build_xgboost,
+    }
+    if config.model in builders:
+        return builders[config.model](config)
     if config.model in MASK_PREDICTION_MODELS | FEATURE_FUSION_MODELS:
         raise ValueError(f"{config.model} must be trained from mask rows, not feature arrays")
     raise ValueError(f"unsupported model: {config.model}")
+
+
+def _build_sklearn_model(
+    config: ModelConfig, constructor: Callable[..., ClassicalRegressor]
+) -> ClassicalRegressor:
+    params = dict(config.params)
+    target_transform = str(params.pop("target_transform", "identity"))
+    return _target_regressor(constructor(**params), target_transform)
+
+
+def _build_random_forest(config: ModelConfig) -> ClassicalRegressor:
+    return _build_sklearn_model(config, RandomForestRegressor)
+
+
+def _build_extra_trees(config: ModelConfig) -> ClassicalRegressor:
+    return _build_sklearn_model(config, ExtraTreesRegressor)
+
+
+def _build_hist_gradient_boosting(config: ModelConfig) -> ClassicalRegressor:
+    return _build_sklearn_model(config, HistGradientBoostingRegressor)
+
+
+def _build_xgboost(config: ModelConfig) -> ClassicalRegressor:
+    try:
+        import torch
+        import xgboost
+    except ImportError as error:
+        raise ValueError("xgboost and torch dependencies are required for model xgboost") from error
+    compute_params = xgboost_compute_params(
+        torch.cuda.is_available(), bool(xgboost.build_info().get("USE_CUDA", False))
+    )
+    model = xgboost.XGBRegressor(**config.params, **compute_params, objective="reg:squarederror")
+    return _XgboostRegressor(model)
 
 
 def _target_regressor(regressor: ClassicalRegressor, transform: str) -> ClassicalRegressor:

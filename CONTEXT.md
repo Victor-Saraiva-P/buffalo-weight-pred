@@ -60,6 +60,10 @@ _Avoid_: IA, modelo de segmentação, rede neural quando o modelo avaliado não 
 Variação nomeada de um Modelo Clássico de Predição, usada para comparar diferentes hiperparâmetros ou tipos de modelo na mesma avaliação.
 _Avoid_: Modelo quando o texto se refere à variação nomeada, IA
 
+**Artefato de Avaliação Atual**:
+Resultado de uma Configuração de Modelo cuja proveniência corresponde à mesma configuração, Divisão Estratificada, entradas e procedimento de treinamento da avaliação solicitada.
+_Avoid_: Cache válido apenas porque os arquivos existem, resultado anterior sem proveniência verificada
+
 **Modelo de Predição por Máscara**:
 Modelo supervisionado que estima peso vivo diretamente a partir da Máscara Binarizada, sem depender do Índice de Features como entrada principal.
 _Avoid_: Modelo Clássico de Predição quando o modelo lê pixels da máscara

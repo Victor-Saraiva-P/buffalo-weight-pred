@@ -5,14 +5,19 @@ import sys
 from pathlib import Path
 
 from buffalo_weight.config import load_config
+from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
+from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
 from buffalo_weight.split import read_rows
-from buffalo_weight.train import evaluate_models, pending_model_configs, write_training_outputs
+from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
 
 
 def train_cnn_mask(
-    shared_config_path: Path, models_config_path: Path, device: str = "auto"
+    shared_config_path: Path,
+    models_config_path: Path,
+    device: str = "auto",
+    dry_run: bool = False,
 ) -> list[ModelConfig]:
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
@@ -35,7 +40,11 @@ def train_cnn_mask(
 
     rows = read_rows(Path(str(split["split_path"])))
     output_dir = Path(str(training["output_dir"]))
-    pending_configs = pending_model_configs(output_dir, model_configs)
+    evidence = TrainingEvidence(rows, [], [], Path(str(data["masks_dir"])), device)
+    plans, pending_configs = prepare_artifacts(output_dir, model_configs, evidence, dry_run)
+    print_artifact_plan(plans)
+    if dry_run:
+        return model_configs
     if pending_configs:
         metrics, predictions = evaluate_models(
             rows,
@@ -44,7 +53,7 @@ def train_cnn_mask(
             masks_dir=Path(str(data["masks_dir"])),
             device=device,
         )
-        write_training_outputs(output_dir, pending_configs, metrics, predictions)
+        write_training_outputs(output_dir, pending_configs, metrics, predictions, evidence)
     skipped = [config.name for config in model_configs if config not in pending_configs]
     if skipped:
         print(f"Skipping completed model configs: {', '.join(skipped)}")
@@ -56,10 +65,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
+        shared_config = load_config(Path(args.shared_config))
+        training = shared_config["training"]
+        if not isinstance(training, dict):
+            raise ValueError("shared config training section must be a map")
+        output_dir = Path(str(training["output_dir"]))
+        if args.dry_run:
+            train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device, True)
+        else:
+            with training_lock(output_dir):
+                train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
     except (KeyError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1

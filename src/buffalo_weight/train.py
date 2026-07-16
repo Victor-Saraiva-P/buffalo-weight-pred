@@ -9,6 +9,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
+from buffalo_weight.artifact_provenance import TrainingEvidence, write_manifest
 from buffalo_weight.csv_io import write_csv_rows
 from buffalo_weight.models import (
     CNN_MASK_MODEL,
@@ -374,6 +375,7 @@ def write_training_outputs(
     model_configs: list[ModelConfig],
     metrics: list[dict[str, str]],
     predictions: list[dict[str, str]],
+    evidence: "TrainingEvidence | None" = None,
 ) -> None:
     for model_config in model_configs:
         config_dir = output_dir / model_config.name
@@ -391,6 +393,8 @@ def write_training_outputs(
             config_dir / "predicted_vs_actual.png",
             f"{model_config.name} ({model_config.model}) - Peso real vs predito",
         )
+        if evidence is not None:
+            write_manifest(output_dir, model_config, evidence)
 
 
 def write_model_comparison_from_outputs(output_dir: Path, model_configs: list[ModelConfig]) -> None:

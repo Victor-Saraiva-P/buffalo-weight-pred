@@ -19,7 +19,15 @@ from buffalo_weight.cnn_mask import (
     load_masks,
     resolve_device,
 )
-from buffalo_weight.models import ModelConfig, build_model, parse_model_configs, xgboost_compute_params
+from buffalo_weight.models import (
+    EXTRA_TREES_MODEL,
+    RANDOM_FOREST_MODEL,
+    ModelConfig,
+    build_model,
+    parse_model_configs,
+    validate_unique_model_configs,
+    xgboost_compute_params,
+)
 from buffalo_weight.mask_classical import MaskFeatureRegressor, shape_profile_features
 from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
@@ -27,6 +35,15 @@ from buffalo_weight.pretrained_mask_embedding import PretrainedMaskEmbeddingRegr
 
 
 class ModelConfigTest(unittest.TestCase):
+    def test_rejects_duplicate_model_configuration_names(self) -> None:
+        configs = [
+            ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
+            ModelConfig("same", EXTRA_TREES_MODEL, {"n_estimators": 2, "random_state": 1}),
+        ]
+
+        with self.assertRaisesRegex(ValueError, "duplicate model configuration names"):
+            validate_unique_model_configs(configs)
+
     def test_classical_model_can_transform_target_inside_fit(self) -> None:
         model = build_model(
             ModelConfig(

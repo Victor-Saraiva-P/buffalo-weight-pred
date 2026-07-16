@@ -253,6 +253,7 @@ def parse_model_configs(training: dict[object, object]) -> list[ModelConfig]:
 
 
 def validate_unique_model_configs(configs: list[ModelConfig]) -> None:
+    """Reject duplicate names before they can share one artifact directory."""
     names = [config.name for config in configs]
     if len(names) == len(set(names)):
         return

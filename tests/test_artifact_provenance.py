@@ -30,10 +30,16 @@ class ArtifactProvenanceTest(unittest.TestCase):
 
     def test_missing_manifest_requires_new_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            plan = artifact_plan(Path(directory), self.config, self.evidence)
+            output_dir = Path(directory)
+            model_dir = output_dir / self.config.name
+            model_dir.mkdir()
+            (model_dir / "old.csv").write_text("old")
+            plan = artifact_plan(output_dir, self.config, self.evidence)
+            prepare_artifacts(output_dir, [self.config], self.evidence)
 
         self.assertEqual(plan.status, "new")
         self.assertIn("manifest missing", plan.reasons)
+        self.assertFalse(model_dir.exists())
 
     def test_manifest_and_output_hashes_make_artifact_reusable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -99,6 +105,28 @@ class ArtifactProvenanceTest(unittest.TestCase):
             plan = artifact_plan(output_dir, mask_config, cpu_evidence)
 
         self.assertEqual(plan.status, "reuse")
+
+    def test_split_metadata_change_makes_artifact_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            model_dir = output_dir / self.config.name
+            model_dir.mkdir()
+            (model_dir / "fold_metrics.csv").write_text("fold,mae\n1,2\n")
+            (model_dir / "predictions.csv").write_text("file_name,y_pred\na,10\n")
+            write_manifest(output_dir, self.config, self.evidence)
+            changed_split = [{**self.evidence.split_rows[0], "farm": "changed"}]
+            evidence = TrainingEvidence(
+                changed_split,
+                self.evidence.feature_rows,
+                self.evidence.feature_columns,
+                None,
+                "auto",
+            )
+
+            plan = artifact_plan(output_dir, self.config, evidence)
+
+        self.assertEqual(plan.status, "stale")
+        self.assertIn("input_hash", plan.reasons)
 
     def test_training_lock_rejects_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

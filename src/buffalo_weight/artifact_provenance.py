@@ -124,7 +124,7 @@ def manifest_differences(
 
 
 def remove_stale_artifact(output_dir: Path, plan: ArtifactPlan) -> None:
-    if plan.status == "stale":
+    if plan.status in {"new", "stale"}:
         shutil.rmtree(output_dir / plan.config.name, ignore_errors=True)
 
 
@@ -145,8 +145,14 @@ def recipe_source(config: ModelConfig) -> tuple[list[str], str]:
 
 def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
     names = {"numpy": "numpy", "scikit-learn": "scikit-learn"}
-    if config.model == CNN_MASK_MODEL or config.model == "pretrained_mask_embedding":
-        names.update({"torch": "torch", "torchvision": "torchvision"})
+    if config.model in MASK_PREDICTION_MODELS or config.model in FEATURE_FUSION_MODELS:
+        names["pillow"] = "pillow"
+    if config.model == CNN_MASK_MODEL:
+        names["torch"] = "torch"
+        if config.params.get("input_representation") == "geometry_channels":
+            names["scipy"] = "scipy"
+    if config.model == "pretrained_mask_embedding":
+        names["torchvision"] = "torchvision"
     if config.model == "xgboost":
         names["xgboost"] = "xgboost"
     return {name: _package_version(module) for name, module in names.items()}
@@ -164,10 +170,11 @@ def _resolved_device(config: ModelConfig, requested: str) -> str:
 
 def input_hash(config: ModelConfig, evidence: TrainingEvidence) -> str:
     rows = evidence.split_rows
+    parts = [_canonical(_all_rows(rows))]
     if config.model not in MASK_PREDICTION_MODELS and config.model not in FEATURE_FUSION_MODELS:
         rows = evidence.feature_rows
     selected_rows = [_selected_row(row, evidence.feature_columns) for row in rows]
-    parts = [_canonical(selected_rows)]
+    parts.append(_canonical(selected_rows))
     if config.model in MASK_PREDICTION_MODELS or config.model in FEATURE_FUSION_MODELS:
         parts.append(_mask_hash(evidence.masks_dir, rows))
     return _digest(parts)
@@ -176,6 +183,10 @@ def input_hash(config: ModelConfig, evidence: TrainingEvidence) -> str:
 def _selected_row(row: dict[str, str], columns: list[str]) -> dict[str, str]:
     names = ["file_name", "weight", "weight_category", "fold", *columns]
     return {name: row.get(name, "") for name in dict.fromkeys(names)}
+
+
+def _all_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [dict(sorted(row.items())) for row in sorted(rows, key=lambda item: item.get("file_name", ""))]
 
 
 def _mask_hash(masks_dir: Path | None, rows: list[dict[str, str]]) -> str:
@@ -206,7 +217,12 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
             "residual": "ResidualMaskNetwork",
             "resnet18": "_resnet18_mask_network",
         }.get(architecture, "build_mask_network")
-        return [f"buffalo_weight.cnn_architectures:{function}", "buffalo_weight.cnn_mask:CnnMaskRegressor"], _source_text("buffalo_weight.cnn_architectures", function) + _source_text("buffalo_weight.cnn_mask", "CnnMaskRegressor")
+        symbols = ["CnnMaskRegressor", "load_mask_inputs", "load_masks", "load_mask", "find_mask_path"]
+        if config.params.get("input_representation") == "geometry_channels":
+            symbols.append("geometry_channels")
+        return _source_bundle(
+            [("buffalo_weight.cnn_architectures", function), *[("buffalo_weight.cnn_mask", symbol) for symbol in symbols]]
+        )
     module = {
         "pca_feature_fusion": "pca_feature_fusion",
         "pca_svr_mask": "pca_svr_mask",
@@ -223,10 +239,34 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
         "mask_feature": "MaskFeatureRegressor",
         "pretrained_mask_embedding": "PretrainedMaskEmbeddingRegressor",
     }.get(config.model, "build_model")
-    source = _source_text(f"buffalo_weight.{module}", symbol)
+    pairs = [(f"buffalo_weight.{module}", symbol)]
     if module == "models":
-        source += _source_text("buffalo_weight.models", "_target_regressor")
-    return [f"buffalo_weight.{module}:{symbol}"], source
+        pairs.append(("buffalo_weight.models", "_target_regressor"))
+    if config.model == "pca_feature_fusion":
+        pairs.extend(
+            [
+                ("buffalo_weight.canonical_mask", "canonicalize_mask"),
+                ("buffalo_weight.canonical_mask", "principal_axis_angle"),
+                ("buffalo_weight.pca_feature_fusion", "_feature_value"),
+                ("buffalo_weight.target_transform", "transform_target"),
+                ("buffalo_weight.target_transform", "inverse_target"),
+            ]
+        )
+    if config.model in MASK_PREDICTION_MODELS:
+        pairs.extend(
+            [
+                ("buffalo_weight.cnn_mask", "load_masks"),
+                ("buffalo_weight.cnn_mask", "load_mask"),
+                ("buffalo_weight.cnn_mask", "find_mask_path"),
+            ]
+        )
+    return _source_bundle(pairs)
+
+
+def _source_bundle(pairs: list[tuple[str, str]]) -> tuple[list[str], str]:
+    names = [f"{module}:{symbol}" for module, symbol in pairs]
+    source = [_source_text(module, symbol) for module, symbol in pairs]
+    return names, _digest(source)
 
 
 def _source_text(module_name: str, symbol_name: str) -> str:

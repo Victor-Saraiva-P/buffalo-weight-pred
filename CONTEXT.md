@@ -12,6 +12,12 @@ A qualidade da segmentação e da binarização deve ser interpretada com base n
 relatório upstream `Relatório PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO
 PESO DE BÚFALO .pdf` e nas regras de `docs/mask-segmentation-reference.md`.
 
+A inspeção manual das 13 Máscaras Binarizadas da categoria `B10` confirmou boa
+correspondência visual com as fotografias originais, sem recortes grosseiros,
+inclusão relevante de fundo ou perda do animal. Portanto, defeitos visuais
+óbvios de segmentação não são a principal hipótese para a subestimação dos
+extremos. Diferenças geométricas sutis ainda podem afetar features sensíveis.
+
 **Conjunto de Máscaras**:
 Coleção de máscaras binarizadas produzidas pela mesma combinação de modelo de segmentação e método de binarização.
 _Avoid_: Combo

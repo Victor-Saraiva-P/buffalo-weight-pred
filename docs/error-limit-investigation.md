@@ -90,6 +90,40 @@ sido manualmente validado como `ok`.
 
 As correlações dos erros OOF variam aproximadamente de 0,70 a 0,998. As três fusões principais ficam acima de 0,987, indicando que repetem quase os mesmos erros. Um oracle que escolhe o melhor dos seis modelos por animal ainda tem MAE de 28,58 kg; há complementaridade, mas nenhuma combinação atual contém informação suficiente para chegar perto de zero.
 
+## Revisão manual dos casos B10
+
+O responsável pelo dataset confirmou manualmente as condições de revisão de
+identidade e de peso: cada uma das 132 máscaras corresponde ao animal correto,
+não há mistura indevida de fotos ou rótulos, e os pesos foram conferidos na
+fonte disponível. A confirmação cobre especialmente a interpretação das
+condições de revisão manual recomendadas para identidade, duplicatas e pesos.
+
+Os 13 identificadores de arquivo da faixa B10 são:
+
+| Identificador | Peso (kg) |
+|---|---:|
+| `4f331c6b-f314-4b86-8505-16f86af489e5` | 515 |
+| `9d023237-a108-4365-ace7-1d32e14c3b6c` | 494 |
+| `680fe796-519b-4d80-9314-ac880f8cb52b` | 577 |
+| `52bc017f-ab87-460f-8814-530402b1616d` | 563 |
+| `22c85481-acbd-4076-b8d4-b330d3374d09` | 634 |
+| `5c3a5015-883d-4916-8bf9-18a3f9755814` | 578 |
+| `a67e048e-d65d-4899-a7a9-7f3671168150` | 503 |
+| `123e681e-0fcd-4138-8212-b85901c9f5fc` | 482 |
+| `90517d64-9f06-458f-898e-a2abbd94a05e` | 613 |
+| `581574de-04c7-4638-8c53-e8fbb08be195` | 601 |
+| `4650f99f-8515-4c80-8802-9b17dd05de8a` | 553 |
+| `dc00f939-0603-4243-bb4d-64e3de37324d` | 575 |
+| `10dc027a-4409-425e-b87e-e39f312a8fda` | 538 |
+
+Após inspeção manual, as 13 imagens B10 apresentaram boa correspondência
+visual entre a fotografia original e a Máscara Binarizada. Não foram
+observados problemas grosseiros de recorte, inclusão de fundo ou perda do
+animal. Essa evidência reduz significativamente a hipótese de que o erro nos
+extremos seja causado por defeitos visuais evidentes da segmentação. Ela não
+exclui diferenças geométricas sutis, como pequenos desvios de área ou contorno,
+que ainda podem afetar features sensíveis.
+
 ## Conclusão baseada nos testes
 
 Os dados sustentam quatro fatores para o erro atual:
@@ -100,9 +134,10 @@ Os dados sustentam quatro fatores para o erro atual:
 4. Dependência de escala aparente e do protocolo de aquisição, sem calibração física observada.
 
 Não há evidência de que duplicatas exatas ou defeitos morfológicos grosseiros
-sejam a causa principal. A qualidade da segmentação tem evidência upstream
-favorável, mas sua contribuição específica para as 132 máscaras ainda precisa
-ser ligada aos ground truths manuais. Ruído de pesagem, repetição do mesmo
+sejam a causa principal. A inspeção visual dos 13 casos B10 reforça essa
+conclusão. A qualidade da segmentação ainda pode contribuir por diferenças
+geométricas sutis, mas deixou de ser a principal suspeita para explicar a
+subestimação sistemática dos extremos. Ruído de pesagem, repetição do mesmo
 animal e generalização prospectiva também não podem ser validados com os
 artefatos atuais.
 

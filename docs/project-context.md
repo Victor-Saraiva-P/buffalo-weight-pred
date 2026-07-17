@@ -7,8 +7,14 @@ Este projeto integra uma pesquisa PIBIC/PIC sobre processamento de imagem para e
 **`Modelo de plano de trabalho dos PICs atual - Plano 1.pdf`**:
 Plano original do trabalho, com escopo formal de avaliacao de metodos de segmentacao semantica por deteccao de objeto saliente em imagens digitais de bubalinos. O plano lista familias de modelos como U2Net, ISNet, SAM e BiRefNet, alem da avaliacao por area, contorno e associacao com a regiao de interesse manual.
 
-**`Relatorio PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO PESO DE BUFALO .pdf`**:
+**`Relatório PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO PESO DE BÚFALO .pdf`**:
 Relatorio parcial da etapa de avaliacao de segmentacao. O documento descreve curadoria manual, criacao de ground truths, tags de dificuldade, avaliacao de segmentacao bruta, estrategias de binarizacao e validacao das melhores combinacoes. Essa etapa indicou a familia BiRefNet, especialmente combinada com LimiarFixoBaixa, como base adequada para gerar mascaras binarizadas preditivas.
+
+**`docs/mask-segmentation-reference.md`**:
+Regra de uso da fonte upstream. Afirmações sobre qualidade de Máscaras Binarizadas devem partir do relatório PIBIC e distinguir suas 387 imagens avaliadas das 132 máscaras com peso válido usadas nesta etapa.
+
+**`docs/adr/0005-dataset-provenance-and-selection.md`**:
+Registra a origem comunicada pelo orientador para os três grupos de fotos, os critérios de aquisição e a decisão de usar as 132 Máscaras Binarizadas manualmente validadas como `ok` no subconjunto da avaliação upstream.
 
 ## Relacao Entre Etapas
 
@@ -17,4 +23,4 @@ Relatorio parcial da etapa de avaliacao de segmentacao. O documento descreve cur
 
 ## Recorte Atual
 
-A etapa atual usa 132 mascaras com peso valido. O objetivo nao e treinar ou ajustar modelos de segmentacao, mas avaliar modelos de predicao de peso a partir das features geometricas extraidas dessas mascaras.
+A etapa atual usa 132 mascaras com peso valido e tag manual `ok`, incluidas nas 387 imagens avaliadas no relatorio PIBIC. O objetivo nao e treinar ou ajustar modelos de segmentacao, mas avaliar modelos de predicao de peso a partir das features geometricas extraidas dessas mascaras.

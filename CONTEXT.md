@@ -8,6 +8,10 @@ Este contexto define linguagem do domínio para treinamento de modelos de predi�
 Imagem em preto e branco que representa a região do búfalo separada do fundo após segmentação e binarização.
 _Avoid_: Combo, máscara preta e branca
 
+A qualidade da segmentação e da binarização deve ser interpretada com base no
+relatório upstream `Relatório PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO
+PESO DE BÚFALO .pdf` e nas regras de `docs/mask-segmentation-reference.md`.
+
 **Conjunto de Máscaras**:
 Coleção de máscaras binarizadas produzidas pela mesma combinação de modelo de segmentação e método de binarização.
 _Avoid_: Combo

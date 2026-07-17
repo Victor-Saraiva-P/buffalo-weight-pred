@@ -49,7 +49,23 @@ A fazenda é classificada com balanced accuracy de 0,932 usando features, mas so
 
 ## Qualidade e robustez da segmentação
 
-Entre as 132 máscaras, 6 possuem múltiplos componentes, 5 tocam a borda e 73 contêm algum buraco. Componentes, buracos e contato com borda não apresentaram associação significativa com erro OOF. `foreground_ratio` apresentou Spearman 0,316, p=0,00022, mas também representa escala aparente e peso, não apenas qualidade.
+O relatório PIBIC upstream avaliou 387 imagens com ground truths manuais e
+comparou a segmentação contínua e a binarizada. No recorte mais favorável, as
+combinações `birefnet-hrsod`, `birefnet-general` e `birefnet-massive` com
+`LimiarFixoBaixa` atenderam simultaneamente aos thresholds definidos para IoU,
+Precision, Recall, Area Similarity e Perímetro Similarity. Esse resultado é
+evidência importante de que a segmentação não deve ser descartada nem tratada
+como desconhecida sem consultar a fonte upstream.
+
+Na amostra atual de 132 máscaras, selecionada manualmente pelo cenário `ok`, 6
+possuem múltiplos componentes, 5 tocam a borda e 73 contêm algum buraco.
+Componentes, buracos e contato com borda não apresentaram associação
+significativa com erro OOF. `foreground_ratio`
+apresentou Spearman 0,316, p=0,00022, mas também representa escala aparente e
+peso, não apenas qualidade. Esses testes morfológicos são diagnósticos
+indiretos: ainda é necessário comprovar a correspondência entre cada uma das
+132 máscaras e os ground truths manuais do relatório PIBIC para concluir sobre
+a qualidade das máscaras usadas nesta etapa.
 
 Perturbações sintéticas mostraram alta sensibilidade a mudanças de área:
 
@@ -62,7 +78,13 @@ Perturbações sintéticas mostraram alta sensibilidade a mudanças de área:
 | Translação 4 px | 51,49 | 5,16 kg |
 | Rotação 5° | 50,33 | 7,20 kg |
 
-Isso comprova sensibilidade ao contorno/área. Não comprova que as máscaras reais estejam erradas, pois não há máscaras manuais de referência.
+Isso comprova sensibilidade ao contorno/área. Não comprova, isoladamente, que
+as máscaras reais estejam erradas. A existência de ground truths manuais e da
+validação upstream está registrada em
+[`docs/mask-segmentation-reference.md`](mask-segmentation-reference.md); o
+limite atual é a falta de uma ligação documental explícita entre esses
+ground truths e as 132 máscaras desta análise, embora o recorte atual tenha
+sido manualmente validado como `ok`.
 
 ## Limite compartilhado pelos modelos
 
@@ -77,7 +99,12 @@ Os dados sustentam quatro fatores para o erro atual:
 3. Ambiguidade da entrada: representações muito próximas podem corresponder a diferenças grandes de peso.
 4. Dependência de escala aparente e do protocolo de aquisição, sem calibração física observada.
 
-Não há evidência de que duplicatas exatas ou defeitos morfológicos grosseiros sejam a causa principal. Ruído de pesagem, qualidade real da segmentação, repetição do mesmo animal e generalização prospectiva não podem ser validados com os artefatos atuais.
+Não há evidência de que duplicatas exatas ou defeitos morfológicos grosseiros
+sejam a causa principal. A qualidade da segmentação tem evidência upstream
+favorável, mas sua contribuição específica para as 132 máscaras ainda precisa
+ser ligada aos ground truths manuais. Ruído de pesagem, repetição do mesmo
+animal e generalização prospectiva também não podem ser validados com os
+artefatos atuais.
 
 ## Artefatos
 

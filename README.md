@@ -15,6 +15,11 @@ O treinamento usa máscaras geradas pelo modelo de segmentação `birefnet-gener
 
 Somente máscaras presentes no `indice.xlsx` devem ser usadas no treinamento.
 
+A qualidade da segmentação e da binarização é documentada em
+[`docs/mask-segmentation-reference.md`](docs/mask-segmentation-reference.md),
+com base no relatório upstream
+`Relatório PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO PESO DE BÚFALO .pdf`.
+
 ## Configuração
 
 `configs/shared.yaml` define dados, Índice de Features, Divisão Estratificada e diretório de treino compartilhados.

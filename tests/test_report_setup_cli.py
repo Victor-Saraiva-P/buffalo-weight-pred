@@ -15,6 +15,7 @@ from buffalo_weight.report_environment import (
 )
 from buffalo_weight.report_cli import main
 from buffalo_weight.train_cnn_mask import main as neural_training_main
+from buffalo_weight.train_pipeline import main as training_pipeline_main
 
 
 class FakeRuntimeProbe:
@@ -209,6 +210,27 @@ class ReportSetupCliTest(unittest.TestCase):
 
         result = neural_training_main(
             ["--shared-config", "missing.yaml", "--models-config", "missing.yaml"],
+            runtime_probe=runtime,
+            stderr=stderr,
+        )
+
+        self.assertEqual(result, 1)
+        self.assertIn("CUDA", stderr.getvalue())
+        self.assertIn("available CUDA GPU", stderr.getvalue())
+
+    def test_training_pipeline_rejects_missing_cuda_before_reading_inputs(self) -> None:
+        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
+        stderr = io.StringIO()
+
+        result = training_pipeline_main(
+            [
+                "--shared-config",
+                "missing-shared.yaml",
+                "--classical-models-config",
+                "missing-classical.yaml",
+                "--cnn-mask-models-config",
+                "missing-cnn.yaml",
+            ],
             runtime_probe=runtime,
             stderr=stderr,
         )

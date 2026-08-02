@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +8,7 @@ from PIL import Image
 
 from buffalo_weight.cnn_architectures import build_mask_network
 from buffalo_weight.models import ModelParam
+from buffalo_weight.neural_environment import resolve_neural_device as resolve_device
 from buffalo_weight.split import parse_weight
 
 if TYPE_CHECKING:
@@ -18,22 +18,7 @@ if TYPE_CHECKING:
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 RESIZE_MODES = frozenset({"letterbox", "stretch"})
-DEVICES = frozenset({"cpu", "cuda"})
 INPUT_REPRESENTATIONS = frozenset({"binary", "geometry_channels"})
-
-
-def resolve_device(requested: str, cuda_available: Callable[[], bool]) -> str:
-    """Require CUDA before neural execution, without automatic CPU fallback.
-
-    Example: ``resolve_device("cuda", lambda: True)`` returns ``"cuda"``.
-    """
-    if requested not in DEVICES:
-        raise ValueError(f"device was {requested!r}; expected one of {sorted(DEVICES)}")
-    if requested == "cpu":
-        return "cpu"
-    if not cuda_available():
-        raise ValueError("device was 'cuda', but CUDA is not available; expected an available CUDA device")
-    return "cuda"
 
 
 class EarlyStopping:

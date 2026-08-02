@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import torch
-from torch import nn
 from collections.abc import Callable
 
+import torch
+from torch import nn
+
+from buffalo_weight.neural_environment import require_setup_managed_pretraining
 from buffalo_weight.resnet18_weights import build_offline_resnet18
 
 
@@ -161,6 +163,7 @@ def build_mask_network(
     fine_tune_mode: str = "head",
     input_channels: int = 1,
 ) -> nn.Module:
+    require_setup_managed_pretraining(architecture, pretrained)
     try:
         builder = MASK_NETWORK_BUILDERS[architecture]
     except KeyError as error:

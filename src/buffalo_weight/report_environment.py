@@ -7,6 +7,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
+from buffalo_weight.neural_environment import require_neural_cuda
+
 
 PYTHON_SERIES = "3.14"
 APPROVED_DEPENDENCIES: dict[str, str] = {
@@ -157,15 +159,6 @@ def validate_python_runtime(runtime: PythonRuntime) -> None:
         return
     raise ValueError(
         f"Python version was {runtime.full_version!r}; expected the 3.14.x series"
-    )
-
-
-def require_neural_cuda(compute: ComputeEnvironment) -> None:
-    """Fail before neural work without CUDA; for example, a CPU host is rejected."""
-    if compute.gpu_name is not None and compute.cuda_capability is not None:
-        return
-    raise ValueError(
-        f"CUDA environment was {compute!r}; expected an available CUDA GPU with compute capability"
     )
 
 

@@ -2,74 +2,142 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import training_lock
 from buffalo_weight.models import ModelConfig, parse_model_configs, validate_unique_model_configs
+from buffalo_weight.neural_environment import (
+    OFFICIAL_NEURAL_DEVICE,
+    OFFICIAL_NEURAL_DEVICE_CHOICES,
+    require_neural_cuda,
+)
+from buffalo_weight.report_environment import RuntimeProbe
 from buffalo_weight.train import write_model_comparison_from_outputs
 from buffalo_weight.train_classical import train_classical
 from buffalo_weight.train_cnn_mask import train_cnn_mask
+from buffalo_weight.system_setup import SystemRuntimeProbe
 from buffalo_weight.validation import validate_mask_files
+
+
+@dataclass(frozen=True)
+class _TrainingPipelineRequest:
+    shared_config_path: Path
+    classical_models_config_path: Path
+    cnn_mask_models_config_path: Path
+    device: str
+    dry_run: bool
 
 
 def train_pipeline(
     shared_config_path: Path,
     classical_models_config_path: Path,
     cnn_mask_models_config_path: Path,
-    device: str = "cuda",
+    device: str = OFFICIAL_NEURAL_DEVICE,
     dry_run: bool = False,
 ) -> None:
-    shared_config = load_config(shared_config_path)
-    training = shared_config.get("training")
-    if not isinstance(training, dict):
-        raise ValueError("shared config training section must be a map")
-    classical_configs = parse_model_configs(load_config(classical_models_config_path))
-    mask_configs = parse_model_configs(load_config(cnn_mask_models_config_path))
-    validate_unique_model_configs([*classical_configs, *mask_configs])
-    output_dir = Path(str(training["output_dir"]))
+    """Run the full training funnel; for example, ``dry_run=True`` only audits work."""
+    request = _TrainingPipelineRequest(
+        shared_config_path, classical_models_config_path, cnn_mask_models_config_path,
+        device, dry_run,
+    )
+    model_configs = _load_pipeline_configs(
+        classical_models_config_path, cnn_mask_models_config_path
+    )
     if dry_run:
-        _run_pipeline(shared_config_path, classical_models_config_path, cnn_mask_models_config_path, device, True)
+        _run_pipeline(request)
         return
-    with training_lock(output_dir):
-        _run_pipeline(shared_config_path, classical_models_config_path, cnn_mask_models_config_path, device, False)
-        write_model_comparison_from_outputs(output_dir, [*classical_configs, *cnn_configs(cnn_mask_models_config_path)])
+    _run_locked_pipeline(request, model_configs)
 
 
-def _run_pipeline(
-    shared_config_path: Path, classical_path: Path, mask_path: Path, device: str, dry_run: bool
+def _run_locked_pipeline(
+    request: _TrainingPipelineRequest, model_configs: list[ModelConfig]
 ) -> None:
-    shared_config = load_config(shared_config_path)
+    output_dir = _training_output_dir(request.shared_config_path)
+    with training_lock(output_dir):
+        _run_pipeline(request)
+        write_model_comparison_from_outputs(output_dir, model_configs)
+
+
+def _load_pipeline_configs(classical_path: Path, mask_path: Path) -> list[ModelConfig]:
+    classical_configs = parse_model_configs(load_config(classical_path))
+    mask_configs = cnn_configs(mask_path)
+    model_configs = [*classical_configs, *mask_configs]
+    validate_unique_model_configs(model_configs)
+    return model_configs
+
+
+def _training_output_dir(shared_config_path: Path) -> Path:
+    training = load_config(shared_config_path).get("training")
+    if isinstance(training, dict):
+        return Path(str(training["output_dir"]))
+    raise ValueError(
+        f"shared config training section was {training!r}; expected a map"
+    )
+
+
+def _run_pipeline(request: _TrainingPipelineRequest) -> None:
+    shared_config = load_config(request.shared_config_path)
     validate_mask_files(shared_config)
-    train_classical(shared_config_path, classical_path, dry_run)
-    train_cnn_mask(shared_config_path, mask_path, device, dry_run)
+    train_classical(
+        request.shared_config_path, request.classical_models_config_path, request.dry_run
+    )
+    train_cnn_mask(
+        request.shared_config_path,
+        request.cnn_mask_models_config_path,
+        request.device,
+        request.dry_run,
+    )
 
 
 def cnn_configs(path: Path) -> list[ModelConfig]:
-    """Load mask configurations for the final aggregate comparison."""
+    """Load comparison configurations.
+
+    Example: pass the official mask-model YAML path.
+    """
     return parse_model_configs(load_config(path))
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    runtime_probe: RuntimeProbe | None = None,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Run the training CLI; for example, ``main([..., "--dry-run"])`` skips CUDA."""
+    args = _build_parser().parse_args(argv)
+    try:
+        return _run_training_command(args, runtime_probe)
+    except (KeyError, ValueError, FileNotFoundError) as error:
+        print(error, file=stderr)
+        return 1
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--classical-models-config", required=True)
     parser.add_argument("--cnn-mask-models-config", required=True)
-    parser.add_argument("--device", choices=("cuda",), default="cuda")
+    parser.add_argument(
+        "--device", choices=OFFICIAL_NEURAL_DEVICE_CHOICES, default=OFFICIAL_NEURAL_DEVICE
+    )
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
 
-    try:
-        train_pipeline(
-            Path(args.shared_config),
-            Path(args.classical_models_config),
-            Path(args.cnn_mask_models_config),
-            args.device,
-            args.dry_run,
-        )
-    except (KeyError, ValueError, FileNotFoundError) as error:
-        print(error, file=sys.stderr)
-        return 1
+
+def _run_training_command(
+    args: argparse.Namespace, runtime_probe: RuntimeProbe | None
+) -> int:
+    if not args.dry_run:
+        require_neural_cuda((runtime_probe or SystemRuntimeProbe()).compute_environment())
+    train_pipeline(
+        Path(args.shared_config),
+        Path(args.classical_models_config),
+        Path(args.cnn_mask_models_config),
+        args.device,
+        args.dry_run,
+    )
     return 0
 
 

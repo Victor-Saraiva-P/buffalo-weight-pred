@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
+from unittest.mock import patch
 
 import torch
 
-from buffalo_weight.resnet18_weights import load_offline_resnet18
+from buffalo_weight.resnet18_weights import build_offline_resnet18, load_offline_resnet18
+from tests.fake_filesystem import MemoryPath
 
 
 class RecordingResNet18:
@@ -45,7 +49,48 @@ class FakeResNet18StateReader:
         return {"layer.weight": torch.tensor([1.0])}
 
 
+class RecordingTorchvisionResNet18Builder:
+    def __init__(self) -> None:
+        self.received_weights: object = "not-called"
+        self.network = RecordingResNet18()
+
+    def __call__(self, *, weights: object) -> RecordingResNet18:
+        self.received_weights = weights
+        return self.network
+
+
+class FakeTorchStateLoader:
+    def __init__(self) -> None:
+        self.path: object | None = None
+
+    def __call__(
+        self, path: object, *, map_location: str, weights_only: bool
+    ) -> dict[str, torch.Tensor]:
+        self.path = path
+        return {"layer.weight": torch.tensor([2.0])}
+
+
 class ResNet18WeightsTest(unittest.TestCase):
+    def test_default_offline_builder_uses_local_state_without_url_weights(self) -> None:
+        content = b"official weights"
+        cache_path = MemoryPath("weights.pth", {"weights.pth": content})
+        expected_sha256 = hashlib.sha256(content).hexdigest()
+        network_builder = RecordingTorchvisionResNet18Builder()
+        state_loader = FakeTorchStateLoader()
+
+        with (
+            patch("torchvision.models.resnet18", new=network_builder),
+            patch("torch.load", new=state_loader),
+        ):
+            network = build_offline_resnet18(
+                cast(Path, cache_path), expected_sha256
+            )
+
+        self.assertIs(network, network_builder.network)
+        self.assertIsNone(network_builder.received_weights)
+        self.assertIs(state_loader.path, cache_path)
+        self.assertEqual(network_builder.network.loaded_state["layer.weight"].item(), 2.0)
+
     def test_offline_loader_builds_without_download_and_loads_validated_cache(self) -> None:
         factory = FakeResNet18Factory()
         reader = FakeResNet18StateReader()

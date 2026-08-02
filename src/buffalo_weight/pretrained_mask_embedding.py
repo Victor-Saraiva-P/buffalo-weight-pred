@@ -7,6 +7,7 @@ import numpy as np
 from buffalo_weight.cnn_mask import load_masks, resolve_device
 from buffalo_weight.mask_classical import regression_pipeline
 from buffalo_weight.models import ModelParam
+from buffalo_weight.neural_environment import require_setup_managed_pretraining
 from buffalo_weight.resnet18_weights import build_offline_resnet18
 from buffalo_weight.split import parse_weight
 
@@ -17,12 +18,9 @@ EMBEDDING_ARCHITECTURES = frozenset({"mobilenet_v3_small", "resnet18"})
 def build_embedding_network(architecture: str) -> object:
     """Build a frozen ImageNet feature extractor; for example, ``build_embedding_network("resnet18")``."""
     from torch import nn
-    from torchvision.models import MobileNet_V3_Small_Weights, mobilenet_v3_small
 
     if architecture == "mobilenet_v3_small":
-        network = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
-        network.classifier = nn.Identity()
-        return network
+        require_setup_managed_pretraining(architecture, pretrained=True)
     if architecture == "resnet18":
         network = build_offline_resnet18()
         network.fc = nn.Identity()

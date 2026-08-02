@@ -31,6 +31,7 @@ from buffalo_weight.models import (
 )
 from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
+from tests.fake_compute import fake_available_cuda, fake_unavailable_cuda
 
 
 class ModelConfigTest(unittest.TestCase):
@@ -182,15 +183,21 @@ class ModelConfigTest(unittest.TestCase):
 
 class CnnMaskTest(unittest.TestCase):
     def test_cuda_device_is_used_when_available(self) -> None:
-        self.assertEqual(resolve_device("cuda", lambda: True), "cuda")
+        """Keep the official device when the named CUDA fake is available."""
+
+        self.assertEqual(resolve_device("cuda", fake_available_cuda), "cuda")
 
     def test_auto_device_is_rejected_without_cpu_fallback(self) -> None:
+        """Reject the legacy automatic-device request even when CUDA exists."""
+
         with self.assertRaisesRegex(ValueError, "auto.*expected.*cuda"):
-            resolve_device("auto", lambda: True)
+            resolve_device("auto", fake_available_cuda)
 
     def test_explicit_cuda_requires_available_device(self) -> None:
+        """Reject the official request when the named CUDA fake is absent."""
+
         with self.assertRaisesRegex(ValueError, "CUDA is not available"):
-            resolve_device("cuda", lambda: False)
+            resolve_device("cuda", fake_unavailable_cuda)
 
     def test_mask_network_architectures_predict_one_weight_per_mask(self) -> None:
         import torch

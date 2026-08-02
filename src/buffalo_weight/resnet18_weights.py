@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
-from buffalo_weight.report_environment import RESNET18_CACHE_PATH, RESNET18_SHA256
+from buffalo_weight.environment_contract import RESNET18_CACHE_PATH, RESNET18_SHA256
 
 if TYPE_CHECKING:
     from torch import Tensor, nn

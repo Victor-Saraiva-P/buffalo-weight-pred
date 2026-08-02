@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from buffalo_weight.report_environment import (
+from buffalo_weight.environment_contract import (
     APPROVED_DEPENDENCIES,
     ComputeEnvironment,
     EnvironmentProvenance,

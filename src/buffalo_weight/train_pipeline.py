@@ -9,16 +9,13 @@ from typing import TextIO
 from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import training_lock
 from buffalo_weight.models import ModelConfig, parse_model_configs, validate_unique_model_configs
-from buffalo_weight.neural_environment import (
-    OFFICIAL_NEURAL_DEVICE,
-    OFFICIAL_NEURAL_DEVICE_CHOICES,
-    require_neural_cuda_for_run,
-)
-from buffalo_weight.report_environment import RuntimeProbe
+from buffalo_weight.neural_cli import add_neural_execution_arguments
+from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE
+from buffalo_weight.environment_contract import RuntimeProbe
 from buffalo_weight.train import write_model_comparison_from_outputs
 from buffalo_weight.train_classical import train_classical
 from buffalo_weight.train_cnn_mask import execute_cuda_validated_cnn_mask_training
-from buffalo_weight.system_setup import default_runtime_probe
+from buffalo_weight.system_setup import require_official_neural_runtime
 from buffalo_weight.validation import validate_mask_files
 
 
@@ -39,8 +36,7 @@ def train_pipeline(
     dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> None:
     """Run the full training funnel; for example, ``dry_run=True`` only audits work."""
-    probe = runtime_probe or default_runtime_probe()
-    require_neural_cuda_for_run(dry_run, probe.compute_environment)
+    require_official_neural_runtime(dry_run, runtime_probe)
     request = _TrainingPipelineRequest(
         shared_config_path, classical_models_config_path, cnn_mask_models_config_path, device,
         dry_run,
@@ -119,10 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--classical-models-config", required=True)
     parser.add_argument("--cnn-mask-models-config", required=True)
-    parser.add_argument(
-        "--device", choices=OFFICIAL_NEURAL_DEVICE_CHOICES, default=OFFICIAL_NEURAL_DEVICE
-    )
-    parser.add_argument("--dry-run", action="store_true")
+    add_neural_execution_arguments(parser)
     return parser
 
 

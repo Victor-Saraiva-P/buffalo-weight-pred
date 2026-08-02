@@ -7,7 +7,8 @@ import sys
 from collections.abc import Sequence
 from typing import TextIO
 
-from buffalo_weight.report_environment import SetupServices, setup_official_environment
+from buffalo_weight.environment_contract import SetupServices
+from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.system_setup import default_setup_services
 
 

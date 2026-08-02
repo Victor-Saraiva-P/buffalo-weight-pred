@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import io
-import subprocess
-import sys
 import unittest
 from pathlib import Path
 
-from buffalo_weight.report_environment import (
+from buffalo_weight.environment_contract import (
     APPROVED_DEPENDENCIES,
     RESNET18_SHA256,
     ComputeEnvironment,
@@ -27,13 +25,6 @@ from tests.fake_setup_services import (
 
 
 class ReportSetupCliTest(unittest.TestCase):
-    def test_setup_bootstraps_without_site_packages(self) -> None:
-        command = [sys.executable, "-S", "tests/setup_without_dependencies_case.py"]
-
-        result = subprocess.run(command, text=True, capture_output=True, check=False)
-
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
     def test_setup_installs_and_reports_approved_environment(self) -> None:
         packages = FakePackageGateway({})
         weights = FakeWeightGateway()

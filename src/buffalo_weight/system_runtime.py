@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from buffalo_weight.report_environment import ComputeEnvironment, PythonRuntime
+from buffalo_weight.environment_contract import ComputeEnvironment, PythonRuntime
 
 
 class PythonVersionInfo(Protocol):

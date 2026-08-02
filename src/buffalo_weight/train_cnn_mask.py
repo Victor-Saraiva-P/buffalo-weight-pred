@@ -10,14 +10,11 @@ from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
 from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
-from buffalo_weight.neural_environment import (
-    OFFICIAL_NEURAL_DEVICE,
-    OFFICIAL_NEURAL_DEVICE_CHOICES,
-    require_neural_cuda_for_run,
-)
-from buffalo_weight.report_environment import RuntimeProbe
+from buffalo_weight.neural_cli import add_neural_execution_arguments
+from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE
+from buffalo_weight.environment_contract import RuntimeProbe
 from buffalo_weight.split import read_rows
-from buffalo_weight.system_setup import default_runtime_probe
+from buffalo_weight.system_setup import require_official_neural_runtime
 from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
 
@@ -36,8 +33,7 @@ def train_cnn_mask(
     dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> list[ModelConfig]:
     """Train mask predictors; for example, pass ``dry_run=True`` to audit artifacts."""
-    probe = runtime_probe or default_runtime_probe()
-    require_neural_cuda_for_run(dry_run, probe.compute_environment)
+    require_official_neural_runtime(dry_run, runtime_probe)
     return execute_cuda_validated_cnn_mask_training(
         shared_config_path, models_config_path, device, dry_run
     )
@@ -144,10 +140,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
-    parser.add_argument(
-        "--device", choices=OFFICIAL_NEURAL_DEVICE_CHOICES, default=OFFICIAL_NEURAL_DEVICE
-    )
-    parser.add_argument("--dry-run", action="store_true")
+    add_neural_execution_arguments(parser)
     return parser
 
 
@@ -159,8 +152,7 @@ def _run_training_command(
             Path(args.shared_config), Path(args.models_config), args.device, True
         )
         return 0
-    probe = runtime_probe or default_runtime_probe()
-    require_neural_cuda_for_run(False, probe.compute_environment)
+    require_official_neural_runtime(False, runtime_probe)
     shared_config = load_config(Path(args.shared_config))
     training = _require_mapping_section(shared_config, "training")
     with training_lock(Path(str(training["output_dir"]))):

@@ -8,7 +8,7 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from typing import Protocol
 
-from buffalo_weight.report_environment import APPROVED_DEPENDENCIES
+from buffalo_weight.environment_contract import APPROVED_DEPENDENCIES
 
 
 class InstalledDistribution(Protocol):

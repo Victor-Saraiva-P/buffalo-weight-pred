@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from typing import cast
 
-from buffalo_weight.report_environment import (
+from buffalo_weight.environment_contract import (
     APPROVED_DEPENDENCIES,
     ComputeEnvironment,
     EnvironmentProvenance,

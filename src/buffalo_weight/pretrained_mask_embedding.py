@@ -15,16 +15,20 @@ from buffalo_weight.split import parse_weight
 
 EMBEDDING_ARCHITECTURES = frozenset({"mobilenet_v3_small", "resnet18"})
 EmbeddingDeviceResolver = Callable[[str, Callable[[], bool]], str]
+EmbeddingNetworkBuilder = Callable[[str], object]
+EmbeddingMaskLoader = Callable[[Path, list[dict[str, str]], int, str], np.ndarray]
 
 
-def build_embedding_network(architecture: str) -> object:
+def build_embedding_network(
+    architecture: str, offline_resnet18_builder: Callable[[], object] = default_offline_resnet18
+) -> object:
     """Build a frozen ImageNet feature extractor; for example, ``build_embedding_network("resnet18")``."""
     from torch import nn
 
     if architecture == "mobilenet_v3_small":
         require_setup_managed_pretraining(architecture, pretrained=True)
     if architecture == "resnet18":
-        network = default_offline_resnet18()
+        network = offline_resnet18_builder()
         network.fc = nn.Identity()
         return network
     raise ValueError(
@@ -39,11 +43,11 @@ class PretrainedMaskEmbeddingRegressor:
     """
 
     def __init__(
-        self,
-        masks_dir: Path,
-        params: dict[str, ModelParam],
+        self, masks_dir: Path, params: dict[str, ModelParam],
         requested_device: str = "cuda",
         device_resolver: EmbeddingDeviceResolver = resolve_device,
+        network_builder: EmbeddingNetworkBuilder = build_embedding_network,
+        mask_loader: EmbeddingMaskLoader = load_masks,
     ) -> None:
         self.masks_dir = masks_dir
         self.params = params
@@ -53,6 +57,8 @@ class PretrainedMaskEmbeddingRegressor:
         self.batch_size = int(params.get("batch_size", 16))
         self.requested_device = requested_device
         self.device_resolver = device_resolver
+        self.network_builder = network_builder
+        self.mask_loader = mask_loader
         self.model = None
         self.y_mean = 0.0
         self.y_std = 1.0
@@ -61,8 +67,8 @@ class PretrainedMaskEmbeddingRegressor:
         import torch
 
         device = self.device_resolver(self.requested_device, torch.cuda.is_available)
-        network = build_embedding_network(self.architecture).to(device).eval()
-        masks = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None]
+        network = self.network_builder(self.architecture).to(device).eval()
+        masks = self.mask_loader(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None]
         mean = torch.tensor([0.485, 0.456, 0.406], device=device)[None, :, None, None]
         std = torch.tensor([0.229, 0.224, 0.225], device=device)[None, :, None, None]
         batches = []

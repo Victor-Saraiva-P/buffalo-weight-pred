@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ContextManager
 
-from buffalo_weight.report_environment import WeightSetupStatus
+from buffalo_weight.environment_contract import WeightSetupStatus
 from buffalo_weight.resnet18_weights import validate_resnet18_sha256
 
 

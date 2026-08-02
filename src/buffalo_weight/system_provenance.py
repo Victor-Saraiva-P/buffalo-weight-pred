@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from buffalo_weight.report_environment import EnvironmentProvenance
+from buffalo_weight.environment_contract import EnvironmentProvenance
 
 
 class JsonProvenanceWriter:

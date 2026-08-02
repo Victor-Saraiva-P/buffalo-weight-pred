@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -8,11 +9,12 @@ from buffalo_weight.cnn_mask import load_masks, resolve_device
 from buffalo_weight.mask_classical import regression_pipeline
 from buffalo_weight.models import ModelParam
 from buffalo_weight.neural_environment import require_setup_managed_pretraining
-from buffalo_weight.resnet18_weights import build_offline_resnet18
+from buffalo_weight.resnet18_weights import default_offline_resnet18
 from buffalo_weight.split import parse_weight
 
 
 EMBEDDING_ARCHITECTURES = frozenset({"mobilenet_v3_small", "resnet18"})
+EmbeddingDeviceResolver = Callable[[str, Callable[[], bool]], str]
 
 
 def build_embedding_network(architecture: str) -> object:
@@ -22,7 +24,7 @@ def build_embedding_network(architecture: str) -> object:
     if architecture == "mobilenet_v3_small":
         require_setup_managed_pretraining(architecture, pretrained=True)
     if architecture == "resnet18":
-        network = build_offline_resnet18()
+        network = default_offline_resnet18()
         network.fc = nn.Identity()
         return network
     raise ValueError(
@@ -36,7 +38,13 @@ class PretrainedMaskEmbeddingRegressor:
     Example: ``PretrainedMaskEmbeddingRegressor(Path("masks"), params).fit(rows)``.
     """
 
-    def __init__(self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "cuda") -> None:
+    def __init__(
+        self,
+        masks_dir: Path,
+        params: dict[str, ModelParam],
+        requested_device: str = "cuda",
+        device_resolver: EmbeddingDeviceResolver = resolve_device,
+    ) -> None:
         self.masks_dir = masks_dir
         self.params = params
         self.image_size = int(params["image_size"])
@@ -44,6 +52,7 @@ class PretrainedMaskEmbeddingRegressor:
         self.architecture = str(params["architecture"])
         self.batch_size = int(params.get("batch_size", 16))
         self.requested_device = requested_device
+        self.device_resolver = device_resolver
         self.model = None
         self.y_mean = 0.0
         self.y_std = 1.0
@@ -51,7 +60,7 @@ class PretrainedMaskEmbeddingRegressor:
     def _embeddings(self, rows: list[dict[str, str]]) -> np.ndarray:
         import torch
 
-        device = resolve_device(self.requested_device, torch.cuda.is_available)
+        device = self.device_resolver(self.requested_device, torch.cuda.is_available)
         network = build_embedding_network(self.architecture).to(device).eval()
         masks = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)[:, None]
         mean = torch.tensor([0.485, 0.456, 0.406], device=device)[None, :, None, None]

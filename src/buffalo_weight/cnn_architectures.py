@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from buffalo_weight.neural_environment import require_setup_managed_pretraining
-from buffalo_weight.resnet18_weights import build_offline_resnet18
+from buffalo_weight.resnet18_weights import default_offline_resnet18
 
 
 MASK_NETWORK_ARCHITECTURES = frozenset(
@@ -129,7 +129,7 @@ def _resnet18_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.Module:
         from torchvision.models import resnet18
     except ImportError as error:
         raise ValueError("resnet18 requires torchvision") from error
-    backbone = build_offline_resnet18() if pretrained else resnet18(weights=None)
+    backbone = default_offline_resnet18() if pretrained else resnet18(weights=None)
     output_layer = backbone.fc
     backbone.fc = nn.Linear(output_layer.in_features, 1)
     return ImageNetMaskNetwork(backbone, backbone.fc, backbone.layer4, fine_tune_mode)

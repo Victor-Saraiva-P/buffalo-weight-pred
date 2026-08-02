@@ -6,15 +6,23 @@ import platform
 import subprocess
 import sys
 from importlib.metadata import distributions, version
+from typing import cast
 from urllib.request import urlopen
-
-import torch
 
 from buffalo_weight.report_environment import RuntimeProbe, SetupServices
 from buffalo_weight.system_packages import PipPackageGateway
 from buffalo_weight.system_provenance import JsonProvenanceWriter
-from buffalo_weight.system_runtime import NvidiaDriverProbe, SystemRuntimeProbe
+from buffalo_weight.system_runtime import NvidiaDriverProbe, SystemRuntimeProbe, TorchRuntime
 from buffalo_weight.system_weights import HttpWeightGateway
+
+
+class TorchRuntimeImporter:
+    def __call__(self) -> TorchRuntime:
+        """Import torch after setup installs it; for example, defer CUDA inspection."""
+
+        import torch
+
+        return cast(TorchRuntime, torch)
 
 
 def default_runtime_probe() -> RuntimeProbe:
@@ -24,7 +32,7 @@ def default_runtime_probe() -> RuntimeProbe:
         sys.version_info,
         platform.python_implementation,
         platform.platform,
-        torch,
+        TorchRuntimeImporter(),
         driver_probe.version,
     )
 

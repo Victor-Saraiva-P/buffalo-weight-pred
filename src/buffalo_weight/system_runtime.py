@@ -17,11 +17,20 @@ class PythonVersionInfo(Protocol):
 
 
 class CudaRuntime(Protocol):
-    def is_available(self) -> bool: ...
+    def is_available(self) -> bool:
+        """Report CUDA usability; for example, CPU-only Torch returns ``False``."""
 
-    def get_device_capability(self, device: int) -> tuple[int, int]: ...
+        ...
 
-    def get_device_name(self, device: int) -> str: ...
+    def get_device_capability(self, device: int) -> tuple[int, int]:
+        """Read capability; for example, device zero may return ``(9, 0)``."""
+
+        ...
+
+    def get_device_name(self, device: int) -> str:
+        """Read a device name; for example, device zero may return ``"H100"``."""
+
+        ...
 
 
 class TorchVersion(Protocol):
@@ -57,13 +66,13 @@ class SystemRuntimeProbe:
         version_info: PythonVersionInfo,
         implementation_provider: Callable[[], str],
         platform_provider: Callable[[], str],
-        torch_runtime: TorchRuntime,
+        torch_runtime_provider: Callable[[], TorchRuntime],
         driver_version_provider: Callable[[], str | None],
     ) -> None:
         self._version_info = version_info
         self._implementation_provider = implementation_provider
         self._platform_provider = platform_provider
-        self._torch_runtime = torch_runtime
+        self._torch_runtime_provider = torch_runtime_provider
         self._driver_version_provider = driver_version_provider
 
     def python_runtime(self) -> PythonRuntime:
@@ -75,18 +84,20 @@ class SystemRuntimeProbe:
 
     def compute_environment(self) -> ComputeEnvironment:
         """Inspect CUDA; for example, CPU-only setup returns empty GPU fields."""
-        cuda = self._torch_runtime.cuda
+        torch_runtime = self._torch_runtime_provider()
+        cuda = torch_runtime.cuda
         driver = self._driver_version_provider()
         if not cuda.is_available():
-            return ComputeEnvironment(None, None, self._torch_runtime.version.cuda, driver)
+            return ComputeEnvironment(None, None, torch_runtime.version.cuda, driver)
         major, minor = cuda.get_device_capability(0)
         return ComputeEnvironment(
             cuda.get_device_name(0),
             f"{major}.{minor}",
-            self._torch_runtime.version.cuda,
+            torch_runtime.version.cuda,
             driver,
         )
 
     def platform_description(self) -> str:
         """Describe the host; for example, include OS and machine architecture."""
+
         return self._platform_provider()

@@ -10,11 +10,15 @@ from buffalo_weight.pretrained_mask_embedding import build_embedding_network
 
 class FailingTorchvisionNetworkBuilder:
     def __call__(self, **kwargs: object) -> object:
+        """Fail if rejected pretraining reaches a torchvision download seam."""
+
         raise AssertionError(f"torchvision builder received {kwargs!r}; expected no download path")
 
 
 class NeuralEnvironmentTest(unittest.TestCase):
     def test_explicit_cpu_is_rejected_for_neural_execution(self) -> None:
+        """Keep CPU fallback outside the official neural execution contract."""
+
         with self.assertRaisesRegex(ValueError, "cpu.*expected.*cuda"):
             resolve_device("cpu", lambda: True)
 

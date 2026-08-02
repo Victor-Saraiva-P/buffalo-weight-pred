@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import torch
 
-from buffalo_weight.resnet18_weights import build_offline_resnet18, load_offline_resnet18
+from buffalo_weight.resnet18_weights import build_offline_resnet18, default_offline_resnet18
 from tests.fake_filesystem import MemoryPath
 
 
@@ -51,16 +51,20 @@ class FakeResNet18StateReader:
 
 class RecordingTorchvisionResNet18Builder:
     def __init__(self) -> None:
+        """Start without a torchvision weight selection."""
         self.received_weights: object = "not-called"
         self.network = RecordingResNet18()
 
     def __call__(self, *, weights: object) -> RecordingResNet18:
+        """Record the torchvision weight selection and return the fake network."""
         self.received_weights = weights
         return self.network
 
 
 class FakeTorchStateLoader:
     def __init__(self) -> None:
+        """Start without a requested local cache path."""
+
         self.path: object | None = None
 
     def __call__(
@@ -82,7 +86,7 @@ class ResNet18WeightsTest(unittest.TestCase):
             patch("torchvision.models.resnet18", new=network_builder),
             patch("torch.load", new=state_loader),
         ):
-            network = build_offline_resnet18(
+            network = default_offline_resnet18(
                 cast(Path, cache_path), expected_sha256
             )
 
@@ -97,7 +101,7 @@ class ResNet18WeightsTest(unittest.TestCase):
         cache_path = Path("generated/setup/resnet18-IMAGENET1K_V1.pth")
         expected_sha256 = "approved-sha"
 
-        network = load_offline_resnet18(factory, reader, cache_path, expected_sha256)
+        network = build_offline_resnet18(factory, reader, cache_path, expected_sha256)
 
         self.assertIs(network, factory.network)
         self.assertEqual(reader.path, cache_path)

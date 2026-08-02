@@ -28,27 +28,33 @@ class MemoryPath:
     @property
     def parent(self) -> "MemoryPath":
         """Return a shared-store parent; for example, ``a/b`` returns ``a``."""
+
         return MemoryPath(str(PurePosixPath(self.value).parent), self.files)
 
     @property
     def suffix(self) -> str:
         """Return the fake suffix; for example, ``weights.pth`` returns ``.pth``."""
+
         return PurePosixPath(self.value).suffix
 
     def exists(self) -> bool:
         """Report stored content; for example, seeded paths exist immediately."""
+
         return self.value in self.files
 
     def mkdir(self, parents: bool, exist_ok: bool) -> None:
         """Accept directory creation; for example, setup can prepare a fake parent."""
+
         return None
 
     def with_suffix(self, suffix: str) -> "MemoryPath":
         """Return a sibling fake path; for example, append the setup ``.part`` suffix."""
+
         return MemoryPath(str(PurePosixPath(self.value).with_suffix(suffix)), self.files)
 
     def replace(self, target: "MemoryPath") -> None:
         """Promote stored bytes; for example, replace a cache with its ``.part`` file."""
+
         self.files[target.value] = self.files.pop(self.value)
 
     def open(self, mode: str) -> io.BytesIO:
@@ -72,4 +78,5 @@ class MemoryPath:
 
     def __str__(self) -> str:
         """Render the fake path; for example, include it in validation errors."""
+
         return self.value

@@ -62,28 +62,27 @@ class TorchResNet18StateReader:
         return cast("Mapping[str, Tensor]", loaded_state)
 
 
-def load_offline_resnet18(
+def build_offline_resnet18(
     factory: ResNet18Factory,
     state_reader: ResNet18StateReader,
-    cache_path: Path = RESNET18_CACHE_PATH,
-    expected_sha256: str = RESNET18_SHA256,
-) -> ResNet18Network:
-    """Build from local validated state; for example, tests can inject an in-memory reader."""
-    network = factory.create_without_weights()
-    network.load_state_dict(state_reader.read(cache_path, expected_sha256))
-    return network
-
-
-def build_offline_resnet18(
     cache_path: Path = RESNET18_CACHE_PATH, expected_sha256: str = RESNET18_SHA256
 ) -> nn.Module:
-    """Build the official offline model; for example, training reuses the setup cache."""
-    network = load_offline_resnet18(
-        TorchvisionResNet18Factory(), TorchResNet18StateReader(), cache_path, expected_sha256
-    )
+    """Build with injected adapters; for example, tests can supply an in-memory reader."""
+    network = factory.create_without_weights()
+    state_dict = state_reader.read(cache_path, expected_sha256)
+    network.load_state_dict(state_dict)
     from torch import nn
 
     return cast("nn.Module", network)
+
+
+def default_offline_resnet18(
+    cache_path: Path = RESNET18_CACHE_PATH, expected_sha256: str = RESNET18_SHA256
+) -> nn.Module:
+    """Compose the system adapters; for example, training reads the setup cache."""
+    return build_offline_resnet18(
+        TorchvisionResNet18Factory(), TorchResNet18StateReader(), cache_path, expected_sha256
+    )
 
 
 def validate_resnet18_sha256(path: Path, expected_sha256: str) -> None:

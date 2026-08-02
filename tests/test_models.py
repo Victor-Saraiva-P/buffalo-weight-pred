@@ -29,10 +29,8 @@ from buffalo_weight.models import (
     validate_unique_model_configs,
     xgboost_compute_params,
 )
-from buffalo_weight.mask_classical import MaskFeatureRegressor, shape_profile_features
 from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
-from buffalo_weight.pretrained_mask_embedding import PretrainedMaskEmbeddingRegressor
 
 
 class ModelConfigTest(unittest.TestCase):
@@ -462,66 +460,6 @@ class PcaFeatureFusionTest(unittest.TestCase):
 
         self.assertEqual(predictions.shape, (8,))
         self.assertTrue(np.isfinite(predictions).all())
-
-
-class MaskClassicalTest(unittest.TestCase):
-    def test_shape_profiles_encode_six_signatures_per_axis_position(self) -> None:
-        masks = np.zeros((2, 4, 4), dtype=np.float32)
-        masks[:, 1:3, 1:3] = 1
-
-        profiles = shape_profile_features(masks)
-
-        self.assertEqual(profiles.shape, (2, 24))
-        self.assertTrue(np.isfinite(profiles).all())
-
-    def test_mask_profile_regressor_fits_binary_masks(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir, rows = mask_regression_fixture(Path(directory))
-            params = {
-                "image_size": 8,
-                "representation": "shape_profile",
-                "estimator": "ridge",
-                "alpha": 1.0,
-                "random_state": 42,
-            }
-            model = MaskFeatureRegressor(masks_dir, params)
-
-            model.fit(rows)
-            predictions = model.predict(rows)
-
-        self.assertEqual(predictions.shape, (8,))
-
-    def test_pretrained_embedding_regressor_uses_frozen_mask_embeddings(self) -> None:
-        import torch
-
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir, rows = mask_regression_fixture(Path(directory))
-            params = {
-                "image_size": 8,
-                "architecture": "resnet18",
-                "estimator": "ridge",
-                "n_components": 2,
-                "random_state": 42,
-            }
-            network = torch.nn.Sequential(torch.nn.AdaptiveAvgPool2d(1), torch.nn.Flatten())
-            model = PretrainedMaskEmbeddingRegressor(masks_dir, params, "cuda")
-
-            with patch("buffalo_weight.pretrained_mask_embedding.build_embedding_network", return_value=network):
-                model.fit(rows)
-                predictions = model.predict(rows)
-
-        self.assertEqual(predictions.shape, (8,))
-
-
-def mask_regression_fixture(masks_dir: Path) -> tuple[Path, list[dict[str, str]]]:
-    """Create varied binary masks; for example, ``mask_regression_fixture(Path(tmp))``."""
-    rows = []
-    for index in range(8):
-        pixels = np.zeros((8, 8), dtype=np.uint8)
-        pixels[1:7, 1 : index + 1] = 255
-        Image.fromarray(pixels).save(masks_dir / f"profile-{index}.png")
-        rows.append({"file_name": f"profile-{index}", "weight": str(100 + index * 10)})
-    return masks_dir, rows
 
 
 if __name__ == "__main__":

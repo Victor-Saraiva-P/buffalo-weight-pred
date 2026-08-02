@@ -19,7 +19,7 @@ from buffalo_weight.report_environment import (
 from buffalo_weight.system_packages import PipPackageGateway
 from buffalo_weight.system_provenance import JsonProvenanceWriter
 from buffalo_weight.system_runtime import NvidiaDriverProbe, SystemRuntimeProbe
-from buffalo_weight.system_setup import default_setup_services
+from buffalo_weight.system_setup import TorchRuntimeImporter, default_setup_services
 from buffalo_weight.system_weights import HttpWeightGateway
 from tests.fake_filesystem import MemoryPath
 
@@ -53,6 +53,7 @@ class RecordingCommandRunner:
 class FakeVersionLookup:
     def __call__(self, distribution_name: str) -> str:
         """Return the approved version for a direct dependency."""
+
         return APPROVED_DEPENDENCIES[distribution_name]
 
 
@@ -66,24 +67,29 @@ class FakeDistribution:
 class FakeDistributionProvider:
     def __call__(self) -> list[FakeDistribution]:
         """Return one deterministic transitive distribution."""
+
         return [FakeDistribution("typing-extensions", "4.15.0")]
 
 
 class FakeCudaRuntime:
     def __init__(self, available: bool = False) -> None:
         """Prepare deterministic CUDA state."""
+
         self.available = available
 
     def is_available(self) -> bool:
         """Report configured CUDA availability."""
+
         return self.available
 
     def get_device_capability(self, device: int) -> tuple[int, int]:
         """Return a fixed capability for the requested fake device."""
+
         return (9, 0)
 
     def get_device_name(self, device: int) -> str:
         """Return a fixed name for the requested fake device."""
+
         return "Fake GPU"
 
 
@@ -97,6 +103,11 @@ class FakeTorchRuntime:
         self.cuda = FakeCudaRuntime(available)
         self.version = FakeTorchVersion()
 
+    def __call__(self) -> "FakeTorchRuntime":
+        """Return the configured runtime when inspection requests torch."""
+
+        return self
+
 
 class FakeVersionInfo:
     major = 3
@@ -107,14 +118,21 @@ class FakeVersionInfo:
 class FixedTextProbe:
     def __init__(self, value: str) -> None:
         """Prepare one deterministic platform text value."""
+
         self.value = value
 
     def __call__(self) -> str:
         """Return the configured platform text."""
+
         return self.value
 
 
 class SystemSetupTest(unittest.TestCase):
+    def test_torch_runtime_importer_loads_installed_runtime(self) -> None:
+        importer = TorchRuntimeImporter()
+        runtime = importer()
+        self.assertEqual(runtime.__name__, "torch")
+
     def test_system_runtime_probe_records_runtime_and_platform(self) -> None:
         probe = SystemRuntimeProbe(
             FakeVersionInfo(),

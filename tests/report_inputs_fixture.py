@@ -27,6 +27,7 @@ class CuratedInputsFixture:
         self._write_config()
 
     def run(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        """Run the real CLI; for example, ``fixture.run('inputs', '--dry-run')``."""
         main_path = Path(__file__).parents[1] / "main.py"
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
@@ -40,20 +41,27 @@ class CuratedInputsFixture:
         )
 
     def replace_weight(self, row_index: int, weight: str) -> None:
+        """Change one label; for example, ``fixture.replace_weight(0, '81')``."""
         rows = self.index_rows()
         rows[row_index]["weight_kg"] = weight
         self._write_csv(rows)
 
     def replace_file_name(self, row_index: int, file_name: str) -> None:
+        """Change one key; for example, ``fixture.replace_file_name(1, 'mask-000.png')``."""
         rows = self.index_rows()
         rows[row_index]["file_name"] = file_name
         self._write_csv(rows)
 
     def index_rows(self) -> list[dict[str, str]]:
+        """Read fixture labels; for example, ``fixture.index_rows()[0]``."""
         with self.index_path.open(newline="") as index_file:
             return list(csv.DictReader(index_file))
 
     def mask_path(self, row_index: int) -> Path:
+        """Locate one mask.
+
+        Example: ``fixture.mask_path(0)`` returns the first fixture PNG.
+        """
         return self.masks_dir / f"mask-{row_index:03d}.png"
 
     def _write_index(self) -> None:

@@ -14,6 +14,8 @@ from buffalo_weight.feature_calculators.scipy_geometry import (
 
 
 class FeatureContext:
+    """Cache geometry for one mask; for example, ``FeatureContext(mask).area``."""
+
     def __init__(self, mask: np.ndarray | Path | str) -> None:
         if isinstance(mask, (Path, str)):
             from PIL import Image
@@ -30,18 +32,31 @@ class FeatureContext:
 
     @property
     def mask(self) -> np.ndarray:
+        """Expose unchanged foreground.
+
+        Example: ``context.mask.shape`` gives the source resolution.
+        """
         return self._mask
 
     @functools.cached_property
     def perimeter(self) -> float:
+        """Return Crofton perimeter.
+
+        Example: ``context.perimeter`` is measured in source pixels.
+        """
         return crofton_perimeter(self._mask)
 
     @functools.cached_property
     def hull_points(self) -> np.ndarray:
+        """Return hull vertices.
+
+        Example: ``context.hull_points`` supports Feret diameter.
+        """
         return convex_hull_points(mask_boundary_points(self._mask))
 
     @functools.cached_property
     def convex_mask(self) -> np.ndarray:
+        """Return the filled hull; for example, ``context.convex_mask.sum()`` is convex area."""
         if self.area == 0:
             return np.zeros((0, 0), dtype=bool)
         ys, xs = self.nonzero_coords
@@ -52,11 +67,13 @@ class FeatureContext:
 
     @functools.cached_property
     def nonzero_coords(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return foreground coordinates; for example, ``ys, xs = context.nonzero_coords``."""
         ys, xs = np.nonzero(self._mask)
         return ys, xs
 
     @functools.cached_property
     def moments_data(self) -> dict[str, float]:
+        """Return normalized moments; for example, ``context.moments_data['eta20']``."""
         ys, xs = self.nonzero_coords
         x_values = xs.astype(float) + 0.5
         y_values = ys.astype(float) + 0.5

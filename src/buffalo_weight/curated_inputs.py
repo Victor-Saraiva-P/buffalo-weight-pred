@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from buffalo_weight.hashing import sha256_file
 from buffalo_weight.reproduction_config import InputsContract
 
 INDEX_COLUMNS = ["file_name", "farm", "weight_kg"]
@@ -36,14 +37,15 @@ def validate_curated_inputs(contract: InputsContract) -> list[ValidMask]:
 
 
 def input_hashes(contract: InputsContract) -> dict[str, str]:
-    hashes = {"mask_index.csv": _file_hash(contract.mask_index_path)}
+    """Hash operational inputs; for example, ``input_hashes(contract)`` fingerprints them."""
+    hashes = {"mask_index.csv": sha256_file(contract.mask_index_path)}
     if not contract.masks_dir.is_dir():
         raise ValueError(
             f"masks directory was {contract.masks_dir}; expected an existing directory"
         )
     for path in sorted(contract.masks_dir.iterdir()):
         if path.is_file():
-            hashes[f"masks/{path.name}"] = _file_hash(path)
+            hashes[f"masks/{path.name}"] = sha256_file(path)
     return hashes
 
 
@@ -132,11 +134,3 @@ def _validated_pixel_digest(mask: ValidMask) -> str:
         )
     shape = f"{pixels.shape[0]}x{pixels.shape[1]}:".encode()
     return hashlib.sha256(shape + pixels.tobytes()).hexdigest()
-
-
-def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()

@@ -7,6 +7,7 @@ from collections import Counter
 from sklearn.model_selection import StratifiedKFold
 
 from buffalo_weight.curated_inputs import ValidMask
+from buffalo_weight.csv_io import format_csv_number
 
 
 def canonical_split_rows(
@@ -45,7 +46,7 @@ def _split_row(mask: ValidMask, category: str, fold: int) -> dict[str, str]:
     return {
         "file_name": mask.file_name,
         "farm": mask.farm,
-        "weight_kg": _format_number(mask.weight_kg),
+        "weight_kg": format_csv_number(mask.weight_kg),
         "weight_category": category,
         "fold": str(fold),
     }
@@ -78,7 +79,3 @@ def _validate_fold_categories(
             raise ValueError(
                 f"fold {fold} category {category} count was {actual[category]}; expected {sorted(expected)}"
             )
-
-
-def _format_number(value: float) -> str:
-    return f"{value:.6f}"

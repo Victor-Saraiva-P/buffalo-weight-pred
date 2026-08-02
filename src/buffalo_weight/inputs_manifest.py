@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
-import importlib.metadata
 import json
-import subprocess
 from pathlib import Path
 
+from buffalo_weight.csv_io import csv_columns, csv_row_count
 from buffalo_weight.curated_inputs import input_hashes
+from buffalo_weight.hashing import sha256_file
 from buffalo_weight.input_schema import OUTPUT_SCHEMAS
+from buffalo_weight.report_provenance import (
+    inputs_recipe_hash,
+    repository_commit,
+    reproduction_dependencies,
+)
 from buffalo_weight.reproduction_config import ReportContract, contract_identity
 
 MANIFEST_VERSION = 1
@@ -17,17 +21,19 @@ OUTPUT_FILES = ("feature_index.csv", "canonical_split.csv")
 
 
 def expected_identity(contract: ReportContract) -> dict[str, object]:
+    """Build stage identity; for example, ``expected_identity(contract)`` fingerprints inputs."""
     return {
         "manifest_version": MANIFEST_VERSION,
         "stage": "inputs",
         "contract": contract_identity(contract),
-        "recipe_sha256": recipe_hash(),
-        "dependencies": _dependency_versions(),
+        "recipe_sha256": inputs_recipe_hash(),
+        "dependencies": reproduction_dependencies(),
         "inputs": input_hashes(contract.inputs),
     }
 
 
 def stage_status(contract: ReportContract) -> str:
+    """Classify freshness; for example, ``stage_status(contract)`` may return ``reusable``."""
     output_dir = contract.inputs_output_dir
     manifest_path = output_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -42,13 +48,14 @@ def stage_status(contract: ReportContract) -> str:
 def complete_manifest(
     contract: ReportContract, output_dir: Path, identity: dict[str, object]
 ) -> dict[str, object]:
+    """Describe validated outputs; for example, ``complete_manifest(c, root, identity)``."""
     manifest = identity.copy()
     manifest.update(
         {
             "package_type": "reconstructible_stage",
             "revision": 1,
             "status": "complete",
-            "source_commit": _source_commit(),
+            "source_commit": repository_commit(),
             "command": "python main.py inputs",
             "row_count": contract.inputs.expected_mask_count,
             "outputs": _output_records(output_dir),
@@ -58,12 +65,32 @@ def complete_manifest(
     return manifest
 
 
+def validate_complete_manifest(
+    manifest: dict[str, object], output_dir: Path, expected_rows: int
+) -> None:
+    """Validate hashes and schemas before publication.
+
+    Example: ``validate_complete_manifest(manifest, temp_dir, 132)`` checks a snapshot.
+    """
+    outputs = manifest.get("outputs")
+    if manifest.get("row_count") != expected_rows or not isinstance(outputs, dict):
+        raise ValueError(
+            f"manifest row_count was {manifest.get('row_count')!r}; expected {expected_rows}"
+        )
+    for name in OUTPUT_FILES:
+        record = outputs.get(name)
+        if not isinstance(record, dict) or not _output_record_matches(
+            record, output_dir / name, name, expected_rows
+        ):
+            raise ValueError(f"manifest output was {record!r} for {name}; expected valid hash/schema/count")
+
+
 def _output_records(output_dir: Path) -> dict[str, dict[str, object]]:
     return {
         name: {
-            "sha256": file_hash(output_dir / name),
-            "rows": _csv_rows(output_dir / name),
-            "columns": _csv_columns(output_dir / name),
+            "sha256": sha256_file(output_dir / name),
+            "rows": csv_row_count(output_dir / name),
+            "columns": csv_columns(output_dir / name),
         }
         for name in OUTPUT_FILES
     }
@@ -77,28 +104,6 @@ def _validation_names() -> list[str]:
         "one_to_one_mask_correspondence",
         "canonical_fold_distribution",
     ]
-
-
-def recipe_hash() -> str:
-    module_names = (
-        "canonical_split.py",
-        "curated_inputs.py",
-        "input_schema.py",
-        "inputs_manifest.py",
-        "report_inputs.py",
-        "reproduction_config.py",
-    )
-    source_root = Path(__file__).parent
-    calculators = sorted((source_root / "feature_calculators").glob("*.py"))
-    return _combined_hash([source_root / name for name in module_names] + calculators)
-
-
-def file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _manifest_is_current(manifest: object, contract: ReportContract) -> bool:
@@ -128,41 +133,7 @@ def _output_record_matches(
     record: dict[object, object], path: Path, name: str, expected_rows: int
 ) -> bool:
     return (
-        record.get("sha256") == file_hash(path)
-        and record.get("rows") == expected_rows == _csv_rows(path)
-        and record.get("columns") == OUTPUT_SCHEMAS[name] == _csv_columns(path)
+        record.get("sha256") == sha256_file(path)
+        and record.get("rows") == expected_rows == csv_row_count(path)
+        and record.get("columns") == OUTPUT_SCHEMAS[name] == csv_columns(path)
     )
-
-
-def _csv_rows(path: Path) -> int:
-    with path.open(encoding="utf-8") as csv_file:
-        return max(sum(1 for _ in csv_file) - 1, 0)
-
-
-def _csv_columns(path: Path) -> list[str]:
-    with path.open(encoding="utf-8") as csv_file:
-        return csv_file.readline().rstrip("\r\n").split(",")
-
-
-def _combined_hash(paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    for path in paths:
-        digest.update(path.relative_to(Path(__file__).parent).as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def _dependency_versions() -> dict[str, str]:
-    distributions = ("numpy", "Pillow", "scipy", "scikit-learn", "PyYAML")
-    return {name: importlib.metadata.version(name) for name in distributions}
-
-
-def _source_commit() -> str:
-    repository_root = Path(__file__).parents[2]
-    result = subprocess.run(
-        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()

@@ -18,6 +18,7 @@ from buffalo_weight.models import (
     MASK_PREDICTION_MODELS,
     ModelConfig,
 )
+from buffalo_weight.hashing import sha256_file
 
 
 MANIFEST_FILE = "provenance.json"
@@ -334,11 +335,11 @@ def _package_version(module_name: str) -> str | None:
 
 
 def file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Hash an artifact.
+
+    Example: ``file_hash(Path('predictions.csv'))`` fingerprints predictions.
+    """
+    return sha256_file(path)
 
 
 def _digest(values: list[object]) -> str:

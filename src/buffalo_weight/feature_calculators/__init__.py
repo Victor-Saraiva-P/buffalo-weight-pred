@@ -55,24 +55,28 @@ VOLUME_FEATURES = {"area_power_1_5", "area_major_axis_product"}
 
 
 def zero_features() -> dict[str, float]:
+    """Return the empty-mask result.
+
+    Example: ``zero_features()['area']`` is zero.
+    """
     return {name: 0.0 for name in APPROVED_FEATURES}
 
 
 def calculate_mask_features(
-    mask: np.ndarray | Path | str, canonical_long_side: int = 1024
+    mask: np.ndarray | Path | str, canonical_long_side: int | None = None
 ) -> dict[str, float]:
     """Calculate the approved geometry; for example, ``calculate_mask_features(mask)``."""
     ctx = FeatureContext(mask)
     if ctx.area == 0:
         return zero_features()
-    if canonical_long_side <= 0:
+    if canonical_long_side is not None and canonical_long_side <= 0:
         raise ValueError(
             f"canonical_long_side was {canonical_long_side}; expected an integer greater than 0"
         )
     major_axis_length = calculate_major_axis_length(ctx)
     raw_features = _primary_features(ctx, major_axis_length)
     raw_features.update(_derived_features(ctx, major_axis_length))
-    scale = canonical_long_side / max(ctx.mask.shape)
+    scale = 1.0 if canonical_long_side is None else canonical_long_side / max(ctx.mask.shape)
     return _scale_features(raw_features, scale)
 
 

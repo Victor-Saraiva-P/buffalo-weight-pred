@@ -26,6 +26,10 @@ class ReportContract:
 
     @property
     def inputs_output_dir(self) -> Path:
+        """Locate reconstructed inputs.
+
+        Example: ``contract.inputs_output_dir`` resolves beneath the artifact root.
+        """
         return self.artifacts_root / "inputs"
 
 
@@ -42,6 +46,7 @@ def load_report_contract(path: Path) -> ReportContract:
 
 
 def contract_identity(contract: ReportContract) -> dict[str, object]:
+    """Normalize pertinent settings; for example, ``contract_identity(contract)``."""
     inputs = contract.inputs
     return {
         "mask_index_path": str(inputs.mask_index_path),

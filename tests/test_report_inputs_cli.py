@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import tempfile
 import unittest
@@ -11,9 +12,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from buffalo_weight.report_cli import main
+from tests.fake_snapshot import FailingSnapshotPublisher
 from tests.report_inputs_fixture import CuratedInputsFixture
 
 
+# This literal is an independent oracle from issue #14; importing production names
+# would make the schema assertion pass when implementation and contract drift together.
 APPROVED_FEATURES = [
     "area",
     "perimeter",
@@ -95,6 +100,7 @@ class ReportInputsCliTest(unittest.TestCase):
             split_rows, split_fields = read_csv(fixture.output_dir / "canonical_split.csv")
             self.assertEqual(feature_fields, ["file_name", "farm", "weight_kg", *APPROVED_FEATURES])
             self.assertEqual(len(feature_rows), 50)
+            self.assert_worked_feature_row(feature_rows[0])
             self.assertEqual(
                 split_fields,
                 ["file_name", "farm", "weight_kg", "weight_category", "fold"],
@@ -138,6 +144,27 @@ class ReportInputsCliTest(unittest.TestCase):
             plan = fixture.run("inputs", "--dry-run")
             self.assertIn("inputs: obsolete", plan.stdout)
 
+    def test_publication_failure_keeps_previous_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            self.assertEqual(fixture.run("inputs").returncode, 0)
+            manifest_path = fixture.output_dir / "manifest.json"
+            manifest_before = manifest_path.read_bytes()
+            fixture.replace_weight(0, "81")
+            publisher = FailingSnapshotPublisher()
+            stderr = io.StringIO()
+            result = main(
+                ["inputs", "--config", str(fixture.config_path)],
+                stdout=io.StringIO(),
+                stderr=stderr,
+                snapshot_publisher=publisher,
+            )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(publisher.publish_calls, 1)
+            self.assertIn("injected publication failure", stderr.getvalue())
+            self.assertEqual(manifest_path.read_bytes(), manifest_before)
+
     def test_clean_removes_only_reconstructible_stage_and_descendants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
@@ -169,6 +196,16 @@ class ReportInputsCliTest(unittest.TestCase):
             )
             self.assertEqual(within_fold, {f"B{index}": 1 for index in range(1, 11)})
 
+    def assert_worked_feature_row(self, row: dict[str, str]) -> None:
+        self.assertEqual(row["file_name"], "mask-000.png")
+        self.assertEqual(row["area"], "180224.000000")
+        self.assertEqual(row["perimeter"], "2699.180246")
+        self.assertEqual(row["bbox_width"], "768.000000")
+        self.assertEqual(row["bbox_area"], "589824.000000")
+        self.assertEqual(row["extent"], "0.305556")
+        self.assertEqual(row["center_vertical_occupancy"], "128.000000")
+        self.assertEqual(row["center_to_end_occupancy_ratio"], "0.444444")
+
     def assert_manifest_hashes(self, output_dir: Path) -> None:
         manifest = json.loads((output_dir / "manifest.json").read_text())
         self.assertEqual(manifest["status"], "complete")
@@ -191,7 +228,10 @@ class ReportInputsCliTest(unittest.TestCase):
 
     @staticmethod
     def _remove_mask(fixture: CuratedInputsFixture) -> None:
-        fixture.mask_path(0).unlink()
+        missing_path = fixture.mask_path(0)
+        if not missing_path.exists():
+            raise AssertionError(f"fixture mask was {missing_path}; expected an existing PNG")
+        missing_path.unlink()
 
     @staticmethod
     def _add_extra_mask(fixture: CuratedInputsFixture) -> None:
@@ -201,23 +241,34 @@ class ReportInputsCliTest(unittest.TestCase):
 
     @staticmethod
     def _invalidate_weight(fixture: CuratedInputsFixture) -> None:
-        fixture.replace_weight(0, "zero")
+        invalid_weight = "zero"
+        fixture.replace_weight(0, invalid_weight)
+        if fixture.index_rows()[0]["weight_kg"] != invalid_weight:
+            raise AssertionError("fixture weight corruption was not persisted")
 
     @staticmethod
     def _repeat_name(fixture: CuratedInputsFixture) -> None:
         rows = fixture.index_rows()
-        fixture.replace_file_name(1, rows[0]["file_name"])
+        repeated_name = rows[0]["file_name"]
+        fixture.replace_file_name(1, repeated_name)
+        if fixture.index_rows()[1]["file_name"] != repeated_name:
+            raise AssertionError("fixture name corruption was not persisted")
 
     @staticmethod
     def _make_non_binary(fixture: CuratedInputsFixture) -> None:
-        Image.fromarray(np.asarray([[0, 128]], dtype=np.uint8)).save(fixture.mask_path(0))
+        invalid_pixels = np.asarray([[0, 128]], dtype=np.uint8)
+        invalid_path = fixture.mask_path(0)
+        Image.fromarray(invalid_pixels).save(invalid_path)
 
     @staticmethod
     def _duplicate_pixels(fixture: CuratedInputsFixture) -> None:
-        fixture.mask_path(1).write_bytes(fixture.mask_path(0).read_bytes())
+        original_bytes = fixture.mask_path(0).read_bytes()
+        duplicate_path = fixture.mask_path(1)
+        duplicate_path.write_bytes(original_bytes)
 
 
 def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    """Read a public CSV; for example, ``read_csv(path)`` returns rows and columns."""
     with path.open(newline="") as csv_file:
         reader = csv.DictReader(csv_file)
         return list(reader), list(reader.fieldnames or [])

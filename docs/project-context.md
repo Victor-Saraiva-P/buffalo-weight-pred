@@ -23,4 +23,4 @@ Registra a origem comunicada pelo orientador para os três grupos de fotos, os c
 
 ## Recorte Atual
 
-A etapa atual usa 132 mascaras com peso valido e tag manual `ok`, incluidas nas 387 imagens avaliadas no relatorio PIBIC. Nenhuma pertence ao grupo `Fotos 1`; todas vieram de `Fotos 2` ou `Fotos 3`. `Fotos 2` e `Fotos 3` correspondem a fazendas diferentes. Os animais B10 estao concentrados na fazenda `Faco`, confundindo fazenda e extremo de peso na amostra atual. O objetivo nao e treinar ou ajustar modelos de segmentacao, mas avaliar modelos de predicao de peso a partir das features geometricas extraidas dessas mascaras.
+A etapa atual usa 132 mascaras com peso valido e tag manual `ok`, incluidas nas 387 imagens avaliadas no relatorio PIBIC. O objetivo nao e treinar ou ajustar modelos de segmentacao, mas avaliar modelos de predicao de peso a partir das features geometricas extraidas dessas mascaras.

@@ -47,12 +47,6 @@ O modelo precisa simultaneamente de escala aparente e forma. As features classif
 
 A fazenda é classificada com balanced accuracy de 0,932 usando features, mas somente o peso já alcança 0,921. No suporte comum, usando apenas forma, a balanced accuracy cai para 0,495, equivalente ao acaso. Assim, a associação fazenda-peso é comprovada; um estilo visual residual de fazenda não foi detectado nesse controle.
 
-Os B10 estão concentrados na fazenda `Faco`, enquanto `Fotos 2` e `Fotos 3`
-correspondem a fazendas diferentes. Assim, a subestimação dos B10 também está
-confundida com um efeito de fazenda: com os dados atuais, não é possível
-separar completamente falta de cobertura de pesos altos de uma diferença de
-domínio da fazenda usando apenas esse grupo.
-
 ## Qualidade e robustez da segmentação
 
 O relatório PIBIC upstream avaliou 387 imagens com ground truths manuais e

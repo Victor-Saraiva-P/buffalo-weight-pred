@@ -43,32 +43,6 @@ class FakeCnnMaskRegressor:
         return np.zeros(len(rows), dtype=float)
 
 
-class FakeCnnMaskGeometryRegressor:
-    fit_rows: list[dict[str, str]] = []
-    early_stopping_rows: list[dict[str, str]] = []
-    predicted_rows: list[dict[str, str]] = []
-    fitted_features: list[str] = []
-
-    def __init__(
-        self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "auto"
-    ) -> None:
-        self.masks_dir = masks_dir
-
-    def fit(
-        self,
-        rows: list[dict[str, str]],
-        feature_columns: list[str],
-        validation_rows: list[dict[str, str]] | None = None,
-    ) -> None:
-        type(self).fit_rows = rows
-        type(self).fitted_features = feature_columns
-        type(self).early_stopping_rows = validation_rows or []
-
-    def predict(self, rows: list[dict[str, str]], feature_columns: list[str]) -> np.ndarray:
-        type(self).predicted_rows = rows
-        return np.zeros(len(rows), dtype=float)
-
-
 class TrainTest(unittest.TestCase):
     def test_only_models_with_complete_csv_outputs_are_cached(self) -> None:
         configs = [
@@ -146,46 +120,6 @@ class TrainTest(unittest.TestCase):
             predict_fold_weights(rows[:1], rows[1:], [], config, Path("masks"), device="cuda")
 
         self.assertEqual(FakeCnnMaskRegressor.requested_device, "cuda")
-
-    def test_cnn_mask_geometry_keeps_external_fold_out_of_fitting(self) -> None:
-        train_rows = [
-            {
-                "file_name": f"train-{index}",
-                "weight": str(100 + index),
-                "weight_category": f"B{index % 4}",
-            }
-            for index in range(20)
-        ]
-        external_rows = [{"file_name": "external", "weight": "200", "weight_category": "B1"}]
-        config = ModelConfig(
-            "cnn_mask_geometry",
-            "cnn_mask_geometry",
-            {
-                "epochs": 5,
-                "batch_size": 4,
-                "learning_rate": 0.001,
-                "image_size": 64,
-                "random_state": 42,
-                "patience": 2,
-                "validation_fraction": 0.25,
-            },
-        )
-
-        with patch("buffalo_weight.train.CnnMaskGeometryRegressor", FakeCnnMaskGeometryRegressor):
-            predictions = predict_fold_weights(
-                train_rows, external_rows, ["area"], config, Path("masks")
-            )
-
-        fitted = {row["file_name"] for row in FakeCnnMaskGeometryRegressor.fit_rows}
-        stopping = {
-            row["file_name"] for row in FakeCnnMaskGeometryRegressor.early_stopping_rows
-        }
-        self.assertEqual(fitted | stopping, {row["file_name"] for row in train_rows})
-        self.assertFalse(fitted & stopping)
-        self.assertNotIn("external", fitted | stopping)
-        self.assertEqual(FakeCnnMaskGeometryRegressor.predicted_rows, external_rows)
-        self.assertEqual(FakeCnnMaskGeometryRegressor.fitted_features, ["area"])
-        np.testing.assert_array_equal(predictions, np.zeros(1))
 
     def test_evaluates_random_forest_by_fold(self) -> None:
         rows = []

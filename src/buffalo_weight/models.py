@@ -7,9 +7,6 @@ from typing import Callable, Protocol, TYPE_CHECKING
 import numpy as np
 from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.compose import TransformedTargetRegressor
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 from buffalo_weight.target_transform import inverse_target, transform_target
 
@@ -19,12 +16,10 @@ if TYPE_CHECKING:
 
 MODEL_CONFIG_PATTERN = re.compile(r"^[a-z0-9_]+$")
 RANDOM_FOREST_MODEL = "random_forest"
-RIDGE_MODEL = "ridge"
 EXTRA_TREES_MODEL = "extra_trees"
 HIST_GRADIENT_BOOSTING_MODEL = "hist_gradient_boosting"
 XGBOOST_MODEL = "xgboost"
 CNN_MASK_MODEL = "cnn_mask"
-CNN_MASK_GEOMETRY_MODEL = "cnn_mask_geometry"
 PCA_SVR_MASK_MODEL = "pca_svr_mask"
 MASK_FEATURE_MODEL = "mask_feature"
 PRETRAINED_MASK_EMBEDDING_MODEL = "pretrained_mask_embedding"
@@ -32,7 +27,7 @@ PCA_FEATURE_FUSION_MODEL = "pca_feature_fusion"
 MASK_PREDICTION_MODELS = frozenset(
     {CNN_MASK_MODEL, MASK_FEATURE_MODEL, PCA_SVR_MASK_MODEL, PRETRAINED_MASK_EMBEDDING_MODEL}
 )
-FEATURE_FUSION_MODELS = frozenset({CNN_MASK_GEOMETRY_MODEL, PCA_FEATURE_FUSION_MODEL})
+FEATURE_FUSION_MODELS = frozenset({PCA_FEATURE_FUSION_MODEL})
 ModelParam = bool | float | int | str
 
 
@@ -43,19 +38,17 @@ class ClassicalRegressor(Protocol):
 
 
 class _XgboostRegressor:
-    def __init__(self, model: XGBRegressor, target_transform: str = "identity") -> None:
+    def __init__(self, model: XGBRegressor) -> None:
         self.model = model
-        self.target_transform = target_transform
 
     def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> object:
-        self.model.fit(x_train, transform_target(y_train, self.target_transform))
+        self.model.fit(x_train, y_train)
         return self
 
     def predict(self, x_validation: np.ndarray) -> np.ndarray:
         from xgboost import DMatrix
 
-        transformed = self.model.get_booster().predict(DMatrix(x_validation))
-        return inverse_target(transformed, self.target_transform)
+        return self.model.get_booster().predict(DMatrix(x_validation))
 
 
 @dataclass(frozen=True)
@@ -66,7 +59,6 @@ class ModelConfig:
 
 
 ALLOWED_PARAMS = {
-    RIDGE_MODEL: {"alpha"},
     RANDOM_FOREST_MODEL: {
         "n_estimators",
         "random_state",
@@ -74,7 +66,6 @@ ALLOWED_PARAMS = {
         "min_samples_split",
         "min_samples_leaf",
         "max_features",
-        "n_jobs",
         "target_transform",
     },
     EXTRA_TREES_MODEL: {
@@ -104,8 +95,6 @@ ALLOWED_PARAMS = {
         "colsample_bytree",
         "reg_lambda",
         "reg_alpha",
-        "target_transform",
-        "n_jobs",
     },
     CNN_MASK_MODEL: {
         "epochs",
@@ -121,22 +110,6 @@ ALLOWED_PARAMS = {
         "architecture",
         "pretrained",
         "fine_tune_mode",
-        "input_representation",
-    },
-    CNN_MASK_GEOMETRY_MODEL: {
-        "architecture",
-        "pretrained",
-        "fine_tune_mode",
-        "epochs",
-        "batch_size",
-        "learning_rate",
-        "image_size",
-        "weight_decay",
-        "random_state",
-        "patience",
-        "augment",
-        "validation_fraction",
-        "resize_mode",
         "input_representation",
     },
     PCA_SVR_MASK_MODEL: {
@@ -194,19 +167,11 @@ ALLOWED_PARAMS = {
     },
 }
 REQUIRED_PARAMS = {
-    RIDGE_MODEL: {"alpha"},
     RANDOM_FOREST_MODEL: {"n_estimators", "random_state"},
     EXTRA_TREES_MODEL: {"n_estimators", "random_state"},
     HIST_GRADIENT_BOOSTING_MODEL: {"random_state"},
     XGBOOST_MODEL: {"n_estimators", "random_state"},
     CNN_MASK_MODEL: {"epochs", "batch_size", "learning_rate", "image_size", "random_state"},
-    CNN_MASK_GEOMETRY_MODEL: {
-        "epochs",
-        "batch_size",
-        "learning_rate",
-        "image_size",
-        "random_state",
-    },
     PCA_SVR_MASK_MODEL: {"image_size", "n_components", "random_state"},
     MASK_FEATURE_MODEL: {"image_size", "representation", "estimator", "random_state"},
     PRETRAINED_MASK_EMBEDDING_MODEL: {
@@ -307,7 +272,6 @@ def xgboost_compute_params(cuda_available: bool, cuda_build: bool) -> dict[str, 
 
 def build_model(config: ModelConfig) -> ClassicalRegressor:
     builders = {
-        RIDGE_MODEL: _build_ridge,
         RANDOM_FOREST_MODEL: _build_random_forest,
         EXTRA_TREES_MODEL: _build_extra_trees,
         HIST_GRADIENT_BOOSTING_MODEL: _build_hist_gradient_boosting,
@@ -332,10 +296,6 @@ def _build_random_forest(config: ModelConfig) -> ClassicalRegressor:
     return _build_sklearn_model(config, RandomForestRegressor)
 
 
-def _build_ridge(config: ModelConfig) -> ClassicalRegressor:
-    return make_pipeline(StandardScaler(), Ridge(**config.params))
-
-
 def _build_extra_trees(config: ModelConfig) -> ClassicalRegressor:
     return _build_sklearn_model(config, ExtraTreesRegressor)
 
@@ -353,11 +313,8 @@ def _build_xgboost(config: ModelConfig) -> ClassicalRegressor:
     compute_params = xgboost_compute_params(
         torch.cuda.is_available(), bool(xgboost.build_info().get("USE_CUDA", False))
     )
-    params = dict(config.params)
-    target_transform = str(params.pop("target_transform", "identity"))
-    transform_target(np.asarray([1.0]), target_transform)
-    model = xgboost.XGBRegressor(**params, **compute_params, objective="reg:squarederror")
-    return _XgboostRegressor(model, target_transform)
+    model = xgboost.XGBRegressor(**config.params, **compute_params, objective="reg:squarederror")
+    return _XgboostRegressor(model)
 
 
 def _target_regressor(regressor: ClassicalRegressor, transform: str) -> ClassicalRegressor:

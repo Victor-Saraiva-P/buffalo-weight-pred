@@ -1,7 +1,6 @@
 SHARED_CONFIG ?= configs/shared.yaml
 CLASSICAL_MODELS_CONFIG ?= configs/classical_models.yaml
 CNN_MASK_MODELS_CONFIG ?= configs/cnn_mask_models.yaml
-CNN_MASK_GEOMETRY_CONFIG ?= configs/cnn_mask_geometry_experiment.yaml
 MASK_CLASSICAL_EXPERIMENTS_CONFIG ?= configs/mask_classical_experiments.yaml
 FUSION_EXPERIMENTS_CONFIG ?= configs/pca_feature_fusion_experiments.yaml
 ALLOMETRIC_EXPERIMENTS_CONFIG ?= configs/allometric_mask_experiments.yaml
@@ -26,7 +25,7 @@ TRAIN_DRY_RUN = --dry-run
 endif
 ENSEMBLE_MODELS ?= dual_pca24_canonical16,tuned_96_pca24,fusion_original_stretch_log,fusion_original_stretch_cube_root,geometry_resnet18_pretrained_last_block,hist_gradient_boosting_baseline
 
-.PHONY: setup features split train train-pure-geometry train-mask-geometry train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
+.PHONY: setup features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
 
 setup: $(PYTHON)
 	$(PYTHON) main.py setup
@@ -42,12 +41,6 @@ split: setup
 
 train: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pipeline --shared-config $(SHARED_CONFIG) --classical-models-config $(CLASSICAL_MODELS_CONFIG) --cnn-mask-models-config $(CNN_MASK_MODELS_CONFIG) --device $(DEVICE) $(TRAIN_DRY_RUN)
-
-train-pure-geometry: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_pure_geometry --shared-config $(SHARED_CONFIG)
-
-train-mask-geometry: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_mask_geometry --shared-config $(SHARED_CONFIG) --models-config $(CNN_MASK_GEOMETRY_CONFIG) --device $(DEVICE)
 
 train-mask-experiments: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.train_cnn_mask --shared-config $(SHARED_CONFIG) --models-config $(MASK_CLASSICAL_EXPERIMENTS_CONFIG) --device $(DEVICE) $(TRAIN_DRY_RUN)

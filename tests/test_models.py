@@ -73,15 +73,6 @@ class ModelConfigTest(unittest.TestCase):
             ["ExtraTreesRegressor", "HistGradientBoostingRegressor"],
         )
 
-    def test_ridge_standardizes_features_inside_each_fit(self) -> None:
-        model = build_model(ModelConfig("ridge", "ridge", {"alpha": 1.0}))
-        features = np.asarray([[1.0, 1000.0], [2.0, 2000.0], [3.0, 3000.0]])
-
-        model.fit(features, np.asarray([10.0, 20.0, 30.0]))
-
-        self.assertEqual(type(model).__name__, "Pipeline")
-        self.assertEqual(model.predict(features).shape, (3,))
-
     def test_xgboost_uses_cuda_histogram_when_available(self) -> None:
         self.assertEqual(
             xgboost_compute_params(cuda_available=True, cuda_build=True),
@@ -118,19 +109,6 @@ class ModelConfigTest(unittest.TestCase):
 
         self.assertEqual(predictions.shape, (10,))
         self.assertFalse(any("mismatched devices" in str(item.message) for item in caught_warnings))
-
-    def test_xgboost_restores_log_target_predictions_to_kilograms(self) -> None:
-        model = build_model(
-            ModelConfig(
-                "xgboost_log", "xgboost",
-                {"n_estimators": 2, "random_state": 42, "target_transform": "log"},
-            )
-        )
-        features = np.arange(20, dtype=float).reshape(10, 2)
-
-        model.fit(features, np.arange(1, 11, dtype=float))
-
-        self.assertTrue((model.predict(features) > 0).all())
 
     def test_parses_cnn_mask_model_config(self) -> None:
         configs = parse_model_configs(

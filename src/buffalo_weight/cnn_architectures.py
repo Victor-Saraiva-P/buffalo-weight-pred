@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
 from torch import nn
-from collections.abc import Callable
+
+from buffalo_weight.neural_environment import require_setup_managed_pretraining
+from buffalo_weight.resnet18_weights import default_offline_resnet18
 
 
 MASK_NETWORK_ARCHITECTURES = frozenset(
@@ -120,13 +124,16 @@ def _efficientnet_b0_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.M
     return ImageNetMaskNetwork(backbone, backbone.classifier, backbone.features[-2:], fine_tune_mode)
 
 
-def _resnet18_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.Module:
+def _resnet18_mask_network(
+    pretrained: bool,
+    fine_tune_mode: str,
+    offline_resnet18_builder: Callable[[], nn.Module],
+) -> nn.Module:
     try:
-        from torchvision.models import ResNet18_Weights, resnet18
+        from torchvision.models import resnet18
     except ImportError as error:
         raise ValueError("resnet18 requires torchvision") from error
-    weights = ResNet18_Weights.DEFAULT if pretrained else None
-    backbone = resnet18(weights=weights)
+    backbone = offline_resnet18_builder() if pretrained else resnet18(weights=None)
     output_layer = backbone.fc
     backbone.fc = nn.Linear(output_layer.in_features, 1)
     return ImageNetMaskNetwork(backbone, backbone.fc, backbone.layer4, fine_tune_mode)
@@ -159,7 +166,11 @@ def build_mask_network(
     pretrained: bool = False,
     fine_tune_mode: str = "head",
     input_channels: int = 1,
+    offline_resnet18_builder: Callable[[], nn.Module] = default_offline_resnet18,
 ) -> nn.Module:
+    require_setup_managed_pretraining(architecture, pretrained)
+    if architecture == "resnet18":
+        return _resnet18_mask_network(pretrained, fine_tune_mode, offline_resnet18_builder)
     try:
         builder = MASK_NETWORK_BUILDERS[architecture]
     except KeyError as error:
@@ -185,16 +196,11 @@ def _build_residual_network(pretrained: bool, fine_tune_mode: str, input_channel
     return ResidualMaskNetwork(input_channels)
 
 
-def _build_resnet_network(pretrained: bool, fine_tune_mode: str, input_channels: int) -> nn.Module:
-    return _resnet18_mask_network(pretrained, fine_tune_mode)
-
-
 MASK_NETWORK_BUILDERS: dict[str, Callable[[bool, str, int], nn.Module]] = {
     "baseline": _build_baseline_network,
     "efficientnet_b0": _build_efficientnet_network,
     "mobilenet_v3_small": _build_mobilenet_network,
     "residual": _build_residual_network,
-    "resnet18": _build_resnet_network,
 }
 
 MASK_NETWORK_RECIPE_SYMBOLS: dict[str, tuple[str, ...]] = {
@@ -202,5 +208,5 @@ MASK_NETWORK_RECIPE_SYMBOLS: dict[str, tuple[str, ...]] = {
     "efficientnet_b0": ("_build_efficientnet_network", "_efficientnet_b0_mask_network"),
     "mobilenet_v3_small": ("_build_mobilenet_network", "_mobilenet_v3_mask_network"),
     "residual": ("_build_residual_network", "ResidualMaskNetwork", "ResidualBlock"),
-    "resnet18": ("_build_resnet_network", "_resnet18_mask_network"),
+    "resnet18": ("_resnet18_mask_network",),
 }

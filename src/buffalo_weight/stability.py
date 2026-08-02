@@ -4,11 +4,17 @@ import argparse
 import math
 import statistics
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from buffalo_weight.config import load_config
 from buffalo_weight.csv_io import write_csv_rows
+from buffalo_weight.environment_contract import RuntimeProbe
 from buffalo_weight.models import ModelConfig, parse_model_configs
+from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE
+from buffalo_weight.neural_preflight import require_model_configs_cuda
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, read_rows
 from buffalo_weight.train import evaluate_models, format_metric
 
@@ -42,6 +48,20 @@ HARD_EXAMPLE_FIELDS = [
     "abs_error_max",
 ]
 COMPARISON_FIELDS = ["model_config", "model", "mae_mean", "mae_std_between_seeds", "mae_min_seed", "mae_max_seed"]
+ConfigLoader = Callable[[Path], dict[str, object]]
+StabilityOutputs = tuple[
+    list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]
+]
+
+
+@dataclass(frozen=True)
+class _StabilityInputs:
+    rows: list[dict[str, str]]
+    feature_columns: list[str]
+    k: int
+    weight_category_count: int
+    model_configs: list[ModelConfig]
+    masks_dir: Path | None
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -221,41 +241,55 @@ def summarize_predictions(prediction_rows: list[dict[str, str]]) -> list[dict[st
 
 
 def evaluate_split_stability(
-    rows: list[dict[str, str]],
-    feature_columns: list[str],
-    k: int,
-    weight_category_count: int,
-    split_random_states: list[int],
-    model_configs: list[ModelConfig],
-    masks_dir: Path | None = None,
-) -> tuple[
-    list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]
-]:
+    rows: list[dict[str, str]], feature_columns: list[str], k: int,
+    weight_category_count: int, split_random_states: list[int], model_configs: list[ModelConfig],
+    masks_dir: Path | None = None, device: str = OFFICIAL_NEURAL_DEVICE,
+    runtime_probe: RuntimeProbe | None = None,
+) -> StabilityOutputs:
+    """Evaluate split seeds; for example, neural configurations preflight CUDA first."""
+    require_model_configs_cuda(model_configs, runtime_probe)
+    return _evaluate_cuda_validated_stability(
+        rows, feature_columns, k, weight_category_count, split_random_states,
+        model_configs, masks_dir, device,
+    )
+
+
+def _evaluate_cuda_validated_stability(
+    rows: list[dict[str, str]], feature_columns: list[str], k: int,
+    weight_category_count: int, split_random_states: list[int], model_configs: list[ModelConfig],
+    masks_dir: Path | None, device: str,
+) -> StabilityOutputs:
     fold_metrics = []
     seed_summaries = []
     predictions = []
-
     for seed in split_random_states:
-        seed_rows = [row.copy() for row in rows]
-        assign_weight_categories(seed_rows, weight_category_count)
-        assign_folds(seed_rows, k, seed)
-        metrics, seed_predictions = evaluate_models(
-            seed_rows,
-            feature_columns,
-            model_configs,
-            masks_dir,
+        metrics, seed_predictions = _evaluate_stability_seed(
+            rows, feature_columns, k, weight_category_count, seed, model_configs, masks_dir, device
         )
-        for row in metrics:
-            fold_metrics.append({"split_random_state": str(seed), **row})
-        for row in seed_predictions:
-            predictions.append({"split_random_state": str(seed), **row})
-        for model_config in sorted({row["model_config"] for row in metrics}):
-            model_rows = [row for row in metrics if row["model_config"] == model_config]
-            seed_summaries.append(
-                summarize_seed(seed, model_config, model_rows[0]["model"], model_rows)
-            )
-
+        _record_seed_results(seed, metrics, seed_predictions, fold_metrics, seed_summaries, predictions)
     return fold_metrics, seed_summaries, summarize_overall(seed_summaries), summarize_predictions(predictions)
+
+
+def _evaluate_stability_seed(
+    rows: list[dict[str, str]], feature_columns: list[str], k: int, weight_category_count: int,
+    seed: int, model_configs: list[ModelConfig], masks_dir: Path | None, device: str,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    seed_rows = [row.copy() for row in rows]
+    assign_weight_categories(seed_rows, weight_category_count)
+    assign_folds(seed_rows, k, seed)
+    return evaluate_models(seed_rows, feature_columns, model_configs, masks_dir, device)
+
+
+def _record_seed_results(
+    seed: int, metrics: list[dict[str, str]], seed_predictions: list[dict[str, str]],
+    fold_metrics: list[dict[str, str]], seed_summaries: list[dict[str, str]],
+    predictions: list[dict[str, str]],
+) -> None:
+    fold_metrics.extend({"split_random_state": str(seed), **row} for row in metrics)
+    predictions.extend({"split_random_state": str(seed), **row} for row in seed_predictions)
+    for model_config in sorted({row["model_config"] for row in metrics}):
+        model_rows = [row for row in metrics if row["model_config"] == model_config]
+        seed_summaries.append(summarize_seed(seed, model_config, model_rows[0]["model"], model_rows))
 
 
 def split_random_states(start_seed: int, count: int) -> list[int]:
@@ -264,61 +298,13 @@ def split_random_states(start_seed: int, count: int) -> list[int]:
     return list(range(start_seed, start_seed + count))
 
 
-def run_stability(config_path: Path, start_seed: int, seed_count: int, output_dir: Path) -> None:
-    config = load_config(config_path)
-    output = config["output"]
-    split = config["split"]
-    training = config["training"]
-    data = config.get("data")
-    if not isinstance(output, dict):
-        raise ValueError("config output section must be a map")
-    if not isinstance(split, dict):
-        raise ValueError("config split section must be a map")
-    if not isinstance(training, dict):
-        raise ValueError("config training section must be a map")
-
-    feature_columns = training["feature_columns"]
-    if not isinstance(feature_columns, list):
-        raise ValueError("config training.feature_columns must be a list")
-
-    feature_rows = read_rows(Path(str(output["features_index_path"])))
-    fold_metrics, seed_summaries, overall, hard_examples = evaluate_split_stability(
-        feature_rows,
-        [str(column) for column in feature_columns],
-        parse_int(split["k"], "split.k"),
-        parse_int(split.get("weight_category_count", 4), "split.weight_category_count"),
-        split_random_states(start_seed, seed_count),
-        parse_model_configs(training),
-        Path(str(data["masks_dir"])) if isinstance(data, dict) and "masks_dir" in data else None,
-    )
-
-    for model_config in sorted({row["model_config"] for row in overall}):
-        config_dir = output_dir / model_config
-        config_fold_metrics = [row for row in fold_metrics if row["model_config"] == model_config]
-        config_seed_summaries = [row for row in seed_summaries if row["model_config"] == model_config]
-        config_overall = [row for row in overall if row["model_config"] == model_config]
-        config_hard_examples = [row for row in hard_examples if row["model_config"] == model_config]
-        write_csv(without_identity(config_fold_metrics), config_dir / "fold_metrics.csv", FOLD_METRIC_FIELDS)
-        write_csv(without_identity(config_seed_summaries), config_dir / "seed_summary.csv", SEED_SUMMARY_FIELDS)
-        write_csv(without_identity(config_overall), config_dir / "overall.csv", OVERALL_FIELDS)
-        write_csv(without_identity(config_hard_examples), config_dir / "hard_examples.csv", HARD_EXAMPLE_FIELDS)
-        save_seed_mae_plot(config_seed_summaries, config_dir / "seed_mae.png")
-        save_fold_mae_plot(config_fold_metrics, config_dir / "fold_mae.png")
-        save_hard_examples_plot(config_hard_examples, config_dir / "hard_examples.png")
-
-    comparison = [
-        {
-            "model_config": row["model_config"],
-            "model": row["model"],
-            "mae_mean": row["mae_mean"],
-            "mae_std_between_seeds": row["mae_std_between_seeds"],
-            "mae_min_seed": row["mae_min_seed"],
-            "mae_max_seed": row["mae_max_seed"],
-        }
-        for row in overall
-    ]
-    write_csv(comparison, output_dir / "model_comparison.csv", COMPARISON_FIELDS)
-    save_model_comparison_plot(comparison, output_dir / "model_comparison.png")
+def run_stability(
+    config_path: Path, start_seed: int, seed_count: int, output_dir: Path,
+    runtime_probe: RuntimeProbe | None = None, config_loader: ConfigLoader = load_config,
+) -> None:
+    """Run legacy-config stability; for example, ``run_stability(path, 0, 30, output)``."""
+    inputs = _legacy_stability_inputs(config_loader(config_path), runtime_probe)
+    _execute_stability(inputs, start_seed, seed_count, output_dir)
 
 
 def run_stability_with_configs(
@@ -327,62 +313,116 @@ def run_stability_with_configs(
     start_seed: int,
     seed_count: int,
     output_dir: Path,
+    runtime_probe: RuntimeProbe | None = None,
+    config_loader: ConfigLoader = load_config,
 ) -> None:
-    shared_config = load_config(shared_config_path)
-    models_config = load_config(models_config_path)
-    features = shared_config["features"]
-    split = shared_config["split"]
-    data = shared_config.get("data")
-    if not isinstance(features, dict):
-        raise ValueError("shared config features section must be a map")
-    if not isinstance(split, dict):
-        raise ValueError("shared config split section must be a map")
+    """Run split stability; for example, pass shared and model config paths separately."""
+    inputs = _shared_stability_inputs(
+        config_loader(shared_config_path), config_loader(models_config_path), runtime_probe
+    )
+    _execute_stability(inputs, start_seed, seed_count, output_dir)
 
-    feature_columns = models_config["feature_columns"]
-    if not isinstance(feature_columns, list):
-        raise ValueError("classical models config feature_columns must be a list")
 
-    feature_rows = read_rows(Path(str(features["features_index_path"])))
-    fold_metrics, seed_summaries, overall, hard_examples = evaluate_split_stability(
-        feature_rows,
-        [str(column) for column in feature_columns],
-        parse_int(split["k"], "split.k"),
+def _legacy_stability_inputs(
+    config: dict[str, object], runtime_probe: RuntimeProbe | None
+) -> _StabilityInputs:
+    output = _config_map(config, "output", "config")
+    split = _config_map(config, "split", "config")
+    training = _config_map(config, "training", "config")
+    model_configs = parse_model_configs(training)
+    require_model_configs_cuda(model_configs, runtime_probe)
+    rows = read_rows(Path(str(output["features_index_path"])))
+    return _stability_inputs(rows, training, split, config.get("data"), model_configs)
+
+
+def _shared_stability_inputs(
+    shared: dict[str, object], models: dict[str, object], runtime_probe: RuntimeProbe | None
+) -> _StabilityInputs:
+    features = _config_map(shared, "features", "shared config")
+    split = _config_map(shared, "split", "shared config")
+    model_configs = parse_model_configs(models)
+    require_model_configs_cuda(model_configs, runtime_probe)
+    rows = read_rows(Path(str(features["features_index_path"])))
+    return _stability_inputs(rows, models, split, shared.get("data"), model_configs)
+
+
+def _stability_inputs(
+    rows: list[dict[str, str]], models: dict[object, object], split: dict[object, object],
+    shared_data_section: object, model_configs: list[ModelConfig],
+) -> _StabilityInputs:
+    columns = models.get("feature_columns")
+    if not isinstance(columns, list):
+        raise ValueError(f"config feature_columns was {columns!r}; expected a list")
+    masks_dir = (
+        Path(str(shared_data_section["masks_dir"]))
+        if isinstance(shared_data_section, dict) and "masks_dir" in shared_data_section
+        else None
+    )
+    return _StabilityInputs(
+        rows, [str(column) for column in columns], parse_int(split["k"], "split.k"),
         parse_int(split.get("weight_category_count", 4), "split.weight_category_count"),
-        split_random_states(start_seed, seed_count),
-        parse_model_configs(models_config),
-        Path(str(data["masks_dir"])) if isinstance(data, dict) and "masks_dir" in data else None,
+        model_configs, masks_dir,
     )
 
-    for model_config in sorted({row["model_config"] for row in overall}):
-        config_dir = output_dir / model_config
-        config_fold_metrics = [row for row in fold_metrics if row["model_config"] == model_config]
-        config_seed_summaries = [row for row in seed_summaries if row["model_config"] == model_config]
-        config_overall = [row for row in overall if row["model_config"] == model_config]
-        config_hard_examples = [row for row in hard_examples if row["model_config"] == model_config]
-        write_csv(without_identity(config_fold_metrics), config_dir / "fold_metrics.csv", FOLD_METRIC_FIELDS)
-        write_csv(without_identity(config_seed_summaries), config_dir / "seed_summary.csv", SEED_SUMMARY_FIELDS)
-        write_csv(without_identity(config_overall), config_dir / "overall.csv", OVERALL_FIELDS)
-        write_csv(without_identity(config_hard_examples), config_dir / "hard_examples.csv", HARD_EXAMPLE_FIELDS)
-        save_seed_mae_plot(config_seed_summaries, config_dir / "seed_mae.png")
-        save_fold_mae_plot(config_fold_metrics, config_dir / "fold_mae.png")
-        save_hard_examples_plot(config_hard_examples, config_dir / "hard_examples.png")
 
-    comparison = [
-        {
-            "model_config": row["model_config"],
-            "model": row["model"],
-            "mae_mean": row["mae_mean"],
-            "mae_std_between_seeds": row["mae_std_between_seeds"],
-            "mae_min_seed": row["mae_min_seed"],
-            "mae_max_seed": row["mae_max_seed"],
-        }
-        for row in overall
-    ]
+def _config_map(
+    config: dict[str, object], key: str, source_name: str
+) -> dict[object, object]:
+    section = config.get(key)
+    if isinstance(section, dict):
+        return section
+    raise ValueError(f"{source_name} {key} section was {section!r}; expected a map")
+
+
+def _execute_stability(
+    inputs: _StabilityInputs, start_seed: int, seed_count: int, output_dir: Path
+) -> None:
+    outputs = _evaluate_cuda_validated_stability(
+        inputs.rows, inputs.feature_columns, inputs.k, inputs.weight_category_count,
+        split_random_states(start_seed, seed_count), inputs.model_configs,
+        inputs.masks_dir, OFFICIAL_NEURAL_DEVICE,
+    )
+    _write_stability_outputs(outputs, output_dir)
+
+
+def _write_stability_outputs(outputs: StabilityOutputs, output_dir: Path) -> None:
+    fold_metrics, seed_summaries, overall, hard_examples = outputs
+    for model_config in sorted({row["model_config"] for row in overall}):
+        _write_model_stability_outputs(
+            model_config, fold_metrics, seed_summaries, overall, hard_examples, output_dir
+        )
+    comparison = _comparison_rows(overall)
     write_csv(comparison, output_dir / "model_comparison.csv", COMPARISON_FIELDS)
     save_model_comparison_plot(comparison, output_dir / "model_comparison.png")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _write_model_stability_outputs(
+    name: str, fold_metrics: list[dict[str, str]], seed_summaries: list[dict[str, str]],
+    overall: list[dict[str, str]], hard_examples: list[dict[str, str]], output_dir: Path,
+) -> None:
+    config_dir = output_dir / name
+    selected_folds = [row for row in fold_metrics if row["model_config"] == name]
+    selected_seeds = [row for row in seed_summaries if row["model_config"] == name]
+    selected_overall = [row for row in overall if row["model_config"] == name]
+    selected_hard = [row for row in hard_examples if row["model_config"] == name]
+    write_csv(without_identity(selected_folds), config_dir / "fold_metrics.csv", FOLD_METRIC_FIELDS)
+    write_csv(without_identity(selected_seeds), config_dir / "seed_summary.csv", SEED_SUMMARY_FIELDS)
+    write_csv(without_identity(selected_overall), config_dir / "overall.csv", OVERALL_FIELDS)
+    write_csv(without_identity(selected_hard), config_dir / "hard_examples.csv", HARD_EXAMPLE_FIELDS)
+    save_seed_mae_plot(selected_seeds, config_dir / "seed_mae.png")
+    save_fold_mae_plot(selected_folds, config_dir / "fold_mae.png")
+    save_hard_examples_plot(selected_hard, config_dir / "hard_examples.png")
+
+
+def _comparison_rows(overall: list[dict[str, str]]) -> list[dict[str, str]]:
+    fields = (
+        "model_config", "model", "mae_mean", "mae_std_between_seeds",
+        "mae_min_seed", "mae_max_seed",
+    )
+    return [{field: row[field] for field in fields} for row in overall]
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config")
     parser.add_argument("--shared-config")
@@ -390,23 +430,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--seed-count", type=int, default=30)
     parser.add_argument("--output-dir", default="generated/stability")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _run_stability_command(
+    args: argparse.Namespace, runtime_probe: RuntimeProbe | None, config_loader: ConfigLoader
+) -> None:
+    if args.config:
+        run_stability(
+            Path(args.config), args.start_seed, args.seed_count, Path(args.output_dir),
+            runtime_probe, config_loader,
+        )
+        return
+    if args.shared_config and args.models_config:
+        run_stability_with_configs(
+            Path(args.shared_config), Path(args.models_config), args.start_seed,
+            args.seed_count, Path(args.output_dir), runtime_probe, config_loader,
+        )
+        return
+    received = (args.config, args.shared_config, args.models_config)
+    raise ValueError(
+        f"stability config arguments were {received!r}; "
+        "expected --config or both --shared-config and --models-config"
+    )
+
+
+def main(
+    argv: list[str] | None = None,
+    runtime_probe: RuntimeProbe | None = None,
+    config_loader: ConfigLoader = load_config,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Run stability analysis; for example, neural configs require a CUDA probe."""
     try:
-        if args.config:
-            run_stability(Path(args.config), args.start_seed, args.seed_count, Path(args.output_dir))
-        elif args.shared_config and args.models_config:
-            run_stability_with_configs(
-                Path(args.shared_config),
-                Path(args.models_config),
-                args.start_seed,
-                args.seed_count,
-                Path(args.output_dir),
-            )
-        else:
-            raise ValueError("provide --config or --shared-config with --models-config")
+        _run_stability_command(_build_parser().parse_args(argv), runtime_probe, config_loader)
     except (KeyError, ValueError, FileNotFoundError) as error:
-        print(error, file=sys.stderr)
+        print(error, file=stderr)
         return 1
     return 0
 

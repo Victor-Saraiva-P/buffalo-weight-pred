@@ -1,9 +1,8 @@
-numpy
-pillow
-scikit-learn
-scipy
-matplotlib
-xgboost>=2.0
-pyyaml
-torch
-torchvision
+numpy==2.5.0
+Pillow==12.2.0
+scikit-learn==1.9.0
+SciPy==1.18.0
+Matplotlib==3.11.0
+PyYAML==6.0.3
+torch==2.13.0
+torchvision==0.28.0

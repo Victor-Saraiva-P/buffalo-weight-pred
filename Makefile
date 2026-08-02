@@ -13,12 +13,11 @@ CALIBRATION_PREDICTIONS ?= generated/train/dual_pca24_canonical16/predictions.cs
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(PYTHON) -m pip
-DEPS_STAMP ?= $(VENV)/.deps.stamp
 CATEGORY_COUNTS ?= 4,6,8
 START_SEED ?= 0
 SEED_COUNT ?= 30
 MODELS ?=
-DEVICE ?= auto
+DEVICE ?= cuda
 DRY_RUN ?= false
 TRAIN_DRY_RUN =
 ifeq ($(DRY_RUN),true)
@@ -28,14 +27,11 @@ ENSEMBLE_MODELS ?= dual_pca24_canonical16,tuned_96_pca24,fusion_original_stretch
 
 .PHONY: setup features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
 
-setup: $(DEPS_STAMP)
+setup: $(PYTHON)
+	$(PYTHON) main.py setup
 
 $(PYTHON):
 	python -m venv $(VENV)
-
-$(DEPS_STAMP): requirements.txt | $(PYTHON)
-	$(PIP) install -r requirements.txt
-	touch $(DEPS_STAMP)
 
 features: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.features --shared-config $(SHARED_CONFIG)
@@ -91,5 +87,5 @@ ensemble: setup
 diagnostics: setup
 	PYTHONPATH=src $(PYTHON) -m buffalo_weight.diagnostics --shared-config $(SHARED_CONFIG)
 
-test: setup
+test:
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests

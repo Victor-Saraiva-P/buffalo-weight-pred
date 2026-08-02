@@ -2,86 +2,163 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
 from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
+from buffalo_weight.neural_cli import add_neural_execution_arguments
+from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE
+from buffalo_weight.environment_contract import RuntimeProbe
 from buffalo_weight.split import read_rows
+from buffalo_weight.system_setup import require_official_neural_runtime
 from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
+
+
+@dataclass(frozen=True)
+class _MaskTrainingInputs:
+    rows: list[dict[str, str]]
+    masks_dir: Path
+    output_dir: Path
 
 
 def train_cnn_mask(
     shared_config_path: Path,
     models_config_path: Path,
-    device: str = "auto",
-    dry_run: bool = False,
+    device: str = OFFICIAL_NEURAL_DEVICE,
+    dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> list[ModelConfig]:
+    """Train mask predictors; for example, pass ``dry_run=True`` to audit artifacts."""
+    require_official_neural_runtime(dry_run, runtime_probe)
+    return execute_cuda_validated_cnn_mask_training(
+        shared_config_path, models_config_path, device, dry_run
+    )
+
+
+def execute_cuda_validated_cnn_mask_training(
+    shared_config_path: Path,
+    models_config_path: Path,
+    device: str,
+    dry_run: bool,
+) -> list[ModelConfig]:
+    """Train after environment preflight; for example, the full pipeline calls this once gated."""
     shared_config = load_config(shared_config_path)
-    models_config = load_config(models_config_path)
-    model_configs = parse_model_configs(models_config)
-    unsupported = [config.name for config in model_configs if config.model not in MASK_PREDICTION_MODELS]
-    if unsupported:
-        raise ValueError("train_cnn_mask only supports mask prediction models")
-
-    validate_mask_files(shared_config)
-    validate_split(shared_config)
-    data = shared_config["data"]
-    split = shared_config["split"]
-    training = shared_config["training"]
-    if not isinstance(data, dict):
-        raise ValueError("shared config data section must be a map")
-    if not isinstance(split, dict):
-        raise ValueError("shared config split section must be a map")
-    if not isinstance(training, dict):
-        raise ValueError("shared config training section must be a map")
-
-    rows = read_rows(Path(str(split["split_path"])))
-    output_dir = Path(str(training["output_dir"]))
-    evidence = TrainingEvidence(rows, [], [], Path(str(data["masks_dir"])), device)
-    plans, pending_configs = prepare_artifacts(output_dir, model_configs, evidence, dry_run)
+    model_configs = _load_mask_model_configs(models_config_path)
+    inputs = _load_mask_training_inputs(shared_config)
+    evidence = TrainingEvidence(inputs.rows, [], [], inputs.masks_dir, device)
+    plans, pending_configs = prepare_artifacts(inputs.output_dir, model_configs, evidence, dry_run)
     print_artifact_plan(plans)
     if dry_run:
         return model_configs
-    if pending_configs:
-        metrics, predictions = evaluate_models(
-            rows,
-            feature_columns=[],
-            model_configs=pending_configs,
-            masks_dir=Path(str(data["masks_dir"])),
-            device=device,
-        )
-        write_training_outputs(output_dir, pending_configs, metrics, predictions, evidence)
-    skipped = [config.name for config in model_configs if config not in pending_configs]
-    if skipped:
-        print(f"Skipping completed model configs: {', '.join(skipped)}")
+    _evaluate_pending_models(inputs, pending_configs, evidence, device)
+    _print_skipped_models(model_configs, pending_configs)
     return model_configs
 
 
-def main(argv: list[str] | None = None) -> int:
+def _load_mask_model_configs(path: Path) -> list[ModelConfig]:
+    model_configs = parse_model_configs(load_config(path))
+    unsupported = [
+        config.name for config in model_configs if config.model not in MASK_PREDICTION_MODELS
+    ]
+    if not unsupported:
+        return model_configs
+    raise ValueError(
+        f"model configs were {unsupported!r}; expected train_cnn_mask only supports "
+        f"mask prediction models {sorted(MASK_PREDICTION_MODELS)!r}"
+    )
+
+
+def _load_mask_training_inputs(config: dict[str, object]) -> _MaskTrainingInputs:
+    validate_mask_files(config)
+    validate_split(config)
+    data_section = _require_mapping_section(config, "data")
+    split_section = _require_mapping_section(config, "split")
+    training_section = _require_mapping_section(config, "training")
+    rows = read_rows(Path(str(split_section["split_path"])))
+    return _MaskTrainingInputs(
+        rows,
+        Path(str(data_section["masks_dir"])),
+        Path(str(training_section["output_dir"])),
+    )
+
+
+def _require_mapping_section(
+    config: dict[str, object], section_name: str
+) -> dict[object, object]:
+    section = config.get(section_name)
+    if isinstance(section, dict):
+        return section
+    raise ValueError(
+        f"shared config {section_name} section was {section!r}; expected a map"
+    )
+
+
+def _evaluate_pending_models(
+    inputs: _MaskTrainingInputs,
+    pending_configs: list[ModelConfig],
+    evidence: TrainingEvidence,
+    device: str,
+) -> None:
+    if not pending_configs:
+        return
+    metrics, predictions = evaluate_models(
+        inputs.rows, [], pending_configs, inputs.masks_dir, device
+    )
+    write_training_outputs(
+        inputs.output_dir, pending_configs, metrics, predictions, evidence
+    )
+
+
+def _print_skipped_models(
+    model_configs: list[ModelConfig], pending_configs: list[ModelConfig]
+) -> None:
+    skipped = [config.name for config in model_configs if config not in pending_configs]
+    if not skipped:
+        return
+    print(f"Skipping completed model configs: {', '.join(skipped)}")
+
+
+def main(
+    argv: list[str] | None = None,
+    runtime_probe: RuntimeProbe | None = None,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Run mask training; for example, ``main([..., "--dry-run"])`` avoids CUDA work."""
+    args = _build_parser().parse_args(argv)
+    try:
+        return _run_training_command(args, runtime_probe)
+    except (KeyError, ValueError) as error:
+        print(error, file=stderr)
+        return 1
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args(argv)
+    add_neural_execution_arguments(parser)
+    return parser
 
-    try:
-        shared_config = load_config(Path(args.shared_config))
-        training = shared_config["training"]
-        if not isinstance(training, dict):
-            raise ValueError("shared config training section must be a map")
-        output_dir = Path(str(training["output_dir"]))
-        if args.dry_run:
-            train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device, True)
-        else:
-            with training_lock(output_dir):
-                train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
-    except (KeyError, ValueError) as error:
-        print(error, file=sys.stderr)
-        return 1
+
+def _run_training_command(
+    args: argparse.Namespace, runtime_probe: RuntimeProbe | None
+) -> int:
+    if args.dry_run:
+        execute_cuda_validated_cnn_mask_training(
+            Path(args.shared_config), Path(args.models_config), args.device, True
+        )
+        return 0
+    require_official_neural_runtime(False, runtime_probe)
+    shared_config = load_config(Path(args.shared_config))
+    training = _require_mapping_section(shared_config, "training")
+    with training_lock(Path(str(training["output_dir"]))):
+        execute_cuda_validated_cnn_mask_training(
+            Path(args.shared_config), Path(args.models_config), args.device, False
+        )
     return 0
 
 

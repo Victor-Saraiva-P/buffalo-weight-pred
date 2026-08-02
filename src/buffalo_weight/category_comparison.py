@@ -3,11 +3,15 @@ from __future__ import annotations
 import argparse
 import sys
 import statistics
+from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 
 from buffalo_weight.config import load_config
 from buffalo_weight.csv_io import write_csv_rows
+from buffalo_weight.environment_contract import RuntimeProbe
 from buffalo_weight.models import parse_model_configs
+from buffalo_weight.neural_preflight import require_model_configs_cuda
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, parse_weight, read_rows
 from buffalo_weight.stability import evaluate_split_stability, split_random_states
 
@@ -48,6 +52,7 @@ COMPARISON_FIELDS = [
     "mae_mean",
     "mae_std_between_seeds",
 ]
+ConfigLoader = Callable[[Path], dict[str, object]]
 
 
 def write_csv(rows: list[dict[str, str]], path: Path, fieldnames: list[str]) -> None:
@@ -206,8 +211,11 @@ def run_category_comparison(
     start_seed: int,
     seed_count: int,
     output_dir: Path,
+    runtime_probe: RuntimeProbe | None = None,
+    config_loader: ConfigLoader = load_config,
 ) -> None:
-    config = load_config(config_path)
+    """Compare category counts; for example, neural configs preflight CUDA before inputs."""
+    config = config_loader(config_path)
     output = config["output"]
     split = config["split"]
     training = config["training"]
@@ -223,6 +231,8 @@ def run_category_comparison(
     if not isinstance(feature_columns, list):
         raise ValueError("config training.feature_columns must be a list")
 
+    model_configs = parse_model_configs(training)
+    require_model_configs_cuda(model_configs, runtime_probe)
     feature_rows = read_rows(Path(str(output["features_index_path"])))
     overall_rows = []
     fold_metric_rows = []
@@ -236,8 +246,9 @@ def run_category_comparison(
             parse_int(split["k"], "split.k"),
             category_count,
             seeds,
-            parse_model_configs(training),
+            model_configs,
             masks_dir,
+            runtime_probe=runtime_probe,
         )
         for row in fold_metrics:
             fold_metric_rows.append({"weight_category_count": str(category_count), **row})
@@ -299,9 +310,12 @@ def run_category_comparison_with_configs(
     start_seed: int,
     seed_count: int,
     output_dir: Path,
+    runtime_probe: RuntimeProbe | None = None,
+    config_loader: ConfigLoader = load_config,
 ) -> None:
-    shared_config = load_config(shared_config_path)
-    models_config = load_config(models_config_path)
+    """Compare category counts; for example, accept shared and model configs separately."""
+    shared_config = config_loader(shared_config_path)
+    models_config = config_loader(models_config_path)
     features = shared_config["features"]
     split = shared_config["split"]
     data = shared_config.get("data")
@@ -314,6 +328,8 @@ def run_category_comparison_with_configs(
     if not isinstance(feature_columns, list):
         raise ValueError("classical models config feature_columns must be a list")
 
+    model_configs = parse_model_configs(models_config)
+    require_model_configs_cuda(model_configs, runtime_probe)
     feature_rows = read_rows(Path(str(features["features_index_path"])))
     overall_rows = []
     fold_metric_rows = []
@@ -327,8 +343,9 @@ def run_category_comparison_with_configs(
             parse_int(split["k"], "split.k"),
             category_count,
             seeds,
-            parse_model_configs(models_config),
+            model_configs,
             masks_dir,
+            runtime_probe=runtime_probe,
         )
         for row in fold_metrics:
             fold_metric_rows.append({"weight_category_count": str(category_count), **row})
@@ -375,7 +392,7 @@ def parse_category_counts(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config")
     parser.add_argument("--shared-config")
@@ -384,30 +401,38 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--seed-count", type=int, default=30)
     parser.add_argument("--output-dir", default="generated/compare-categories")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _run_category_command(
+    args: argparse.Namespace, runtime_probe: RuntimeProbe | None, config_loader: ConfigLoader
+) -> None:
+    counts = parse_category_counts(args.category_counts)
+    if args.config:
+        run_category_comparison(
+            Path(args.config), counts, args.start_seed, args.seed_count, Path(args.output_dir),
+            runtime_probe, config_loader,
+        )
+        return
+    if args.shared_config and args.models_config:
+        run_category_comparison_with_configs(
+            Path(args.shared_config), Path(args.models_config), counts, args.start_seed,
+            args.seed_count, Path(args.output_dir), runtime_probe, config_loader,
+        )
+        return
+    received = (args.config, args.shared_config, args.models_config)
+    raise ValueError(f"category config arguments were {received!r}; expected one config shape")
+
+
+def main(
+    argv: list[str] | None = None, runtime_probe: RuntimeProbe | None = None,
+    config_loader: ConfigLoader = load_config, stderr: TextIO = sys.stderr,
+) -> int:
+    """Run category comparison; for example, mixed neural configs require CUDA."""
     try:
-        if args.config:
-            run_category_comparison(
-                Path(args.config),
-                parse_category_counts(args.category_counts),
-                args.start_seed,
-                args.seed_count,
-                Path(args.output_dir),
-            )
-        elif args.shared_config and args.models_config:
-            run_category_comparison_with_configs(
-                Path(args.shared_config),
-                Path(args.models_config),
-                parse_category_counts(args.category_counts),
-                args.start_seed,
-                args.seed_count,
-                Path(args.output_dir),
-            )
-        else:
-            raise ValueError("provide --config or --shared-config with --models-config")
+        _run_category_command(_build_parser().parse_args(argv), runtime_probe, config_loader)
     except (KeyError, ValueError, FileNotFoundError) as error:
-        print(error, file=sys.stderr)
+        print(error, file=stderr)
         return 1
     return 0
 

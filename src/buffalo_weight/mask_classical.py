@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from buffalo_weight.split import parse_weight
 
 MASK_REPRESENTATIONS = frozenset({"pixels_pca", "shape_profile"})
 MASK_ESTIMATORS = frozenset({"extra_trees", "kernel_ridge", "ridge", "svr"})
+MaskLoader = Callable[[Path, list[dict[str, str]], int, str], np.ndarray]
 
 
 def shape_profile_features(masks: np.ndarray) -> np.ndarray:
@@ -69,18 +71,21 @@ class MaskFeatureRegressor:
     Example: ``MaskFeatureRegressor(Path("masks"), params).fit(rows)``.
     """
 
-    def __init__(self, masks_dir: Path, params: dict[str, ModelParam]) -> None:
+    def __init__(
+        self, masks_dir: Path, params: dict[str, ModelParam], mask_loader: MaskLoader = load_masks
+    ) -> None:
         self.masks_dir = masks_dir
         self.params = params
         self.image_size = int(params["image_size"])
         self.resize_mode = str(params.get("resize_mode", "letterbox"))
         self.representation = str(params["representation"])
+        self.mask_loader = mask_loader
         self.model: Pipeline | None = None
         self.y_mean = 0.0
         self.y_std = 1.0
 
     def _features(self, rows: list[dict[str, str]]) -> np.ndarray:
-        masks = load_masks(self.masks_dir, rows, self.image_size, self.resize_mode)
+        masks = self.mask_loader(self.masks_dir, rows, self.image_size, self.resize_mode)
         if self.representation == "shape_profile":
             return shape_profile_features(masks)
         if self.representation == "pixels_pca":

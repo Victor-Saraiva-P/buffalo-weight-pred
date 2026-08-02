@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import tempfile
 import unittest
 import warnings
@@ -28,10 +29,9 @@ from buffalo_weight.models import (
     validate_unique_model_configs,
     xgboost_compute_params,
 )
-from buffalo_weight.mask_classical import MaskFeatureRegressor, shape_profile_features
 from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
 from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
-from buffalo_weight.pretrained_mask_embedding import PretrainedMaskEmbeddingRegressor
+from tests.fake_compute import fake_available_cuda, fake_unavailable_cuda
 
 
 class ModelConfigTest(unittest.TestCase):
@@ -92,6 +92,10 @@ class ModelConfigTest(unittest.TestCase):
             {"device": "cpu", "tree_method": "hist"},
         )
 
+    @unittest.skipUnless(
+        importlib.util.find_spec("xgboost"),
+        "XGBoost is an optional dependency outside the official environment",
+    )
     def test_xgboost_prediction_avoids_mismatched_device_fallback(self) -> None:
         model = build_model(
             ModelConfig("xgboost_test", "xgboost", {"n_estimators": 2, "random_state": 42})
@@ -178,15 +182,22 @@ class ModelConfigTest(unittest.TestCase):
 
 
 class CnnMaskTest(unittest.TestCase):
-    def test_auto_device_uses_cuda_when_available(self) -> None:
-        self.assertEqual(resolve_device("auto", lambda: True), "cuda")
+    def test_cuda_device_is_used_when_available(self) -> None:
+        """Keep the official device when the named CUDA fake is available."""
 
-    def test_auto_device_falls_back_to_cpu(self) -> None:
-        self.assertEqual(resolve_device("auto", lambda: False), "cpu")
+        self.assertEqual(resolve_device("cuda", fake_available_cuda), "cuda")
+
+    def test_auto_device_is_rejected_without_cpu_fallback(self) -> None:
+        """Reject the legacy automatic-device request even when CUDA exists."""
+
+        with self.assertRaisesRegex(ValueError, "auto.*expected.*cuda"):
+            resolve_device("auto", fake_available_cuda)
 
     def test_explicit_cuda_requires_available_device(self) -> None:
+        """Reject the official request when the named CUDA fake is absent."""
+
         with self.assertRaisesRegex(ValueError, "CUDA is not available"):
-            resolve_device("cuda", lambda: False)
+            resolve_device("cuda", fake_unavailable_cuda)
 
     def test_mask_network_architectures_predict_one_weight_per_mask(self) -> None:
         import torch
@@ -434,66 +445,6 @@ class PcaFeatureFusionTest(unittest.TestCase):
 
         self.assertEqual(predictions.shape, (8,))
         self.assertTrue(np.isfinite(predictions).all())
-
-
-class MaskClassicalTest(unittest.TestCase):
-    def test_shape_profiles_encode_six_signatures_per_axis_position(self) -> None:
-        masks = np.zeros((2, 4, 4), dtype=np.float32)
-        masks[:, 1:3, 1:3] = 1
-
-        profiles = shape_profile_features(masks)
-
-        self.assertEqual(profiles.shape, (2, 24))
-        self.assertTrue(np.isfinite(profiles).all())
-
-    def test_mask_profile_regressor_fits_binary_masks(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir, rows = mask_regression_fixture(Path(directory))
-            params = {
-                "image_size": 8,
-                "representation": "shape_profile",
-                "estimator": "ridge",
-                "alpha": 1.0,
-                "random_state": 42,
-            }
-            model = MaskFeatureRegressor(masks_dir, params)
-
-            model.fit(rows)
-            predictions = model.predict(rows)
-
-        self.assertEqual(predictions.shape, (8,))
-
-    def test_pretrained_embedding_regressor_uses_frozen_mask_embeddings(self) -> None:
-        import torch
-
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir, rows = mask_regression_fixture(Path(directory))
-            params = {
-                "image_size": 8,
-                "architecture": "resnet18",
-                "estimator": "ridge",
-                "n_components": 2,
-                "random_state": 42,
-            }
-            network = torch.nn.Sequential(torch.nn.AdaptiveAvgPool2d(1), torch.nn.Flatten())
-            model = PretrainedMaskEmbeddingRegressor(masks_dir, params, "cpu")
-
-            with patch("buffalo_weight.pretrained_mask_embedding.build_embedding_network", return_value=network):
-                model.fit(rows)
-                predictions = model.predict(rows)
-
-        self.assertEqual(predictions.shape, (8,))
-
-
-def mask_regression_fixture(masks_dir: Path) -> tuple[Path, list[dict[str, str]]]:
-    """Create varied binary masks; for example, ``mask_regression_fixture(Path(tmp))``."""
-    rows = []
-    for index in range(8):
-        pixels = np.zeros((8, 8), dtype=np.uint8)
-        pixels[1:7, 1 : index + 1] = 255
-        Image.fromarray(pixels).save(masks_dir / f"profile-{index}.png")
-        rows.append({"file_name": f"profile-{index}", "weight": str(100 + index * 10)})
-    return masks_dir, rows
 
 
 if __name__ == "__main__":

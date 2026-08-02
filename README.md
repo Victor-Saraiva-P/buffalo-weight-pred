@@ -63,7 +63,7 @@ PYTHON=.venv/bin/python make train
 
 `make train` valida os artefatos já gerados, treina primeiro os Modelos Clássicos de Predição pendentes, depois os Modelos de Predição por Máscara pendentes, e por fim recria `model_comparison.csv`/`model_comparison.png` em `generated/train/`. Uma configuração é considerada concluída quando seu diretório contém `fold_metrics.csv` e `predictions.csv`.
 
-Por padrão, `configs/cnn_mask_models.yaml` reúne todas as configurações de máscara avaliadas no projeto, incluindo ablações da CNN, PCA+SVR, MobileNetV3, EfficientNet-B0 e ResNet-18. Os arquivos de experimento menores continuam disponíveis para executar somente subconjuntos específicos.
+Por padrão, `configs/cnn_mask_models.yaml` reúne as configurações oficiais de máscara, incluindo ablações da CNN, PCA+SVR, MobileNetV3 com inicialização aleatória e ResNet-18 com pesos gerenciados pelo setup. Os arquivos de experimento menores continuam disponíveis para preservar comparações anteriores.
 
 Apagar todo o cache de treinamento para forçar uma nova execução de todos os modelos:
 
@@ -74,12 +74,12 @@ make clean
 Apagar somente uma ou mais configurações específicas:
 
 ```bash
-make clean MODELS="resnet18_pretrained_last_block mobilenet_v3_pretrained_last_block"
+make clean MODELS="resnet18_pretrained_last_block mobilenet_v3_random_last_block"
 ```
 
 Também é possível separar os nomes por vírgula. A limpeza seletiva remove os diretórios indicados e invalida `model_comparison.csv`/`model_comparison.png`. Como o cache é identificado pelo nome da configuração, alterações nos parâmetros de uma configuração existente exigem sua limpeza manual antes de `make train`.
 
-O treino de `cnn_mask` usa CUDA automaticamente quando disponível e usa CPU como fallback. Para forçar um dispositivo, execute `DEVICE=cuda make train` ou `DEVICE=cpu make train`.
+O treino neural exige CUDA e rejeita sua ausência antes de ler entradas ou iniciar modelos clássicos; não há fallback para CPU. Setup, validação e dry-run continuam disponíveis sem GPU.
 
 O treino gera um diretório por Configuração de Modelo em `generated/train/`. Cada diretório inclui `predicted_vs_actual.png`, que marca os maiores erros no gráfico de peso real vs predito.
 
@@ -107,17 +107,13 @@ cnn_mask_baseline:
 CNN_MASK_MODELS_CONFIG=configs/cnn_mask_next_experiment.yaml make train
 ```
 
-`architecture: mobilenet_v3_small` usa a MobileNetV3 Small do `torchvision`. A máscara é repetida nos três canais e normalizada como entrada ImageNet, mas nenhum dado RGB é adicionado. O experimento compara pesos pré-treinados com a cabeça congelada, fine-tuning do último bloco e um controle com pesos aleatórios:
+`architecture: mobilenet_v3_small` usa a MobileNetV3 Small do `torchvision`. A máscara é repetida nos três canais e normalizada como entrada ImageNet, mas nenhum dado RGB é adicionado. Apenas a inicialização aleatória é aceita no contrato oficial:
 
 ```bash
-CNN_MASK_MODELS_CONFIG=configs/cnn_mask_transfer_experiment.yaml make train
+DEVICE=cuda make train
 ```
 
-O comparativo seguinte mantém o fine-tuning do último estágio e avalia MobileNetV3 Small, EfficientNet-B0 e ResNet-18 sob o mesmo protocolo:
-
-```bash
-CNN_MASK_MODELS_CONFIG=configs/cnn_mask_pretrained_models_experiment.yaml make train
-```
+`pretrained: true` é aceito somente para `resnet18`, cujos pesos `IMAGENET1K_V1` são obtidos e validados pelo setup. MobileNetV3 e EfficientNet-B0 pré-treinadas são rejeitadas antes de qualquer chamada ao `torchvision`, evitando downloads ocultos durante treino ou inferência.
 
 O modelo `pca_svr_mask` oferece um baseline não neural que aplica PCA diretamente aos pixels binários e usa SVR para regressão. A PCA e o SVR são ajustados novamente dentro do treino de cada fold:
 

@@ -19,8 +19,13 @@ from buffalo_weight.inputs_manifest import (
     stage_status,
     validate_complete_manifest,
 )
+from buffalo_weight.report_provenance import ReportProvenance, SystemReportProvenance
 from buffalo_weight.reproduction_config import ReportContract
-from buffalo_weight.snapshot_io import FilesystemSnapshotPublisher, SnapshotPublisher
+from buffalo_weight.snapshot_io import (
+    FilesystemSnapshotPublisher,
+    SnapshotPublisher,
+    clean_snapshot_stage,
+)
 
 STAGE_DESCENDANTS = {
     "inputs": ("inputs", "feature_selection", "baselines", "tuning", "diagnostics"),
@@ -35,13 +40,16 @@ def run_inputs_stage(
     contract: ReportContract,
     dry_run: bool = False,
     publisher: SnapshotPublisher | None = None,
+    provenance: ReportProvenance | None = None,
 ) -> str:
     """Run the inputs stage; for example, ``run_inputs_stage(contract, dry_run=True)``."""
-    status = stage_status(contract)
+    resolved_provenance = provenance or SystemReportProvenance()
+    status = stage_status(contract, resolved_provenance)
     if dry_run or status == "reusable":
         return status
     masks = validate_curated_inputs(contract.inputs)
-    _build_atomic_snapshot(contract, masks, publisher or FilesystemSnapshotPublisher())
+    resolved_publisher = publisher or FilesystemSnapshotPublisher()
+    _build_atomic_snapshot(contract, masks, resolved_publisher, resolved_provenance)
     return "rebuilt"
 
 
@@ -54,31 +62,41 @@ def clean_reconstructible_stage(contract: ReportContract, stage: str) -> list[st
     removed: list[str] = []
     for name in descendants:
         path = contract.artifacts_root / name
-        if path.is_dir():
-            shutil.rmtree(path)
+        if path.is_dir() or path.is_symlink():
+            clean_snapshot_stage(path)
             removed.append(name)
     return removed
 
 
 def _build_atomic_snapshot(
-    contract: ReportContract, masks: list[ValidMask], publisher: SnapshotPublisher
+    contract: ReportContract,
+    masks: list[ValidMask],
+    publisher: SnapshotPublisher,
+    provenance: ReportProvenance,
 ) -> None:
     root = contract.artifacts_root
     root.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=".inputs-", dir=root))
-    identity = expected_identity(contract)
+    identity = expected_identity(contract, provenance)
     try:
-        _write_outputs(temporary, contract, masks)
-        _validate_outputs(temporary, contract, masks)
-        if expected_identity(contract) != identity:
-            raise ValueError("inputs changed during the stage; expected an unchanged input snapshot")
-        manifest = complete_manifest(contract, temporary, identity)
-        validate_complete_manifest(manifest, temporary, contract.inputs.expected_mask_count)
-        (temporary / "manifest.json").write_text(_json_text(manifest))
+        _write_validated_snapshot(temporary, contract, masks, identity, provenance)
         publisher.publish(temporary, contract.inputs_output_dir)
     except BaseException:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+
+
+def _write_validated_snapshot(
+    temporary: Path, contract: ReportContract, masks: list[ValidMask],
+    identity: dict[str, object], provenance: ReportProvenance,
+) -> None:
+    _write_outputs(temporary, contract, masks)
+    _validate_outputs(temporary, contract, masks)
+    if expected_identity(contract, provenance) != identity:
+        raise ValueError("inputs changed during the stage; expected an unchanged input snapshot")
+    manifest = complete_manifest(contract, temporary, identity, provenance.repository_commit())
+    validate_complete_manifest(manifest, temporary, contract.inputs.expected_mask_count)
+    (temporary / "manifest.json").write_text(_json_text(manifest))
 
 
 def _write_outputs(output_dir: Path, contract: ReportContract, masks: list[ValidMask]) -> None:

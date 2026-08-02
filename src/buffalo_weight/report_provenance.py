@@ -6,41 +6,59 @@ import hashlib
 import importlib.metadata
 import subprocess
 from pathlib import Path
+from typing import Protocol
 
 
-def inputs_recipe_hash() -> str:
-    """Hash input-stage knowledge.
+class ReportProvenance(Protocol):
+    """Provenance seam; for example, tests can provide fixed versions and a commit."""
 
-    Example: ``inputs_recipe_hash()`` changes when a consumed implementation changes.
-    """
-    source_root = Path(__file__).parent
-    modules = [source_root / name for name in _recipe_module_names()]
-    calculators = sorted((source_root / "feature_calculators").glob("*.py"))
-    return _combined_source_hash(modules + calculators)
+    def inputs_recipe_hash(self) -> str:
+        """Hash stage knowledge.
+
+        Example: a source edit changes this digest.
+        """
+        ...
+
+    def dependencies(self) -> dict[str, str]:
+        """Report packages.
+
+        Example: the mapping includes ``numpy``.
+        """
+        ...
+
+    def repository_commit(self) -> str:
+        """Report source identity.
+
+        Example: this returns a full Git SHA.
+        """
+        ...
 
 
-def reproduction_dependencies() -> dict[str, str]:
-    """Report pertinent package versions.
+class SystemReportProvenance:
+    """System provenance adapter; for example, the inputs stage uses it outside tests."""
 
-    Example: ``reproduction_dependencies()['numpy']`` returns the NumPy version.
-    """
-    distributions = ("numpy", "Pillow", "scipy", "scikit-learn", "PyYAML")
-    return {name: importlib.metadata.version(name) for name in distributions}
+    def inputs_recipe_hash(self) -> str:
+        """Hash input-stage knowledge; for example, consumed source edits invalidate reuse."""
+        source_root = Path(__file__).parent
+        modules = [source_root / name for name in _recipe_module_names()]
+        calculators = sorted((source_root / "feature_calculators").glob("*.py"))
+        return _combined_source_hash(modules + calculators)
 
+    def dependencies(self) -> dict[str, str]:
+        """Report packages; for example, the mapping includes the NumPy version."""
+        distributions = ("numpy", "Pillow", "scipy", "scikit-learn", "PyYAML")
+        return {name: importlib.metadata.version(name) for name in distributions}
 
-def repository_commit() -> str:
-    """Report the source commit.
-
-    Example: ``repository_commit()`` returns the checkout's full Git SHA.
-    """
-    repository_root = Path(__file__).parents[2]
-    result = subprocess.run(
-        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    def repository_commit(self) -> str:
+        """Report source identity; for example, this returns the checkout's full Git SHA."""
+        repository_root = Path(__file__).parents[2]
+        result = subprocess.run(
+            ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
 
 
 def _recipe_module_names() -> tuple[str, ...]:

@@ -8,6 +8,56 @@ from pathlib import Path
 from typing import Protocol
 
 
+class AtomicFilesystem(Protocol):
+    """Minimal atomic I/O seam; for example, tests can fail the second replacement."""
+
+    def replace(self, source: Path, destination: Path) -> None:
+        """Replace one path.
+
+        Example: ``filesystem.replace(next_link, current)`` swaps pointers.
+        """
+        ...
+
+    def symlink(self, target: str, link: Path) -> None:
+        """Create a pointer.
+
+        Example: ``filesystem.symlink(target, next_link)`` prepares publication.
+        """
+        ...
+
+    def remove_tree(self, path: Path) -> None:
+        """Remove obsolete storage.
+
+        Example: ``filesystem.remove_tree(old_snapshot)`` reclaims a cache.
+        """
+        ...
+
+
+class SystemAtomicFilesystem:
+    """System I/O adapter; for example, it powers ``FilesystemSnapshotPublisher``."""
+
+    def replace(self, source: Path, destination: Path) -> None:
+        """Replace one path.
+
+        Example: ``filesystem.replace(next_link, current)`` swaps pointers.
+        """
+        os.replace(source, destination)
+
+    def symlink(self, target: str, link: Path) -> None:
+        """Create a pointer.
+
+        Example: ``filesystem.symlink(target, next_link)`` prepares publication.
+        """
+        os.symlink(target, link)
+
+    def remove_tree(self, path: Path) -> None:
+        """Remove obsolete storage.
+
+        Example: ``filesystem.remove_tree(old_snapshot)`` reclaims a cache.
+        """
+        shutil.rmtree(path, ignore_errors=True)
+
+
 class SnapshotPublisher(Protocol):
     """Publication seam; for example, a fake can reject ``publish`` atomically."""
 
@@ -20,28 +70,64 @@ class SnapshotPublisher(Protocol):
 
 
 class FilesystemSnapshotPublisher:
-    """Filesystem publisher; for example, it swaps a validated temporary stage."""
+    """Atomic pointer publisher; for example, readers always see one complete snapshot."""
+
+    def __init__(self, filesystem: AtomicFilesystem | None = None) -> None:
+        """Inject atomic I/O.
+
+        Example: ``FilesystemSnapshotPublisher(fake_filesystem)`` tests interrupted swaps.
+        """
+        self._filesystem = filesystem or SystemAtomicFilesystem()
 
     def publish(self, temporary: Path, destination: Path) -> None:
-        """Atomically replace a snapshot; for example, ``publisher.publish(temp, final)``."""
-        backup = destination.with_name(f".{destination.name}-previous")
-        self._remove_previous_backup(backup)
-        if destination.exists():
-            os.replace(destination, backup)
-        self._install_or_restore(temporary, destination, backup)
+        """Swap one pointer; for example, ``publisher.publish(temp, current)`` is atomic."""
+        _reject_legacy_destination(destination)
+        previous = _pointed_snapshot(destination)
+        snapshot_store = destination.parent / ".snapshots" / destination.name
+        snapshot_store.mkdir(parents=True, exist_ok=True)
+        installed = snapshot_store / temporary.name
+        self._filesystem.replace(temporary, installed)
+        next_link = destination.with_name(f".{destination.name}-next-{temporary.name}")
+        self._install_pointer(installed, next_link, destination)
+        if previous is not None:
+            self._filesystem.remove_tree(previous)
 
-    @staticmethod
-    def _remove_previous_backup(backup: Path) -> None:
-        if not backup.exists():
-            return
-        shutil.rmtree(backup)
-
-    @staticmethod
-    def _install_or_restore(temporary: Path, destination: Path, backup: Path) -> None:
+    def _install_pointer(self, snapshot: Path, next_link: Path, destination: Path) -> None:
+        relative_target = os.path.relpath(snapshot, destination.parent)
+        self._filesystem.symlink(relative_target, next_link)
         try:
-            os.replace(temporary, destination)
+            self._filesystem.replace(next_link, destination)
         except BaseException:
-            if backup.exists():
-                os.replace(backup, destination)
+            next_link.unlink(missing_ok=True)
             raise
-        shutil.rmtree(backup, ignore_errors=True)
+
+
+def clean_snapshot_stage(destination: Path) -> None:
+    """Remove a pointer and its storage; for example, ``clean_snapshot_stage(inputs_path)``."""
+    if destination.is_symlink():
+        destination.unlink()
+    elif destination.is_dir():
+        shutil.rmtree(destination)
+    snapshot_store = destination.parent / ".snapshots" / destination.name
+    shutil.rmtree(snapshot_store, ignore_errors=True)
+
+
+def _reject_legacy_destination(destination: Path) -> None:
+    if destination.exists() and not destination.is_symlink():
+        raise ValueError(
+            f"stage destination was {destination}; expected absent path or managed symlink"
+        )
+
+
+def _pointed_snapshot(destination: Path) -> Path | None:
+    if not destination.is_symlink():
+        return None
+    pointed = destination.resolve(strict=False)
+    expected_store = (destination.parent / ".snapshots" / destination.name).resolve()
+    try:
+        pointed.relative_to(expected_store)
+    except ValueError as error:
+        raise ValueError(
+            f"stage pointer target was {pointed}; expected a descendant of {expected_store}"
+        ) from error
+    return pointed

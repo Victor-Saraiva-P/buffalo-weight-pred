@@ -13,7 +13,9 @@ import numpy as np
 from PIL import Image
 
 from buffalo_weight.report_cli import main
-from tests.fake_snapshot import FailingSnapshotPublisher
+from buffalo_weight.snapshot_io import FilesystemSnapshotPublisher
+from tests.fake_report_provenance import FixedReportProvenance
+from tests.fake_snapshot import FailAfterSnapshotInstallOperations
 from tests.report_inputs_fixture import CuratedInputsFixture
 
 
@@ -151,7 +153,8 @@ class ReportInputsCliTest(unittest.TestCase):
             manifest_path = fixture.output_dir / "manifest.json"
             manifest_before = manifest_path.read_bytes()
             fixture.replace_weight(0, "81")
-            publisher = FailingSnapshotPublisher()
+            operations = FailAfterSnapshotInstallOperations()
+            publisher = FilesystemSnapshotPublisher(operations)
             stderr = io.StringIO()
             result = main(
                 ["inputs", "--config", str(fixture.config_path)],
@@ -159,11 +162,26 @@ class ReportInputsCliTest(unittest.TestCase):
                 stderr=stderr,
                 snapshot_publisher=publisher,
             )
-
             self.assertEqual(result, 1)
-            self.assertEqual(publisher.publish_calls, 1)
-            self.assertIn("injected publication failure", stderr.getvalue())
+            self.assertEqual(operations.replace_calls, 2)
+            self.assertIn("post-install failure", stderr.getvalue())
             self.assertEqual(manifest_path.read_bytes(), manifest_before)
+
+    def test_cli_injects_report_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            result = main(
+                ["inputs", "--config", str(fixture.config_path)],
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+                report_provenance=FixedReportProvenance(),
+            )
+
+            self.assertEqual(result, 0)
+            manifest = json.loads((fixture.output_dir / "manifest.json").read_text())
+            self.assertEqual(manifest["recipe_sha256"], "1" * 64)
+            self.assertEqual(manifest["dependencies"], {"fake-compute": "1.0"})
+            self.assertEqual(manifest["source_commit"], "2" * 40)
 
     def test_clean_removes_only_reconstructible_stage_and_descendants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

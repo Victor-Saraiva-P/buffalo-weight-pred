@@ -11,6 +11,7 @@ from typing import TextIO
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.report_inputs import clean_reconstructible_stage, run_inputs_stage
+from buffalo_weight.report_provenance import ReportProvenance
 from buffalo_weight.reproduction_config import load_report_contract
 from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
@@ -22,11 +23,14 @@ def main(
     stdout: TextIO = sys.stdout,
     stderr: TextIO = sys.stderr,
     snapshot_publisher: SnapshotPublisher | None = None,
+    report_provenance: ReportProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
     try:
-        return _dispatch(arguments, services, snapshot_publisher, stdout)
+        return _dispatch(
+            arguments, services, snapshot_publisher, report_provenance, stdout
+        )
     except (OSError, ValueError) as error:
         print(f"rejected: {error}", file=stderr)
         return 1
@@ -36,13 +40,16 @@ def _dispatch(
     arguments: argparse.Namespace,
     services: SetupServices | None,
     snapshot_publisher: SnapshotPublisher | None,
+    report_provenance: ReportProvenance | None,
     stdout: TextIO,
 ) -> int:
     if arguments.command == "setup":
         return _run_setup(services or default_setup_services(), stdout)
     contract = load_report_contract(Path(arguments.config))
     if arguments.command == "inputs":
-        status = run_inputs_stage(contract, arguments.dry_run, snapshot_publisher)
+        status = run_inputs_stage(
+            contract, arguments.dry_run, snapshot_publisher, report_provenance
+        )
         print(f"inputs: {status}", file=stdout)
         return 0
     removed = clean_reconstructible_stage(contract, arguments.stage)

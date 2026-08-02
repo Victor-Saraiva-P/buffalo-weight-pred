@@ -1,19 +1,35 @@
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 
-class FailingSnapshotPublisher:
+class FailAfterSnapshotInstallOperations:
     def __init__(self) -> None:
-        """Create a publication fake.
+        """Create an atomic-filesystem fake.
 
-        Example: ``FailingSnapshotPublisher()`` records attempted publications.
+        Example: ``FailAfterSnapshotInstallOperations()`` fails after the first rename.
         """
-        self.publish_calls = 0
+        self.replace_calls = 0
 
-    def publish(self, temporary: Path, destination: Path) -> None:
-        """Fail during publication; for example, ``fake.publish(temp, destination)``."""
-        self.publish_calls += 1
-        raise OSError(
-            f"publication destination was {destination}; expected injected publication failure"
-        )
+    def replace(self, source: Path, destination: Path) -> None:
+        """Install then fail; for example, the second ``replace`` raises ``OSError``."""
+        self.replace_calls += 1
+        if self.replace_calls == 2:
+            raise OSError(f"destination was {destination}; expected post-install failure")
+        os.replace(source, destination)
+
+    def symlink(self, target: str, link: Path) -> None:
+        """Create a real pointer.
+
+        Example: ``fake.symlink(target, link)`` prepares the failed swap.
+        """
+        os.symlink(target, link)
+
+    def remove_tree(self, path: Path) -> None:
+        """Remove obsolete storage.
+
+        Example: ``fake.remove_tree(snapshot)`` records realistic cleanup.
+        """
+        shutil.rmtree(path, ignore_errors=True)

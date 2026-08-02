@@ -1,0 +1,5 @@
+# CNN late fusion with pure geometry
+
+The `cnn_mask_geometry` Model Hybrid Prediction uses late fusion: a CNN mask embedding is concatenated with a small embedding of exactly the ten pure-geometry features before weight regression. It remains a separate model family from `cnn_mask`, uses the same outer folds, and fits feature scaling and early stopping only inside each outer training partition, because comparisons must preserve interpretable input contracts and prevent validation leakage. Posture-dependent bounding-box, axis, thickness, and absolute-centroid features remain excluded from this experiment; the mask-only result is retained when fusion does not improve OOF performance.
+
+**Considered Options**: Overloading `cnn_mask` was rejected because it would hide the dependency on the Feature Index. Reusing the earlier PCA+ExtraTrees fusion was rejected because it is not a CNN fusion and includes posture-dependent features. Replacing the geometry-only result was rejected because authorizing mask pixels defines a separate experiment.

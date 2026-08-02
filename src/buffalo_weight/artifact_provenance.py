@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from buffalo_weight.models import (
+    CNN_MASK_GEOMETRY_MODEL,
     CNN_MASK_MODEL,
     FEATURE_FUSION_MODELS,
     MASK_PREDICTION_MODELS,
@@ -162,7 +163,7 @@ def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
     names = {"numpy": "numpy", "scikit-learn": "scikit-learn"}
     if config.model in MASK_PREDICTION_MODELS or config.model in FEATURE_FUSION_MODELS:
         names["pillow"] = "pillow"
-    if config.model == CNN_MASK_MODEL:
+    if config.model in {CNN_MASK_MODEL, CNN_MASK_GEOMETRY_MODEL}:
         names["torch"] = "torch"
         if config.params.get("architecture") in {"efficientnet_b0", "mobilenet_v3_small", "resnet18"}:
             names["torchvision"] = "torchvision"
@@ -180,7 +181,7 @@ def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
 
 
 def _resolved_device(config: ModelConfig, requested: str) -> str:
-    if requested != "auto" or config.model not in MASK_PREDICTION_MODELS:
+    if requested != "auto" or config.model not in {CNN_MASK_MODEL, CNN_MASK_GEOMETRY_MODEL}:
         return requested
     try:
         import torch
@@ -229,6 +230,8 @@ def _find_mask(directory: Path, stem: str) -> Path | None:
 
 
 def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
+    if config.model == CNN_MASK_GEOMETRY_MODEL:
+        return _cnn_mask_geometry_source()
     if config.model == CNN_MASK_MODEL:
         architecture = str(config.params.get("architecture", "baseline"))
         from buffalo_weight.cnn_architectures import MASK_NETWORK_RECIPE_SYMBOLS
@@ -307,6 +310,33 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
     if config.model in {"random_forest", "extra_trees", "hist_gradient_boosting"}:
         pairs.append(("buffalo_weight.models", "_build_sklearn_model"))
     return _source_bundle(pairs)
+
+
+def _cnn_mask_geometry_source() -> tuple[list[str], str]:
+    geometry_symbols = [
+        "CnnMaskGeometryRegressor",
+        "_feature_array",
+        "_feature_value",
+        "_target_array",
+        "_safe_standard_deviation",
+    ]
+    network_symbols = [
+        "MaskGeometryNetwork",
+        "ResNetMaskGeometryNetwork",
+        "build_mask_geometry_network",
+        "_mask_encoder",
+        "_convolution_block",
+        "_geometry_encoder",
+        "_configure_resnet_training",
+    ]
+    mask_symbols = ["load_mask_inputs", "load_masks", "load_mask", "find_mask_path", "geometry_channels"]
+    return _source_bundle(
+        [
+            *[("buffalo_weight.cnn_mask_geometry", symbol) for symbol in geometry_symbols],
+            *[("buffalo_weight.cnn_mask_geometry_network", symbol) for symbol in network_symbols],
+            *[("buffalo_weight.cnn_mask", symbol) for symbol in mask_symbols],
+        ]
+    )
 
 
 def _source_bundle(pairs: list[tuple[str, str]]) -> tuple[list[str], str]:

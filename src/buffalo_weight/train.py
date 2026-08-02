@@ -9,10 +9,12 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
 from buffalo_weight.cnn_mask import CnnMaskRegressor
+from buffalo_weight.cnn_mask_geometry import CnnMaskGeometryRegressor
 from buffalo_weight.artifact_provenance import TrainingEvidence, write_manifest
 from buffalo_weight.csv_io import write_csv_rows
 from buffalo_weight.models import (
     CNN_MASK_MODEL,
+    CNN_MASK_GEOMETRY_MODEL,
     MASK_FEATURE_MODEL,
     PCA_FEATURE_FUSION_MODEL,
     PCA_SVR_MASK_MODEL,
@@ -127,6 +129,13 @@ def predict_fold_weights(
     masks_dir: Path | None,
     device: str = "auto",
 ) -> np.ndarray:
+    if model_config.model == CNN_MASK_GEOMETRY_MODEL:
+        if masks_dir is None:
+            raise ValueError("cnn_mask_geometry requires data.masks_dir")
+        model = CnnMaskGeometryRegressor(masks_dir, model_config.params, device)
+        fit_rows, stopping_rows = split_cnn_training_rows(train_rows, model_config.params)
+        model.fit(fit_rows, feature_columns, stopping_rows)
+        return model.predict(validation_rows, feature_columns)
     if model_config.model == CNN_MASK_MODEL:
         if masks_dir is None:
             raise ValueError("cnn_mask requires data.masks_dir")

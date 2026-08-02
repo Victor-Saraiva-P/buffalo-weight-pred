@@ -61,6 +61,31 @@ Treinar modelos usando kfold estratificado:
 PYTHON=.venv/bin/python make train
 ```
 
+Avaliar exclusivamente geometria pura com Ridge, Random Forest e XGBoost:
+
+```bash
+PYTHON=.venv/bin/python make train-pure-geometry
+```
+
+Esse comando exclui dimensões de bounding box, eixos, espessuras e centróides.
+Ele executa Stratified K-Fold externo com 5 folds e 10 faixas de peso. A escolha
+de hiperparâmetros usa somente folds internos do conjunto de treino, evitando
+vazamento da validação externa. Os resultados e diagnósticos científicos ficam
+em `generated/pure_geometry/`.
+
+Comparar uma CNN que recebe somente canais derivados da máscara com uma CNN de
+fusão tardia que também recebe exclusivamente as dez features de geometria pura:
+
+```bash
+PYTHON=.venv/bin/python make train-mask-geometry
+```
+
+As duas configurações usam os mesmos cinco folds da avaliação geometry-only. O
+early stopping usa apenas uma subdivisão interna do treino de cada fold externo.
+Os artefatos ficam em `generated/mask_geometry/`; comece por `report.md` e
+`model_comparison.csv`. Esse experimento é separado do resultado geometry-only,
+pois autoriza pixels das Máscaras Binarizadas como entrada adicional.
+
 `make train` valida os artefatos já gerados, treina primeiro os Modelos Clássicos de Predição pendentes, depois os Modelos de Predição por Máscara pendentes, e por fim recria `model_comparison.csv`/`model_comparison.png` em `generated/train/`. Uma configuração é considerada concluída quando seu diretório contém `fold_metrics.csv` e `predictions.csv`.
 
 Por padrão, `configs/cnn_mask_models.yaml` reúne as configurações oficiais de máscara, incluindo ablações da CNN, PCA+SVR, MobileNetV3 com inicialização aleatória e ResNet-18 com pesos gerenciados pelo setup. Os arquivos de experimento menores continuam disponíveis para preservar comparações anteriores.

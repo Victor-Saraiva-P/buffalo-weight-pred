@@ -2,7 +2,10 @@
 
 The 132 Máscaras Binarizadas used by the current Etapa de Predição de Peso are
 the manually validated `ok` subset of the 387 images evaluated in the upstream
-PIBIC segmentation study. The remaining images from that study were not
+PIBIC segmentation study. None of the 132 belongs to `Fotos 1`; all come from
+`Fotos 2` or `Fotos 3`. `Fotos 2` and `Fotos 3` correspond to different farms.
+The B10 animals are concentrated in the `Faco` farm according to the Índice de
+Máscaras. The remaining images from that study were not
 carried into this phase because the current phase requires a valid weight
 label, the manual `ok` validation, and follows the dataset scope communicated
 by the project supervisor.
@@ -34,4 +37,7 @@ training inclusion. The exact mapping of each current mask to source group,
 ground truth, `ok` validation, and supervisor-provided weight source should be
 preserved when available. The counts in the email (`224 + 88 + 47 = 359`) do
 not equal the 387 images reported in the PIBIC document, so this discrepancy
-remains an open provenance issue rather than being silently resolved.
+remains an open provenance issue rather than being silently resolved. Because
+B10 is concentrated in one farm, farm and high weight are confounded in the
+current sample; farm-domain effects and weight-distribution effects cannot be
+separated from B10 alone.

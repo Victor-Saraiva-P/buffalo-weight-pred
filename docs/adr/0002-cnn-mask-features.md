@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0006
+---
+
 # Future hybrid mask and feature CNN
 
 We want to evaluate a future `cnn_mask_features` Configuração de Modelo that combines the Máscara Binarizada pixels with geometric features from the Índice de Features. The goal is to compare three prediction strategies in the Etapa de Predição de Peso: Modelo Clássico de Predição from features only, Modelo de Predição por Máscara from pixels only, and a hybrid model that uses both signals.

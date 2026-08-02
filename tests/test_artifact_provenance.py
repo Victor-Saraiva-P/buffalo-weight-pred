@@ -182,6 +182,28 @@ class ArtifactProvenanceTest(unittest.TestCase):
         self.assertEqual(plan.status, "stale")
         self.assertIn("input_hash", plan.reasons)
 
+    def test_cnn_geometry_manifest_tracks_hybrid_recipe_and_torch(self) -> None:
+        config = ModelConfig(
+            "hybrid",
+            "cnn_mask_geometry",
+            {
+                "epochs": 1,
+                "batch_size": 1,
+                "learning_rate": 0.1,
+                "image_size": 8,
+                "random_state": 1,
+            },
+        )
+
+        manifest = expected_manifest(config, self.evidence)
+
+        self.assertIn(
+            "buffalo_weight.cnn_mask_geometry:CnnMaskGeometryRegressor",
+            manifest["recipe_sources"],
+        )
+        self.assertIn("buffalo_weight.cnn_mask_geometry_network:MaskGeometryNetwork", manifest["recipe_sources"])
+        self.assertIn("torch", manifest["dependency_versions"])
+
     def test_training_lock_rejects_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)

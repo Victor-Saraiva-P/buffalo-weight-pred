@@ -4,13 +4,6 @@ model_configs:
     params:
       n_estimators: 200
       random_state: 42
-  xgboost_baseline:
-    model: xgboost
-    params:
-      n_estimators: 200
-      random_state: 42
-      learning_rate: 0.05
-      max_depth: 3
   random_forest_regularized:
     model: random_forest
     params:

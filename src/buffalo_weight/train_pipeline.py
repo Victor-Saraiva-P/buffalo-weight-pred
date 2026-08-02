@@ -17,7 +17,7 @@ def train_pipeline(
     shared_config_path: Path,
     classical_models_config_path: Path,
     cnn_mask_models_config_path: Path,
-    device: str = "auto",
+    device: str = "cuda",
     dry_run: bool = False,
 ) -> None:
     shared_config = load_config(shared_config_path)
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--classical-models-config", required=True)
     parser.add_argument("--cnn-mask-models-config", required=True)
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--device", choices=("cuda",), default="cuda")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 

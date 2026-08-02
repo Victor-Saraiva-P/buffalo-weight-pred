@@ -18,22 +18,22 @@ if TYPE_CHECKING:
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 RESIZE_MODES = frozenset({"letterbox", "stretch"})
-DEVICES = frozenset({"auto", "cpu", "cuda"})
+DEVICES = frozenset({"cpu", "cuda"})
 INPUT_REPRESENTATIONS = frozenset({"binary", "geometry_channels"})
 
 
 def resolve_device(requested: str, cuda_available: Callable[[], bool]) -> str:
-    """Resolve a requested compute device, using CUDA for ``auto`` when available.
+    """Require CUDA before neural execution, without automatic CPU fallback.
 
-    Example: ``resolve_device("auto", lambda: False)`` returns ``"cpu"``.
+    Example: ``resolve_device("cuda", lambda: True)`` returns ``"cuda"``.
     """
     if requested not in DEVICES:
         raise ValueError(f"device was {requested!r}; expected one of {sorted(DEVICES)}")
-    if requested == "auto":
-        return "cuda" if cuda_available() else "cpu"
-    if requested == "cuda" and not cuda_available():
+    if requested == "cpu":
+        return "cpu"
+    if not cuda_available():
         raise ValueError("device was 'cuda', but CUDA is not available; expected an available CUDA device")
-    return requested
+    return "cuda"
 
 
 class EarlyStopping:
@@ -130,7 +130,7 @@ def load_mask_inputs(
 
 
 class CnnMaskRegressor:
-    def __init__(self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "auto") -> None:
+    def __init__(self, masks_dir: Path, params: dict[str, ModelParam], requested_device: str = "cuda") -> None:
         self.masks_dir = masks_dir
         self.image_size = int(params["image_size"])
         self.resize_mode = str(params.get("resize_mode", "letterbox"))

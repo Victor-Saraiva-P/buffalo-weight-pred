@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from collections.abc import Callable
 
+from buffalo_weight.resnet18_weights import build_offline_resnet18
+
 
 MASK_NETWORK_ARCHITECTURES = frozenset(
     {"baseline", "efficientnet_b0", "mobilenet_v3_small", "residual", "resnet18"}
@@ -122,11 +124,10 @@ def _efficientnet_b0_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.M
 
 def _resnet18_mask_network(pretrained: bool, fine_tune_mode: str) -> nn.Module:
     try:
-        from torchvision.models import ResNet18_Weights, resnet18
+        from torchvision.models import resnet18
     except ImportError as error:
         raise ValueError("resnet18 requires torchvision") from error
-    weights = ResNet18_Weights.DEFAULT if pretrained else None
-    backbone = resnet18(weights=weights)
+    backbone = build_offline_resnet18() if pretrained else resnet18(weights=None)
     output_layer = backbone.fc
     backbone.fc = nn.Linear(output_layer.in_features, 1)
     return ImageNetMaskNetwork(backbone, backbone.fc, backbone.layer4, fine_tune_mode)

@@ -178,11 +178,12 @@ class ModelConfigTest(unittest.TestCase):
 
 
 class CnnMaskTest(unittest.TestCase):
-    def test_auto_device_uses_cuda_when_available(self) -> None:
-        self.assertEqual(resolve_device("auto", lambda: True), "cuda")
+    def test_cuda_device_is_used_when_available(self) -> None:
+        self.assertEqual(resolve_device("cuda", lambda: True), "cuda")
 
-    def test_auto_device_falls_back_to_cpu(self) -> None:
-        self.assertEqual(resolve_device("auto", lambda: False), "cpu")
+    def test_auto_device_is_rejected_without_cpu_fallback(self) -> None:
+        with self.assertRaisesRegex(ValueError, "auto.*expected.*cuda"):
+            resolve_device("auto", lambda: True)
 
     def test_explicit_cuda_requires_available_device(self) -> None:
         with self.assertRaisesRegex(ValueError, "CUDA is not available"):
@@ -476,7 +477,7 @@ class MaskClassicalTest(unittest.TestCase):
                 "random_state": 42,
             }
             network = torch.nn.Sequential(torch.nn.AdaptiveAvgPool2d(1), torch.nn.Flatten())
-            model = PretrainedMaskEmbeddingRegressor(masks_dir, params, "cpu")
+            model = PretrainedMaskEmbeddingRegressor(masks_dir, params, "cuda")
 
             with patch("buffalo_weight.pretrained_mask_embedding.build_embedding_network", return_value=network):
                 model.fit(rows)

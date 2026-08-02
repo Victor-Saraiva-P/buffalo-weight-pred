@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import TextIO
 from pathlib import Path
 
 from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
 from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
+from buffalo_weight.report_environment import RuntimeProbe, require_neural_cuda
 from buffalo_weight.split import read_rows
+from buffalo_weight.system_setup import SystemRuntimeProbe
 from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
 
@@ -16,7 +19,7 @@ from buffalo_weight.validation import validate_mask_files, validate_split
 def train_cnn_mask(
     shared_config_path: Path,
     models_config_path: Path,
-    device: str = "auto",
+    device: str = "cuda",
     dry_run: bool = False,
 ) -> list[ModelConfig]:
     shared_config = load_config(shared_config_path)
@@ -60,15 +63,21 @@ def train_cnn_mask(
     return model_configs
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    runtime_probe: RuntimeProbe | None = None,
+    stderr: TextIO = sys.stderr,
+) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-config", required=True)
     parser.add_argument("--models-config", required=True)
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--device", choices=("cuda",), default="cuda")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     try:
+        if not args.dry_run:
+            require_neural_cuda((runtime_probe or SystemRuntimeProbe()).compute_environment())
         shared_config = load_config(Path(args.shared_config))
         training = shared_config["training"]
         if not isinstance(training, dict):
@@ -80,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             with training_lock(output_dir):
                 train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
     except (KeyError, ValueError) as error:
-        print(error, file=sys.stderr)
+        print(error, file=stderr)
         return 1
     return 0
 

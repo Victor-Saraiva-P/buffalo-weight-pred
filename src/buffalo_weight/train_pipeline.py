@@ -17,8 +17,8 @@ from buffalo_weight.neural_environment import (
 from buffalo_weight.report_environment import RuntimeProbe
 from buffalo_weight.train import write_model_comparison_from_outputs
 from buffalo_weight.train_classical import train_classical
-from buffalo_weight.train_cnn_mask import train_cnn_mask
-from buffalo_weight.system_setup import SystemRuntimeProbe
+from buffalo_weight.train_cnn_mask import execute_cuda_validated_cnn_mask_training
+from buffalo_weight.system_setup import default_runtime_probe
 from buffalo_weight.validation import validate_mask_files
 
 
@@ -29,7 +29,6 @@ class _TrainingPipelineRequest:
     cnn_mask_models_config_path: Path
     device: str
     dry_run: bool
-    runtime_probe: RuntimeProbe | None
 
 
 def train_pipeline(
@@ -40,11 +39,11 @@ def train_pipeline(
     dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> None:
     """Run the full training funnel; for example, ``dry_run=True`` only audits work."""
-    probe = runtime_probe or SystemRuntimeProbe()
+    probe = runtime_probe or default_runtime_probe()
     require_neural_cuda_for_run(dry_run, probe.compute_environment)
     request = _TrainingPipelineRequest(
         shared_config_path, classical_models_config_path, cnn_mask_models_config_path, device,
-        dry_run, probe,
+        dry_run,
     )
     model_configs = _load_pipeline_configs(classical_models_config_path, cnn_mask_models_config_path)
     if dry_run:
@@ -85,12 +84,11 @@ def _run_pipeline(request: _TrainingPipelineRequest) -> None:
     train_classical(
         request.shared_config_path, request.classical_models_config_path, request.dry_run
     )
-    train_cnn_mask(
+    execute_cuda_validated_cnn_mask_training(
         request.shared_config_path,
         request.cnn_mask_models_config_path,
         request.device,
         request.dry_run,
-        request.runtime_probe,
     )
 
 

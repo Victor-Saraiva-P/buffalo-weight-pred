@@ -17,7 +17,7 @@ from buffalo_weight.neural_environment import (
 )
 from buffalo_weight.report_environment import RuntimeProbe
 from buffalo_weight.split import read_rows
-from buffalo_weight.system_setup import SystemRuntimeProbe
+from buffalo_weight.system_setup import default_runtime_probe
 from buffalo_weight.train import evaluate_models, write_training_outputs
 from buffalo_weight.validation import validate_mask_files, validate_split
 
@@ -36,8 +36,20 @@ def train_cnn_mask(
     dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> list[ModelConfig]:
     """Train mask predictors; for example, pass ``dry_run=True`` to audit artifacts."""
-    probe = runtime_probe or SystemRuntimeProbe()
+    probe = runtime_probe or default_runtime_probe()
     require_neural_cuda_for_run(dry_run, probe.compute_environment)
+    return execute_cuda_validated_cnn_mask_training(
+        shared_config_path, models_config_path, device, dry_run
+    )
+
+
+def execute_cuda_validated_cnn_mask_training(
+    shared_config_path: Path,
+    models_config_path: Path,
+    device: str,
+    dry_run: bool,
+) -> list[ModelConfig]:
+    """Train after environment preflight; for example, the full pipeline calls this once gated."""
     shared_config = load_config(shared_config_path)
     model_configs = _load_mask_model_configs(models_config_path)
     inputs = _load_mask_training_inputs(shared_config)
@@ -143,17 +155,17 @@ def _run_training_command(
     args: argparse.Namespace, runtime_probe: RuntimeProbe | None
 ) -> int:
     if args.dry_run:
-        train_cnn_mask(
+        execute_cuda_validated_cnn_mask_training(
             Path(args.shared_config), Path(args.models_config), args.device, True
         )
         return 0
-    probe = runtime_probe or SystemRuntimeProbe()
+    probe = runtime_probe or default_runtime_probe()
     require_neural_cuda_for_run(False, probe.compute_environment)
     shared_config = load_config(Path(args.shared_config))
     training = _require_mapping_section(shared_config, "training")
     with training_lock(Path(str(training["output_dir"]))):
-        train_cnn_mask(
-            Path(args.shared_config), Path(args.models_config), args.device, False, runtime_probe
+        execute_cuda_validated_cnn_mask_training(
+            Path(args.shared_config), Path(args.models_config), args.device, False
         )
     return 0
 

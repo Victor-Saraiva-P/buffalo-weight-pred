@@ -7,7 +7,6 @@ import subprocess
 import unittest
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 
 from buffalo_weight.report_environment import (
     APPROVED_DEPENDENCIES,
@@ -17,13 +16,11 @@ from buffalo_weight.report_environment import (
     ScientificValidity,
     WeightSetupStatus,
 )
-from buffalo_weight.system_setup import (
-    HttpWeightGateway,
-    JsonProvenanceWriter,
-    PipPackageGateway,
-    SystemRuntimeProbe,
-    default_setup_services,
-)
+from buffalo_weight.system_packages import PipPackageGateway
+from buffalo_weight.system_provenance import JsonProvenanceWriter
+from buffalo_weight.system_runtime import NvidiaDriverProbe, SystemRuntimeProbe
+from buffalo_weight.system_setup import default_setup_services
+from buffalo_weight.system_weights import HttpWeightGateway
 from tests.fake_filesystem import MemoryPath
 
 
@@ -72,10 +69,33 @@ class FakeDistributionProvider:
         return [FakeDistribution("typing-extensions", "4.15.0")]
 
 
-class UnavailableCuda:
-    def __call__(self) -> bool:
-        """Report a CPU-only fake host."""
-        return False
+class FakeCudaRuntime:
+    def __init__(self, available: bool = False) -> None:
+        """Prepare deterministic CUDA state."""
+        self.available = available
+
+    def is_available(self) -> bool:
+        """Report configured CUDA availability."""
+        return self.available
+
+    def get_device_capability(self, device: int) -> tuple[int, int]:
+        """Return a fixed capability for the requested fake device."""
+        return (9, 0)
+
+    def get_device_name(self, device: int) -> str:
+        """Return a fixed name for the requested fake device."""
+        return "Fake GPU"
+
+
+class FakeTorchVersion:
+    cuda = "13.0"
+
+
+class FakeTorchRuntime:
+    def __init__(self, available: bool = False) -> None:
+        """Expose the torch fields used by the runtime adapter."""
+        self.cuda = FakeCudaRuntime(available)
+        self.version = FakeTorchVersion()
 
 
 class FakeVersionInfo:
@@ -96,54 +116,58 @@ class FixedTextProbe:
 
 class SystemSetupTest(unittest.TestCase):
     def test_system_runtime_probe_records_runtime_and_platform(self) -> None:
-        with (
-            patch("buffalo_weight.system_setup.sys.version_info", new=FakeVersionInfo()),
-            patch(
-                "buffalo_weight.system_setup.platform.python_implementation",
-                new=FixedTextProbe("CPython"),
-            ),
-            patch(
-                "buffalo_weight.system_setup.platform.platform",
-                new=FixedTextProbe("Fake Linux"),
-            ),
-        ):
-            runtime = SystemRuntimeProbe().python_runtime()
-            platform_description = SystemRuntimeProbe().platform_description()
+        probe = SystemRuntimeProbe(
+            FakeVersionInfo(),
+            FixedTextProbe("CPython"),
+            FixedTextProbe("Fake Linux"),
+            FakeTorchRuntime(),
+            FixedTextProbe("590.00"),
+        )
+
+        runtime = probe.python_runtime()
+        platform_description = probe.platform_description()
 
         self.assertEqual(runtime.full_version, "3.14.9")
         self.assertEqual(runtime.implementation, "CPython")
         self.assertEqual(platform_description, "Fake Linux")
 
     def test_system_runtime_probe_records_missing_cuda_and_driver(self) -> None:
-        runner = RecordingCommandRunner("590.00\n")
+        probe = SystemRuntimeProbe(
+            FakeVersionInfo(),
+            FixedTextProbe("CPython"),
+            FixedTextProbe("Fake Linux"),
+            FakeTorchRuntime(),
+            FixedTextProbe("590.00"),
+        )
 
-        with (
-            patch("buffalo_weight.system_setup.subprocess.run", new=runner),
-            patch("torch.cuda.is_available", new=UnavailableCuda()),
-        ):
-            compute = SystemRuntimeProbe().compute_environment()
+        compute = probe.compute_environment()
 
         self.assertIsNone(compute.gpu_name)
         self.assertEqual(compute.driver_version, "590.00")
 
     def test_package_gateway_installs_checks_and_records_versions(self) -> None:
         runner = RecordingCommandRunner()
-        gateway = PipPackageGateway()
+        gateway = PipPackageGateway(
+            "/fake/python", runner, FakeVersionLookup(), FakeDistributionProvider()
+        )
 
-        with (
-            patch("buffalo_weight.system_setup.subprocess.run", new=runner),
-            patch("buffalo_weight.system_setup.version", new=FakeVersionLookup()),
-            patch("buffalo_weight.system_setup.distributions", new=FakeDistributionProvider()),
-        ):
-            installed = gateway.installed_direct_versions()
-            gateway.install_approved(Path("requirements.txt"))
-            gateway.verify_consistency()
-            resolved = gateway.resolved_versions()
+        installed = gateway.installed_direct_versions()
+        gateway.install_approved(Path("requirements.txt"))
+        gateway.verify_consistency()
+        resolved = gateway.resolved_versions()
 
         self.assertEqual(installed, APPROVED_DEPENDENCIES)
         self.assertEqual(resolved, {"typing-extensions": "4.15.0"})
         self.assertIn("pip", runner.commands[0])
         self.assertEqual(runner.commands[1][-1], "check")
+
+    def test_nvidia_driver_probe_injects_command_runner(self) -> None:
+        runner = RecordingCommandRunner("590.00\n")
+
+        version = NvidiaDriverProbe(runner).version()
+
+        self.assertEqual(version, "590.00")
+        self.assertEqual(runner.commands[0][0], "nvidia-smi")
 
     def test_default_setup_services_uses_system_adapters(self) -> None:
         services = default_setup_services()
@@ -157,7 +181,9 @@ class SystemSetupTest(unittest.TestCase):
         cache_path = MemoryPath("weights.pth", {"weights.pth": b"official weights"})
         expected = hashlib.sha256(b"official weights").hexdigest()
 
-        status = HttpWeightGateway().ensure_resnet18_weights(cast(Path, cache_path), expected)
+        status = HttpWeightGateway(FakeUrlOpen(b"")).ensure_resnet18_weights(
+            cast(Path, cache_path), expected
+        )
 
         self.assertEqual(status, WeightSetupStatus.REUSED)
 
@@ -165,7 +191,9 @@ class SystemSetupTest(unittest.TestCase):
         cache_path = MemoryPath("weights.pth", {"weights.pth": b"corrupt weights"})
 
         with self.assertRaisesRegex(ValueError, "ResNet-18 cache SHA-256.*expected"):
-            HttpWeightGateway().ensure_resnet18_weights(cast(Path, cache_path), "0" * 64)
+            HttpWeightGateway(FakeUrlOpen(b"")).ensure_resnet18_weights(
+                cast(Path, cache_path), "0" * 64
+            )
 
     def test_weight_gateway_downloads_valid_weight_into_offline_cache(self) -> None:
         content = b"official weights"
@@ -173,10 +201,9 @@ class SystemSetupTest(unittest.TestCase):
         cache_path = MemoryPath("weights.pth")
         url_open = FakeUrlOpen(content)
 
-        with patch("buffalo_weight.system_setup.urlopen", new=url_open):
-            status = HttpWeightGateway().ensure_resnet18_weights(
-                cast(Path, cache_path), expected
-            )
+        status = HttpWeightGateway(url_open).ensure_resnet18_weights(
+            cast(Path, cache_path), expected
+        )
 
         self.assertEqual(status, WeightSetupStatus.DOWNLOADED)
         self.assertEqual(cache_path.files["weights.pth"], content)

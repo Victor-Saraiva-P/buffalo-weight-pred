@@ -8,6 +8,7 @@ from buffalo_weight.config import load_config
 from buffalo_weight.artifact_provenance import TrainingEvidence, prepare_artifacts
 from buffalo_weight.artifact_provenance import print_artifact_plan, training_lock
 from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_model_configs
+from buffalo_weight.official_model_contract import validate_official_model_configs
 from buffalo_weight.split import read_rows
 from buffalo_weight.train import evaluate_models, join_rows, write_training_outputs
 from buffalo_weight.validation import validate_feature_index, validate_split
@@ -19,6 +20,7 @@ def train_classical(
     shared_config = load_config(shared_config_path)
     models_config = load_config(models_config_path)
     model_configs = parse_model_configs(models_config)
+    validate_official_model_configs(model_configs)
     unsupported = [config.name for config in model_configs if config.model in MASK_PREDICTION_MODELS]
     if unsupported:
         raise ValueError("train_classical only supports classical prediction models")

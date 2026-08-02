@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import tempfile
 import unittest
 import warnings
@@ -92,6 +93,10 @@ class ModelConfigTest(unittest.TestCase):
             {"device": "cpu", "tree_method": "hist"},
         )
 
+    @unittest.skipUnless(
+        importlib.util.find_spec("xgboost"),
+        "XGBoost is an optional dependency outside the official environment",
+    )
     def test_xgboost_prediction_avoids_mismatched_device_fallback(self) -> None:
         model = build_model(
             ModelConfig("xgboost_test", "xgboost", {"n_estimators": 2, "random_state": 42})

@@ -197,8 +197,8 @@ class TrainTest(unittest.TestCase):
                     {"n_estimators": 5, "random_state": 42},
                 ),
                 ModelConfig(
-                    "xgboost_baseline",
-                    "xgboost",
+                    "extra_trees_baseline",
+                    "extra_trees",
                     {"n_estimators": 5, "random_state": 42},
                 ),
             ],
@@ -208,9 +208,9 @@ class TrainTest(unittest.TestCase):
         self.assertEqual(len(predictions), 40)
         self.assertEqual(
             {row["model_config"] for row in metrics},
-            {"random_forest_baseline", "xgboost_baseline"},
+            {"random_forest_baseline", "extra_trees_baseline"},
         )
-        self.assertEqual({row["model"] for row in metrics}, {"random_forest", "xgboost"})
+        self.assertEqual({row["model"] for row in metrics}, {"random_forest", "extra_trees"})
 
     def test_train_classical_rejects_mask_prediction_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "train_classical only supports classical prediction models"):

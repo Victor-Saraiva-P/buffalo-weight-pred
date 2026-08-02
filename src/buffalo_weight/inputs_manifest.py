@@ -19,7 +19,7 @@ OUTPUT_FILES = ("feature_index.csv", "canonical_split.csv")
 def expected_identity(
     contract: ReportContract, provenance: ReportProvenance
 ) -> dict[str, object]:
-    """Build stage identity; for example, ``expected_identity(contract)`` fingerprints inputs."""
+    """Build identity; for example, ``expected_identity(contract, provenance)`` fingerprints inputs."""
     return {
         "manifest_version": MANIFEST_VERSION,
         "stage": "inputs",
@@ -31,7 +31,7 @@ def expected_identity(
 
 
 def stage_status(contract: ReportContract, provenance: ReportProvenance) -> str:
-    """Classify freshness; for example, ``stage_status(contract)`` may return ``reusable``."""
+    """Classify freshness; for example, ``stage_status(contract, provenance)`` may be reusable."""
     output_dir = contract.inputs_output_dir
     manifest_path = output_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -50,7 +50,7 @@ def complete_manifest(
     identity: dict[str, object],
     source_commit: str,
 ) -> dict[str, object]:
-    """Describe validated outputs; for example, ``complete_manifest(c, root, identity)``."""
+    """Describe outputs; for example, ``complete_manifest(c, root, identity, commit)``."""
     manifest = identity.copy()
     manifest.update(_completion_fields(contract, output_dir, source_commit))
     return manifest

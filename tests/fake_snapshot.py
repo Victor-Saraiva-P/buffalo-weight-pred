@@ -33,3 +33,7 @@ class FailAfterSnapshotInstallOperations:
         Example: ``fake.remove_tree(snapshot)`` records realistic cleanup.
         """
         shutil.rmtree(path, ignore_errors=True)
+
+    def unlink(self, path: Path) -> None:
+        """Remove a pointer; for example, ``fake.unlink(next_link)`` cleans failure state."""
+        path.unlink(missing_ok=True)

@@ -32,6 +32,13 @@ class AtomicFilesystem(Protocol):
         """
         ...
 
+    def unlink(self, path: Path) -> None:
+        """Remove one pointer.
+
+        Example: ``filesystem.unlink(next_link)`` cleans an abandoned swap.
+        """
+        ...
+
 
 class SystemAtomicFilesystem:
     """System I/O adapter; for example, it powers ``FilesystemSnapshotPublisher``."""
@@ -56,6 +63,13 @@ class SystemAtomicFilesystem:
         Example: ``filesystem.remove_tree(old_snapshot)`` reclaims a cache.
         """
         shutil.rmtree(path, ignore_errors=True)
+
+    def unlink(self, path: Path) -> None:
+        """Remove one pointer.
+
+        Example: ``filesystem.unlink(next_link)`` cleans an abandoned swap.
+        """
+        path.unlink(missing_ok=True)
 
 
 class SnapshotPublisher(Protocol):
@@ -98,18 +112,21 @@ class FilesystemSnapshotPublisher:
         try:
             self._filesystem.replace(next_link, destination)
         except BaseException:
-            next_link.unlink(missing_ok=True)
+            self._filesystem.unlink(next_link)
             raise
 
 
-def clean_snapshot_stage(destination: Path) -> None:
-    """Remove a pointer and its storage; for example, ``clean_snapshot_stage(inputs_path)``."""
+def clean_snapshot_stage(
+    destination: Path, filesystem: AtomicFilesystem | None = None
+) -> None:
+    """Remove storage; for example, ``clean_snapshot_stage(inputs_path, filesystem)``."""
+    resolved_filesystem = filesystem or SystemAtomicFilesystem()
     if destination.is_symlink():
-        destination.unlink()
+        resolved_filesystem.unlink(destination)
     elif destination.is_dir():
-        shutil.rmtree(destination)
+        resolved_filesystem.remove_tree(destination)
     snapshot_store = destination.parent / ".snapshots" / destination.name
-    shutil.rmtree(snapshot_store, ignore_errors=True)
+    resolved_filesystem.remove_tree(snapshot_store)
 
 
 def _reject_legacy_destination(destination: Path) -> None:

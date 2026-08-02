@@ -10,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from buffalo_weight.report_cli import main
@@ -274,7 +275,7 @@ class ReportInputsCliTest(unittest.TestCase):
 
     @staticmethod
     def _make_non_binary(fixture: CuratedInputsFixture) -> None:
-        invalid_pixels = np.asarray([[0, 128]], dtype=np.uint8)
+        invalid_pixels: NDArray[np.uint8] = np.asarray([[0, 128]], dtype=np.uint8)
         invalid_path = fixture.mask_path(0)
         Image.fromarray(invalid_pixels).save(invalid_path)
 

@@ -10,15 +10,15 @@ import os
 from pathlib import Path
 import shutil
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Sequence
 
+from buffalo_weight.hashing import sha256_file
 from buffalo_weight.models import (
     CNN_MASK_MODEL,
     FEATURE_FUSION_MODELS,
     MASK_PREDICTION_MODELS,
     ModelConfig,
 )
-from buffalo_weight.hashing import sha256_file
 
 
 MANIFEST_FILE = "provenance.json"
@@ -342,7 +342,7 @@ def file_hash(path: Path) -> str:
     return sha256_file(path)
 
 
-def _digest(values: list[object]) -> str:
+def _digest(values: Sequence[object]) -> str:
     return hashlib.sha256("\n".join(str(value) for value in values).encode()).hexdigest()
 
 

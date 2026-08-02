@@ -4,6 +4,7 @@ import math
 import unittest
 
 import numpy as np
+from numpy.typing import NDArray
 
 from buffalo_weight.feature_calculators import APPROVED_FEATURES, calculate_mask_features
 
@@ -55,7 +56,7 @@ class FeatureCalculatorTest(unittest.TestCase):
         self.assertEqual(features["centroid_y_ratio"], 0.5)
 
     def test_applies_canonical_scale_by_feature_dimension(self) -> None:
-        mask = np.ones((3, 3), dtype=bool)
+        mask: NDArray[np.bool_] = np.ones((3, 3), dtype=bool)
 
         original_scale = calculate_mask_features(mask, canonical_long_side=3)
         doubled_scale = calculate_mask_features(mask, canonical_long_side=6)

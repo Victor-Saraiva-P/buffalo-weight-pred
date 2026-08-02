@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 
@@ -86,7 +87,7 @@ class CuratedInputsFixture:
         for index in range(self.sample_count):
             height = 8 + index // 10
             width = 8 + index % 10
-            pixels = np.zeros((height, width), dtype=np.uint8)
+            pixels: NDArray[np.uint8] = np.zeros((height, width), dtype=np.uint8)
             pixels[1:-1, 1 : 2 + index % (width - 2)] = 255
             pixels[1 + index % (height - 2), 1:-1] = 255
             Image.fromarray(pixels).save(self.mask_path(index))

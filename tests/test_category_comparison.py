@@ -1,14 +1,59 @@
 from __future__ import annotations
 
 import csv
+import io
 from pathlib import Path
 import tempfile
 import unittest
 
-from buffalo_weight.category_comparison import run_category_comparison
+from buffalo_weight.category_comparison import main, run_category_comparison
+from buffalo_weight.environment_contract import ComputeEnvironment
+from tests.fake_setup_services import FakeRuntimeProbe
+
+
+NEURAL_CATEGORY_CONFIG: dict[str, object] = {
+    "output": {"features_index_path": "must-not-be-read.csv"},
+    "split": {"k": 5},
+    "training": {
+        "feature_columns": ["area"],
+        "model_configs": {
+            "cnn_mask_baseline": {
+                "model": "cnn_mask",
+                "params": {
+                    "batch_size": 8,
+                    "epochs": 1,
+                    "image_size": 64,
+                    "learning_rate": 0.001,
+                    "random_state": 42,
+                },
+            }
+        },
+    },
+}
+
+
+class FakeCategoryConfigLoader:
+    def __call__(self, path: Path) -> dict[str, object]:
+        """Return a neural config whose feature path must never be read."""
+
+        return NEURAL_CATEGORY_CONFIG
 
 
 class CategoryComparisonTest(unittest.TestCase):
+    def test_neural_cli_rejects_missing_cuda_before_reading_features(self) -> None:
+        runtime = FakeRuntimeProbe(
+            compute=ComputeEnvironment(None, None, "13.0", "590.00")
+        )
+        stderr = io.StringIO()
+
+        result = main(
+            ["--config", "neural.yaml"], runtime_probe=runtime,
+            config_loader=FakeCategoryConfigLoader(), stderr=stderr,
+        )
+
+        self.assertEqual(result, 1)
+        self.assertIn("available CUDA GPU", stderr.getvalue())
+
     def test_compares_configured_weight_category_counts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

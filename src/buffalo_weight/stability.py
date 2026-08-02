@@ -11,16 +11,11 @@ from typing import TextIO
 
 from buffalo_weight.config import load_config
 from buffalo_weight.csv_io import write_csv_rows
-from buffalo_weight.models import (
-    CNN_MASK_MODEL,
-    PRETRAINED_MASK_EMBEDDING_MODEL,
-    ModelConfig,
-    parse_model_configs,
-)
-from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE, require_neural_cuda
 from buffalo_weight.environment_contract import RuntimeProbe
+from buffalo_weight.models import ModelConfig, parse_model_configs
+from buffalo_weight.neural_environment import OFFICIAL_NEURAL_DEVICE
+from buffalo_weight.neural_preflight import require_model_configs_cuda
 from buffalo_weight.split import assign_folds, assign_weight_categories, parse_int, read_rows
-from buffalo_weight.system_setup import default_runtime_probe
 from buffalo_weight.train import evaluate_models, format_metric
 
 
@@ -53,7 +48,6 @@ HARD_EXAMPLE_FIELDS = [
     "abs_error_max",
 ]
 COMPARISON_FIELDS = ["model_config", "model", "mae_mean", "mae_std_between_seeds", "mae_min_seed", "mae_max_seed"]
-NEURAL_STABILITY_MODELS = frozenset({CNN_MASK_MODEL, PRETRAINED_MASK_EMBEDDING_MODEL})
 ConfigLoader = Callable[[Path], dict[str, object]]
 StabilityOutputs = tuple[
     list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]
@@ -253,7 +247,7 @@ def evaluate_split_stability(
     runtime_probe: RuntimeProbe | None = None,
 ) -> StabilityOutputs:
     """Evaluate split seeds; for example, neural configurations preflight CUDA first."""
-    _require_neural_stability_cuda(model_configs, runtime_probe)
+    require_model_configs_cuda(model_configs, runtime_probe)
     return _evaluate_cuda_validated_stability(
         rows, feature_columns, k, weight_category_count, split_random_states,
         model_configs, masks_dir, device,
@@ -308,6 +302,7 @@ def run_stability(
     config_path: Path, start_seed: int, seed_count: int, output_dir: Path,
     runtime_probe: RuntimeProbe | None = None, config_loader: ConfigLoader = load_config,
 ) -> None:
+    """Run legacy-config stability; for example, ``run_stability(path, 0, 30, output)``."""
     inputs = _legacy_stability_inputs(config_loader(config_path), runtime_probe)
     _execute_stability(inputs, start_seed, seed_count, output_dir)
 
@@ -321,6 +316,7 @@ def run_stability_with_configs(
     runtime_probe: RuntimeProbe | None = None,
     config_loader: ConfigLoader = load_config,
 ) -> None:
+    """Run split stability; for example, pass shared and model config paths separately."""
     inputs = _shared_stability_inputs(
         config_loader(shared_config_path), config_loader(models_config_path), runtime_probe
     )
@@ -334,7 +330,7 @@ def _legacy_stability_inputs(
     split = _config_map(config, "split", "config")
     training = _config_map(config, "training", "config")
     model_configs = parse_model_configs(training)
-    _require_neural_stability_cuda(model_configs, runtime_probe)
+    require_model_configs_cuda(model_configs, runtime_probe)
     rows = read_rows(Path(str(output["features_index_path"])))
     return _stability_inputs(rows, training, split, config.get("data"), model_configs)
 
@@ -345,19 +341,23 @@ def _shared_stability_inputs(
     features = _config_map(shared, "features", "shared config")
     split = _config_map(shared, "split", "shared config")
     model_configs = parse_model_configs(models)
-    _require_neural_stability_cuda(model_configs, runtime_probe)
+    require_model_configs_cuda(model_configs, runtime_probe)
     rows = read_rows(Path(str(features["features_index_path"])))
     return _stability_inputs(rows, models, split, shared.get("data"), model_configs)
 
 
 def _stability_inputs(
     rows: list[dict[str, str]], models: dict[object, object], split: dict[object, object],
-    data: object, model_configs: list[ModelConfig],
+    shared_data_section: object, model_configs: list[ModelConfig],
 ) -> _StabilityInputs:
     columns = models.get("feature_columns")
     if not isinstance(columns, list):
         raise ValueError(f"config feature_columns was {columns!r}; expected a list")
-    masks_dir = Path(str(data["masks_dir"])) if isinstance(data, dict) and "masks_dir" in data else None
+    masks_dir = (
+        Path(str(shared_data_section["masks_dir"]))
+        if isinstance(shared_data_section, dict) and "masks_dir" in shared_data_section
+        else None
+    )
     return _StabilityInputs(
         rows, [str(column) for column in columns], parse_int(split["k"], "split.k"),
         parse_int(split.get("weight_category_count", 4), "split.weight_category_count"),
@@ -422,15 +422,6 @@ def _comparison_rows(overall: list[dict[str, str]]) -> list[dict[str, str]]:
     return [{field: row[field] for field in fields} for row in overall]
 
 
-def _require_neural_stability_cuda(
-    model_configs: list[ModelConfig], runtime_probe: RuntimeProbe | None
-) -> None:
-    if not any(config.model in NEURAL_STABILITY_MODELS for config in model_configs):
-        return
-    probe = runtime_probe or default_runtime_probe()
-    require_neural_cuda(probe.compute_environment())
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config")
@@ -457,7 +448,11 @@ def _run_stability_command(
             args.seed_count, Path(args.output_dir), runtime_probe, config_loader,
         )
         return
-    raise ValueError("stability arguments were incomplete; expected --config or both shared configs")
+    received = (args.config, args.shared_config, args.models_config)
+    raise ValueError(
+        f"stability config arguments were {received!r}; "
+        "expected --config or both --shared-config and --models-config"
+    )
 
 
 def main(

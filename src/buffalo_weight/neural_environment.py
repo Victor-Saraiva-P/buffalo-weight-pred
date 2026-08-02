@@ -26,6 +26,15 @@ def require_neural_cuda(compute: ComputeAvailability) -> None:
     )
 
 
+def require_neural_cuda_for_run(
+    dry_run: bool, compute_environment: Callable[[], ComputeAvailability]
+) -> None:
+    """Gate executable neural work; for example, a dry-run skips the CUDA probe."""
+    if dry_run:
+        return
+    require_neural_cuda(compute_environment())
+
+
 def resolve_neural_device(requested: str, cuda_available: Callable[[], bool]) -> str:
     """Require CUDA for neural work; for example, an available CUDA request succeeds."""
     if requested != OFFICIAL_NEURAL_DEVICE:

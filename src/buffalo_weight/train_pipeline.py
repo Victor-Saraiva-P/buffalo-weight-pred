@@ -12,7 +12,7 @@ from buffalo_weight.models import ModelConfig, parse_model_configs, validate_uni
 from buffalo_weight.neural_environment import (
     OFFICIAL_NEURAL_DEVICE,
     OFFICIAL_NEURAL_DEVICE_CHOICES,
-    require_neural_cuda,
+    require_neural_cuda_for_run,
 )
 from buffalo_weight.report_environment import RuntimeProbe
 from buffalo_weight.train import write_model_comparison_from_outputs
@@ -29,6 +29,7 @@ class _TrainingPipelineRequest:
     cnn_mask_models_config_path: Path
     device: str
     dry_run: bool
+    runtime_probe: RuntimeProbe | None
 
 
 def train_pipeline(
@@ -36,16 +37,16 @@ def train_pipeline(
     classical_models_config_path: Path,
     cnn_mask_models_config_path: Path,
     device: str = OFFICIAL_NEURAL_DEVICE,
-    dry_run: bool = False,
+    dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> None:
     """Run the full training funnel; for example, ``dry_run=True`` only audits work."""
+    probe = runtime_probe or SystemRuntimeProbe()
+    require_neural_cuda_for_run(dry_run, probe.compute_environment)
     request = _TrainingPipelineRequest(
-        shared_config_path, classical_models_config_path, cnn_mask_models_config_path,
-        device, dry_run,
+        shared_config_path, classical_models_config_path, cnn_mask_models_config_path, device,
+        dry_run, probe,
     )
-    model_configs = _load_pipeline_configs(
-        classical_models_config_path, cnn_mask_models_config_path
-    )
+    model_configs = _load_pipeline_configs(classical_models_config_path, cnn_mask_models_config_path)
     if dry_run:
         _run_pipeline(request)
         return
@@ -89,6 +90,7 @@ def _run_pipeline(request: _TrainingPipelineRequest) -> None:
         request.cnn_mask_models_config_path,
         request.device,
         request.dry_run,
+        request.runtime_probe,
     )
 
 
@@ -129,14 +131,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def _run_training_command(
     args: argparse.Namespace, runtime_probe: RuntimeProbe | None
 ) -> int:
-    if not args.dry_run:
-        require_neural_cuda((runtime_probe or SystemRuntimeProbe()).compute_environment())
     train_pipeline(
         Path(args.shared_config),
         Path(args.classical_models_config),
         Path(args.cnn_mask_models_config),
         args.device,
         args.dry_run,
+        runtime_probe,
     )
     return 0
 

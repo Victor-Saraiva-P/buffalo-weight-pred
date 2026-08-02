@@ -14,8 +14,9 @@ from buffalo_weight.report_environment import (
     WeightSetupStatus,
 )
 from buffalo_weight.report_cli import main
-from buffalo_weight.train_cnn_mask import main as neural_training_main
+from buffalo_weight.train_cnn_mask import main as neural_training_main, train_cnn_mask
 from buffalo_weight.train_pipeline import main as training_pipeline_main
+from buffalo_weight.train_pipeline import train_pipeline
 
 
 class FakeRuntimeProbe:
@@ -238,6 +239,27 @@ class ReportSetupCliTest(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("CUDA", stderr.getvalue())
         self.assertIn("available CUDA GPU", stderr.getvalue())
+
+    def test_programmatic_pipeline_rejects_cuda_before_reading_inputs(self) -> None:
+        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
+
+        with self.assertRaisesRegex(ValueError, "available CUDA GPU"):
+            train_pipeline(
+                Path("missing-shared.yaml"),
+                Path("missing-classical.yaml"),
+                Path("missing-cnn.yaml"),
+                runtime_probe=runtime,
+            )
+
+    def test_programmatic_neural_training_rejects_cuda_before_reading_inputs(self) -> None:
+        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
+
+        with self.assertRaisesRegex(ValueError, "available CUDA GPU"):
+            train_cnn_mask(
+                Path("missing-shared.yaml"),
+                Path("missing-models.yaml"),
+                runtime_probe=runtime,
+            )
 
 def setup_services(
     packages: FakePackageGateway,

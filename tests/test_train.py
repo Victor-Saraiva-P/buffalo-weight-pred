@@ -218,7 +218,9 @@ class TrainTest(unittest.TestCase):
 
     def test_train_cnn_mask_rejects_classical_prediction_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "train_cnn_mask only supports mask prediction models"):
-            train_cnn_mask(Path("configs/shared.yaml"), Path("configs/classical_models.yaml"))
+            train_cnn_mask(
+                Path("configs/shared.yaml"), Path("configs/classical_models.yaml"), dry_run=True
+            )
 
 
 if __name__ == "__main__":

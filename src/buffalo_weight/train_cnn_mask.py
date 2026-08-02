@@ -13,7 +13,7 @@ from buffalo_weight.models import MASK_PREDICTION_MODELS, ModelConfig, parse_mod
 from buffalo_weight.neural_environment import (
     OFFICIAL_NEURAL_DEVICE,
     OFFICIAL_NEURAL_DEVICE_CHOICES,
-    require_neural_cuda,
+    require_neural_cuda_for_run,
 )
 from buffalo_weight.report_environment import RuntimeProbe
 from buffalo_weight.split import read_rows
@@ -33,16 +33,16 @@ def train_cnn_mask(
     shared_config_path: Path,
     models_config_path: Path,
     device: str = OFFICIAL_NEURAL_DEVICE,
-    dry_run: bool = False,
+    dry_run: bool = False, runtime_probe: RuntimeProbe | None = None,
 ) -> list[ModelConfig]:
     """Train mask predictors; for example, pass ``dry_run=True`` to audit artifacts."""
+    probe = runtime_probe or SystemRuntimeProbe()
+    require_neural_cuda_for_run(dry_run, probe.compute_environment)
     shared_config = load_config(shared_config_path)
     model_configs = _load_mask_model_configs(models_config_path)
     inputs = _load_mask_training_inputs(shared_config)
     evidence = TrainingEvidence(inputs.rows, [], [], inputs.masks_dir, device)
-    plans, pending_configs = prepare_artifacts(
-        inputs.output_dir, model_configs, evidence, dry_run
-    )
+    plans, pending_configs = prepare_artifacts(inputs.output_dir, model_configs, evidence, dry_run)
     print_artifact_plan(plans)
     if dry_run:
         return model_configs
@@ -147,11 +147,14 @@ def _run_training_command(
             Path(args.shared_config), Path(args.models_config), args.device, True
         )
         return 0
-    require_neural_cuda((runtime_probe or SystemRuntimeProbe()).compute_environment())
+    probe = runtime_probe or SystemRuntimeProbe()
+    require_neural_cuda_for_run(False, probe.compute_environment)
     shared_config = load_config(Path(args.shared_config))
     training = _require_mapping_section(shared_config, "training")
     with training_lock(Path(str(training["output_dir"]))):
-        train_cnn_mask(Path(args.shared_config), Path(args.models_config), args.device)
+        train_cnn_mask(
+            Path(args.shared_config), Path(args.models_config), args.device, False, runtime_probe
+        )
     return 0
 
 

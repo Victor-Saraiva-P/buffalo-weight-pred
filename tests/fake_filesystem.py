@@ -52,6 +52,7 @@ class MemoryPath:
         self.files[target.value] = self.files.pop(self.value)
 
     def open(self, mode: str) -> io.BytesIO:
+        """Open stored bytes; for example, setup can read a cached weight in ``rb`` mode."""
         if mode == "rb":
             return io.BytesIO(self.files[self.value])
         if mode == "wb":
@@ -59,6 +60,7 @@ class MemoryPath:
         raise ValueError(f"memory file mode was {mode!r}; expected 'rb' or 'wb'")
 
     def write_text(self, content: str) -> int:
+        """Store UTF-8 text; for example, provenance JSON remains available by path."""
         encoded = content.encode()
         self.files[self.value] = encoded
         return len(encoded)

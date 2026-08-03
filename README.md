@@ -36,6 +36,24 @@ Esses arquivos podem ser recriados a partir de `data/` e das configurações em 
 
 ## Comandos
 
+O Núcleo Reprodutível do Relatório usa a interface pública `python main.py`.
+Depois de preparar o ambiente oficial, o estágio de entradas deve preceder a
+Seleção Manual de Features:
+
+```bash
+PYTHON=.venv/bin/python make setup
+PYTHON=.venv/bin/python make inputs
+PYTHON=.venv/bin/python make feature-selection
+```
+
+`feature-selection` executa o Random Forest congelado em CPU e a Rede Densa por
+Feições em CUDA sobre a Divisão Estratificada Canônica. O resultado provisório
+fica em `generated/report/feature_selection/`, com as duas tabelas tidy, três
+figuras a 300 DPI, a minuta auditável e um contrato que permanece sem
+`selected_features` ou decisão humana. Use
+`python main.py feature-selection --dry-run --config configs/report.yaml` para
+consultar `blocked`, `absent`, `obsolete` ou `reusable` sem gravar arquivos.
+
 Criar ambiente e instalar dependências:
 
 ```bash

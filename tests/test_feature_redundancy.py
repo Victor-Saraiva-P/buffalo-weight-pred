@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+import unittest
+
+from buffalo_weight.feature_evaluation import FeatureSample
+from buffalo_weight.feature_redundancy import calculate_feature_redundancy
+
+
+class FeatureRedundancyTest(unittest.TestCase):
+    def test_reports_each_pair_and_structural_area_bijection(self) -> None:
+        samples = [
+            FeatureSample(str(index), 1, "B1", 80.0, {
+                "area": float(value),
+                "equivalent_diameter": float(value**0.5),
+                "perimeter": float(10 - value),
+            })
+            for index, value in enumerate((1, 4, 9, 16))
+        ]
+
+        rows = calculate_feature_redundancy(
+            samples, ("area", "equivalent_diameter", "perimeter")
+        )
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0].structural_relation, "area_bijection")
+        self.assertEqual(rows[0].removal_group, "area_transformations")
+        self.assertAlmostEqual(rows[0].spearman or 0.0, 1.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

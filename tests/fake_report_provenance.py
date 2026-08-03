@@ -22,3 +22,17 @@ class FixedReportProvenance:
         Example: this isolates the Git process.
         """
         return "2" * 40
+
+
+class FixedFeatureSelectionProvenance:
+    def feature_selection_recipe_hash(self) -> str:
+        """Return fixed selection knowledge; for example, tests get stable manifests."""
+        return "3" * 64
+
+    def feature_selection_dependencies(self) -> dict[str, str]:
+        """Return fixed selection packages; for example, tests avoid environment coupling."""
+        return {"fake-selection": "2.0"}
+
+    def repository_commit(self) -> str:
+        """Return fixed source identity; for example, tests avoid invoking Git."""
+        return "2" * 40

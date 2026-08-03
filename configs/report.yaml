@@ -1,0 +1,11 @@
+inputs:
+  mask_index_path: data/mask_index.csv
+  masks_dir: data/conjunto-de-mascaras
+  expected_mask_count: 132
+  canonical_long_side: 1024
+  weight_category_count: 10
+  fold_count: 5
+  fold_seed: 42
+
+artifacts:
+  root: generated/report

@@ -10,8 +10,9 @@ import os
 from pathlib import Path
 import shutil
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Sequence
 
+from buffalo_weight.hashing import sha256_file
 from buffalo_weight.models import (
     CNN_MASK_MODEL,
     FEATURE_FUSION_MODELS,
@@ -334,14 +335,14 @@ def _package_version(module_name: str) -> str | None:
 
 
 def file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Hash an artifact.
+
+    Example: ``file_hash(Path('predictions.csv'))`` fingerprints predictions.
+    """
+    return sha256_file(path)
 
 
-def _digest(values: list[object]) -> str:
+def _digest(values: Sequence[object]) -> str:
     return hashlib.sha256("\n".join(str(value) for value in values).encode()).hexdigest()
 
 

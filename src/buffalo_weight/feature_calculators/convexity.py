@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from buffalo_weight.feature_calculators.context import FeatureContext
+from buffalo_weight.feature_calculators.crofton import crofton_perimeter
 
 
 def calculate_convex_area(ctx: FeatureContext) -> float:
-    _, hull_area, _ = ctx.hull_data
-    return hull_area
+    """Count hull pixels.
+
+    Example: ``calculate_convex_area(context)`` returns a pixel count.
+    """
+    return float(ctx.convex_mask.sum())
 
 
 def calculate_convexity(ctx: FeatureContext) -> float:
-    _, _, hull_perimeter = ctx.hull_data
-    perimeter = ctx.perimeter
-    return hull_perimeter / perimeter if perimeter else 0
+    """Compare hull and mask perimeters; for example, ``calculate_convexity(context)``."""
+    if not ctx.perimeter:
+        return 0.0
+    return crofton_perimeter(ctx.convex_mask) / ctx.perimeter

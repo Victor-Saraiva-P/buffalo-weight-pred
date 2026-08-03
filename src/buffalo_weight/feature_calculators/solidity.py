@@ -4,6 +4,7 @@ from buffalo_weight.feature_calculators.context import FeatureContext
 
 
 def calculate_solidity(ctx: FeatureContext) -> float:
+    """Return area over convex area; for example, ``calculate_solidity(context)``."""
     area = ctx.area
-    _, hull_area, _ = ctx.hull_data
+    hull_area = float(ctx.convex_mask.sum())
     return area / hull_area if hull_area else 0

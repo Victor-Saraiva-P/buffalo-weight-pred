@@ -40,3 +40,18 @@ REDUNDANCY_FAMILIES = {
     "convex_hull_relations": ("area", "perimeter", "convex_area", "solidity", "convexity"),
     "area_contour_relation": ("area", "perimeter", "circularity"),
 }
+STRUCTURAL_RELATIONS = (
+    ("area_bijection", ("area", "equivalent_diameter", "area_power_1_5")),
+    ("area_major_axis_product", ("area", "major_axis_length", "area_major_axis_product")),
+    ("bbox_area_product", ("bbox_width", "bbox_height", "bbox_area")),
+    ("bbox_aspect_ratio", ("bbox_width", "bbox_height", "aspect_ratio")),
+    ("bbox_extent", ("area", "bbox_area", "extent")),
+    ("ellipse_roundness", ("area", "major_axis_length", "roundness")),
+    ("vertical_occupancy_ratio", (
+        "center_vertical_occupancy", "end_vertical_occupancy_min",
+        "end_vertical_occupancy_max", "center_to_end_occupancy_ratio",
+    )),
+    ("convex_solidity", ("area", "convex_area", "solidity")),
+    ("convexity_ratio", ("perimeter", "convex_area", "convexity")),
+    ("area_contour_circularity", ("area", "perimeter", "circularity")),
+)

@@ -41,7 +41,10 @@ class PredictionPartition:
 
 
 class FeaturePredictor(Protocol):
-    def predict(self, partition: PredictionPartition) -> NDArray[np.float64]: ...
+    def predict(self, partition: PredictionPartition) -> NDArray[np.float64]:
+        """Predict one partition; for example, evaluation passes only held-out rows."""
+        # Prediction receives only the partition permitted by the outer-fold orchestrator.
+        ...
 
 
 class FeatureBaseline(Protocol):
@@ -49,7 +52,9 @@ class FeatureBaseline(Protocol):
 
     def fit(
         self, partition: TrainingPartition, feature_names: tuple[str, ...]
-    ) -> FeaturePredictor: ...
+    ) -> FeaturePredictor:
+        """Fit one partition; for example, outer-fold rows are excluded by construction."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -201,7 +206,9 @@ def _matrix(
 
 
 def _targets(samples: list[FeatureSample]) -> NDArray[np.float64]:
-    return np.asarray([sample.weight_kg for sample in samples], dtype=np.float64)
+    target_values = [sample.weight_kg for sample in samples]
+    targets = np.asarray(target_values, dtype=np.float64)
+    return targets
 
 
 def _batch(
@@ -251,7 +258,9 @@ def _evidence_row(batch: _PredictionBatch, scope: str, fold: int | None) -> Feat
 
 
 def _mae(targets: NDArray[np.float64], predictions: NDArray[np.float64]) -> float:
-    return float(np.mean(np.abs(targets - predictions)))
+    absolute_errors = np.abs(targets - predictions)
+    mean_error = np.mean(absolute_errors)
+    return float(mean_error)
 
 
 def _evidence_sort_key(row: FeatureEvidence) -> tuple[object, ...]:

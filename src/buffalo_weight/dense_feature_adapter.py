@@ -6,6 +6,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,6 +29,22 @@ class DenseTrainingRecipe:
     training_seed: int = 44
 
 
+@dataclass(frozen=True)
+class DenseTargetScale:
+    mean_kg: float
+    scale_kg: float
+
+    def standardize(self, targets_kg: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Standardize targets; for example, training applies only train-fitted values."""
+        standardized = (targets_kg - self.mean_kg) / self.scale_kg
+        return np.asarray(standardized, dtype=np.float64)
+
+    def restore(self, standardized: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Restore kilograms; for example, held-out predictions return report units."""
+        targets_kg = standardized * self.scale_kg + self.mean_kg
+        return np.asarray(targets_kg, dtype=np.float64)
+
+
 class DenseFeatureNetwork(nn.Module):
     """Frozen dense architecture; for example, ``DenseFeatureNetwork(26)`` accepts features."""
 
@@ -42,7 +59,9 @@ class DenseFeatureNetwork(nn.Module):
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         """Predict standardized weight; for example, ``network(feature_batch)``."""
-        return cast(torch.Tensor, self.layers(values).squeeze(1))
+        predictions = self.layers(values)
+        squeezed = predictions.squeeze(1)
+        return cast(torch.Tensor, squeezed)
 
 
 @dataclass(frozen=True)
@@ -55,16 +74,31 @@ class DenseContractProbe:
     model: DenseFeatureNetwork
 
 
+class CudaRuntime(Protocol):
+    """CUDA availability seam; for example, tests inject an unavailable runtime."""
+
+    def cuda_available(self) -> bool:
+        """Report usability; for example, false must stop before model creation."""
+        # Preflight stays replaceable so tests can prove failure precedes GPU allocation.
+        ...
+
+
+class TorchCudaRuntime:
+    """Read PyTorch CUDA state; for example, production adapters use this runtime."""
+
+    def cuda_available(self) -> bool:
+        """Report PyTorch CUDA availability; for example, a configured GPU returns true."""
+        available = torch.cuda.is_available()
+        usable = bool(available)
+        return usable
+
+
 class DenseFeatureAdapter:
     """Own CUDA operations; for example, the dense baseline injects this adapter."""
 
-    @staticmethod
-    def cuda_available() -> bool:
-        """Report CUDA availability; for example, setup can fail before expensive work."""
-        return torch.cuda.is_available()
-
-    def __init__(self) -> None:
-        if not self.cuda_available():
+    def __init__(self, runtime: CudaRuntime | None = None) -> None:
+        resolved_runtime = runtime or TorchCudaRuntime()
+        if not resolved_runtime.cuda_available():
             raise ValueError("CUDA availability was false; expected CUDA for dense feature training")
         self.device = torch.device("cuda")
 
@@ -91,7 +125,9 @@ class DenseFeatureAdapter:
 
     def save_model(self, model: DenseFeatureNetwork, path: Path) -> None:
         """Save an owned checkpoint; for example, ``adapter.save_model(model, path)``."""
-        torch.save({"state_dict": model.state_dict(), "input_count": model.input_count}, path)
+        payload = {"state_dict": model.state_dict(), "input_count": model.input_count}
+        torch.save(payload, path)
+        return None
 
     def load_model(self, path: Path, input_count: int) -> DenseFeatureNetwork:
         """Load an owned checkpoint; for example, ``adapter.load_model(path, 26)``."""
@@ -116,7 +152,7 @@ class DenseFeatureAdapter:
     def select_epoch_count(
         self, train_values: NDArray[np.float64], train_targets: NDArray[np.float64],
         validation_values: NDArray[np.float64], validation_targets_kg: NDArray[np.float64],
-        target_mean: float, target_scale: float, recipe: DenseTrainingRecipe,
+        target_scale: DenseTargetScale, recipe: DenseTrainingRecipe,
     ) -> int:
         """Select only epoch count; for example, inner validation never sees the outer fold."""
         model = self.create_model(train_values.shape[1], recipe.training_seed)
@@ -125,7 +161,7 @@ class DenseFeatureAdapter:
         for epoch in range(1, recipe.max_epochs + 1):
             self._train_epoch(model, optimizer, train_values, train_targets, recipe, random)
             mae = self._validation_mae(model, validation_values, validation_targets_kg,
-                                       target_mean, target_scale)
+                                       target_scale)
             if best_mae - mae > recipe.minimum_improvement_kg:
                 best_mae, best_epoch, stale = mae, epoch, 0
             else:
@@ -180,10 +216,10 @@ class DenseFeatureAdapter:
 
     def _validation_mae(
         self, model: DenseFeatureNetwork, values: NDArray[np.float64],
-        targets_kg: NDArray[np.float64], target_mean: float, target_scale: float,
+        targets_kg: NDArray[np.float64], target_scale: DenseTargetScale,
     ) -> float:
         standardized = self.predict_array(model, values)
-        predictions_kg = standardized * target_scale + target_mean
+        predictions_kg = target_scale.restore(standardized)
         return float(np.mean(np.abs(targets_kg - predictions_kg)))
 
     def _probe_batch(self, input_count: int) -> tuple[torch.Tensor, torch.Tensor]:

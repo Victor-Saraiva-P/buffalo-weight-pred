@@ -11,9 +11,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from buffalo_weight.feature_evaluation import FeatureSample
-from buffalo_weight.feature_selection_contract import REDUNDANCY_FAMILIES
-
-AREA_BIJECTION_FEATURES = frozenset(("area", "equivalent_diameter", "area_power_1_5"))
+from buffalo_weight.feature_selection_contract import REDUNDANCY_FAMILIES, STRUCTURAL_RELATIONS
 
 
 @dataclass(frozen=True)
@@ -46,9 +44,10 @@ def _redundancy_row(
 
 
 def _structural_relation(feature_a: str, feature_b: str) -> str:
-    if {feature_a, feature_b}.issubset(AREA_BIJECTION_FEATURES):
-        return "area_bijection"
-    return "none"
+    pair = {feature_a, feature_b}
+    relations = [name for name, members in STRUCTURAL_RELATIONS if pair.issubset(members)]
+    relation = "|".join(relations)
+    return relation or "none"
 
 
 def _removal_group(feature_a: str, feature_b: str) -> str:
@@ -59,4 +58,7 @@ def _removal_group(feature_a: str, feature_b: str) -> str:
 
 
 def _finite_correlation(value: float) -> float | None:
-    return float(value) if math.isfinite(value) else None
+    if not math.isfinite(value):
+        return None
+    finite_value = float(value)
+    return finite_value

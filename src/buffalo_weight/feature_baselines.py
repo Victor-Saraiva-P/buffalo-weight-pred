@@ -12,6 +12,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from buffalo_weight.dense_feature_adapter import (
     DenseFeatureAdapter,
     DenseFeatureNetwork,
+    DenseTargetScale,
     DenseTrainingRecipe,
 )
 from buffalo_weight.feature_evaluation import (
@@ -25,11 +26,15 @@ class SklearnFeaturePredictor:
     """Own scikit-learn inference; for example, RF training returns this predictor."""
 
     def __init__(self, regressor: RandomForestRegressor) -> None:
+        """Own one fitted regressor; for example, the RF baseline returns this boundary."""
         self._regressor = regressor
+        self._prediction_dtype = np.float64
 
     def predict(self, partition: PredictionPartition) -> NDArray[np.float64]:
         """Predict held-out weights; for example, ``predict(partition)`` returns kilograms."""
-        return np.asarray(self._regressor.predict(partition.values), dtype=np.float64)
+        predictions = self._regressor.predict(partition.values)
+        typed_predictions = np.asarray(predictions, dtype=self._prediction_dtype)
+        return typed_predictions
 
 
 class RandomForestBaseline:
@@ -73,7 +78,9 @@ class _FeatureScale:
     scale: NDArray[np.float64]
 
     def transform(self, values: NDArray[np.float64]) -> NDArray[np.float64]:
-        return (values - self.mean) / self.scale
+        """Standardize features; for example, only fitted training statistics are used."""
+        standardized = (values - self.mean) / self.scale
+        return np.asarray(standardized, dtype=np.float64)
 
 
 class DenseFeaturePredictor:
@@ -81,16 +88,16 @@ class DenseFeaturePredictor:
 
     def __init__(
         self, adapter: DenseFeatureAdapter, model: DenseFeatureNetwork,
-        feature_scale: _FeatureScale, target_mean: float, target_scale: float,
+        feature_scale: _FeatureScale, target_scale: DenseTargetScale,
     ) -> None:
         self._adapter, self._model, self._feature_scale = adapter, model, feature_scale
-        self._target_mean, self._target_scale = target_mean, target_scale
+        self._target_scale = target_scale
 
     def predict(self, partition: PredictionPartition) -> NDArray[np.float64]:
         """Predict kilograms; for example, ``predict(outer_fold)`` returns one value per row."""
         values = self._feature_scale.transform(partition.values)
         standardized = self._adapter.predict_array(self._model, values)
-        return standardized * self._target_scale + self._target_mean
+        return self._target_scale.restore(standardized)
 
 
 class DenseFeatureBaseline:
@@ -112,9 +119,10 @@ class DenseFeatureBaseline:
         """Fit without outer-fold access; for example, evaluation passes only train rows."""
         selection, stopping = _inner_indices(partition, self.recipe.inner_seed)
         inner_features = _fit_feature_scale(partition.values[selection])
-        inner_mean, inner_scale = _fit_target_scale(partition.targets_kg[selection])
-        epochs = self._select_epochs(partition, selection, stopping, inner_features,
-                                     inner_mean, inner_scale)
+        inner_target = _fit_target_scale(partition.targets_kg[selection])
+        epochs = self._select_epochs(
+            partition, selection, stopping, inner_features, inner_target
+        )
         predictor = self._retrain(partition, epochs)
         self.training_audits.append(_training_audit(partition, selection, stopping, epochs))
         return predictor
@@ -122,22 +130,22 @@ class DenseFeatureBaseline:
     def _select_epochs(
         self, partition: TrainingPartition, selection: NDArray[np.int64],
         stopping: NDArray[np.int64], feature_scale: _FeatureScale,
-        target_mean: float, target_scale: float,
+        target_scale: DenseTargetScale,
     ) -> int:
         train_x = feature_scale.transform(partition.values[selection])
-        train_y = (partition.targets_kg[selection] - target_mean) / target_scale
+        train_y = target_scale.standardize(partition.targets_kg[selection])
         validation_x = feature_scale.transform(partition.values[stopping])
         return self._adapter.select_epoch_count(train_x, train_y, validation_x,
-                                                partition.targets_kg[stopping], target_mean,
-                                                target_scale, self.recipe)
+                                                partition.targets_kg[stopping], target_scale,
+                                                self.recipe)
 
     def _retrain(self, partition: TrainingPartition, epochs: int) -> DenseFeaturePredictor:
         feature_scale = _fit_feature_scale(partition.values)
-        target_mean, target_scale = _fit_target_scale(partition.targets_kg)
+        target_scale = _fit_target_scale(partition.targets_kg)
         values = feature_scale.transform(partition.values)
-        targets = (partition.targets_kg - target_mean) / target_scale
+        targets = target_scale.standardize(partition.targets_kg)
         model = self._adapter.fit_epochs(values, targets, epochs, self.recipe)
-        return DenseFeaturePredictor(self._adapter, model, feature_scale, target_mean, target_scale)
+        return DenseFeaturePredictor(self._adapter, model, feature_scale, target_scale)
 
 
 def _inner_indices(
@@ -155,9 +163,10 @@ def _fit_feature_scale(values: NDArray[np.float64]) -> _FeatureScale:
     return _FeatureScale(mean, scale)
 
 
-def _fit_target_scale(targets: NDArray[np.float64]) -> tuple[float, float]:
+def _fit_target_scale(targets: NDArray[np.float64]) -> DenseTargetScale:
     mean, standard_deviation = float(np.mean(targets)), float(np.std(targets))
-    return mean, standard_deviation if standard_deviation != 0.0 else 1.0
+    scale = standard_deviation if standard_deviation != 0.0 else 1.0
+    return DenseTargetScale(mean, scale)
 
 
 def _training_audit(

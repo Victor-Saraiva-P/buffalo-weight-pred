@@ -39,7 +39,6 @@ class FeatureBaselinesTest(unittest.TestCase):
         np.testing.assert_array_equal(first.predict(held_out), second.predict(held_out))
 
 
-@unittest.skipUnless(DenseFeatureAdapter.cuda_available(), "CUDA contract requires a GPU")
 class DenseFeatureAdapterCudaTest(unittest.TestCase):
     def test_cuda_step_checkpoint_device_and_repetition(self) -> None:
         adapter = DenseFeatureAdapter()
@@ -57,6 +56,16 @@ class DenseFeatureAdapterCudaTest(unittest.TestCase):
             adapter.save_model(first.model, checkpoint)
             restored = adapter.load_model(checkpoint, input_count=2)
             self.assertEqual(first.predictions, adapter.predict_tuple(restored))
+            self.assertEqual(next(restored.parameters()).device.type, "cuda")
+
+    def test_missing_cuda_fails_before_model_creation(self) -> None:
+        from tests.fake_feature_evaluation import UnavailableCudaRuntime
+
+        runtime = UnavailableCudaRuntime()
+        with self.assertRaisesRegex(ValueError, "CUDA availability was false"):
+            DenseFeatureAdapter(runtime)
+        self.assertEqual(runtime.availability_checks, 1)
+        self.assertEqual(runtime.model_operations, 0)
 
     def test_dense_baseline_isolates_internal_selection_and_external_retrain(self) -> None:
         partition = dense_training_partition()

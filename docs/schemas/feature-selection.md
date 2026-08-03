@@ -9,8 +9,10 @@ human review confirms the Conjunto Compartilhado de Features.
 `feature_a`, `feature_b`, `structural_relation`, `pearson`, `spearman`, and
 `removal_group`. Correlations are dimensionless, use six decimal places, and
 are empty only when the statistic is undefined. `structural_relation` is
-`area_bijection` or `none`; `removal_group` is one of the six frozen group
-names or `none`.
+`none` or a deterministic `|`-separated list of the frozen mathematical
+relations (area transformations, Bounding Rectangle, Elipse Equivalente,
+Ocupação Vertical Regional, Fecho Convexo da Máscara, and area–contour).
+`removal_group` is one of the six frozen group names or `none`.
 
 `feature_predictive_evidence.csv` has one row per fold result and one grouped
 OOF row per experimental result. Its ordered columns are `experiment`,

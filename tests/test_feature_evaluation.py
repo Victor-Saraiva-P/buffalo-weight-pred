@@ -3,11 +3,25 @@ from __future__ import annotations
 import unittest
 
 from buffalo_weight.feature_evaluation import FeatureSample, evaluate_feature_evidence
+from buffalo_weight.feature_selection_stage import ScientificFeatureEvidenceRunner
 from buffalo_weight.feature_selection_rules import permutation_seed
 from tests.fake_feature_evaluation import RecordingFeatureBaseline
 
 
 class FeatureEvaluationTest(unittest.TestCase):
+    def test_scientific_runner_uses_injected_baseline_seams(self) -> None:
+        random_forest = RecordingFeatureBaseline("random_forest")
+        dense = RecordingFeatureBaseline("dense")
+        runner = ScientificFeatureEvidenceRunner((random_forest, dense))
+
+        evidence = runner.evaluate(
+            two_fold_samples(), ("area", "perimeter"), (), 1, 42
+        )
+
+        self.assertEqual({row.baseline for row in evidence}, {"random_forest", "dense"})
+        self.assertTrue(random_forest.fit_calls)
+        self.assertTrue(dense.fit_calls)
+
     def test_evaluates_only_across_the_reserved_outer_fold(self) -> None:
         samples = two_fold_samples()
         baseline = RecordingFeatureBaseline()

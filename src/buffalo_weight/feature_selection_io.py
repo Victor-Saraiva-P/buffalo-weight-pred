@@ -19,8 +19,12 @@ def load_feature_samples(
     feature_rows = _read_expected_csv(inputs_dir / "feature_index.csv", FEATURE_COLUMNS)
     split_rows = _read_expected_csv(inputs_dir / "canonical_split.csv", SPLIT_COLUMNS)
     split_by_name = {row["file_name"]: row for row in split_rows}
-    if set(split_by_name) != {row["file_name"] for row in feature_rows}:
-        raise ValueError("feature/split names differed; expected identical file_name sets")
+    feature_names_in_rows = {row["file_name"] for row in feature_rows}
+    if set(split_by_name) != feature_names_in_rows:
+        raise ValueError(
+            f"feature/split names were {feature_names_in_rows!r}/{set(split_by_name)!r}; "
+            "expected identical file_name sets"
+        )
     return [_sample(row, split_by_name[row["file_name"]], feature_names) for row in feature_rows]
 
 
@@ -82,13 +86,21 @@ def _write_csv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> No
 
 
 def _optional_number(value: float | None) -> str:
-    return "" if value is None else format_csv_number(value)
+    if value is None:
+        return ""
+    formatted = format_csv_number(value)
+    return formatted
 
 
 def _optional_int(value: int | None) -> str:
-    return "" if value is None else str(value)
+    if value is None:
+        return ""
+    formatted = str(value)
+    return formatted
 
 
 def _evidence_sort_key(row: FeatureEvidence) -> tuple[object, ...]:
-    return (row.experiment, row.baseline, row.target, 0 if row.scope == "fold" else 1,
-            row.fold or 0, row.repetition or 0)
+    scope_rank = 0 if row.scope == "fold" else 1
+    key = (row.experiment, row.baseline, row.target, scope_rank,
+           row.fold or 0, row.repetition or 0)
+    return key

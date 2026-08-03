@@ -95,6 +95,7 @@ def _permutation_intervals(
 def _feature_ticks(axis: Axes, x_labels: tuple[str, ...], y_labels: tuple[str, ...]) -> None:
     axis.set_xticks(range(len(x_labels)), x_labels, rotation=90, fontsize=5)
     axis.set_yticks(range(len(y_labels)), y_labels, fontsize=5)
+    axis.tick_params(axis="both", pad=1)
 
 
 def _save_figure(figure: Figure, path: Path) -> None:

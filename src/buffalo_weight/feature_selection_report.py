@@ -5,6 +5,7 @@ from __future__ import annotations
 from buffalo_weight.feature_evaluation import FeatureEvidence
 from buffalo_weight.feature_recommendations import RemovalRecommendation
 from buffalo_weight.feature_redundancy import FeatureRedundancy
+from buffalo_weight.feature_selection_types import FeatureBaselineName
 
 
 def selection_report_markdown(
@@ -46,12 +47,12 @@ def _isolated_section(evidence: list[FeatureEvidence]) -> list[str]:
 
 def _redundancy_section(redundancy: list[FeatureRedundancy]) -> list[str]:
     structural = [row for row in redundancy if row.structural_relation != "none"]
-    strongest = sorted(redundancy, key=_observed_strength, reverse=True)[:10]
+    ordered = sorted(redundancy, key=_observed_strength, reverse=True)
     lines = ["", "## Redundância estrutural e observada", "",
              f"Há {len(structural)} pares com relação estrutural declarada. O mapa completo está "
-             "em `redundancy_heatmap.png`; os 325 pares permanecem no CSV.", "",
+             "em `redundancy_heatmap.png`; todos os pares também permanecem no CSV.", "",
              "| Par | Relação estrutural | Pearson | Spearman |", "|---|---|---:|---:|"]
-    lines.extend(_redundancy_line(row) for row in strongest)
+    lines.extend(_redundancy_line(row) for row in ordered)
     return lines
 
 
@@ -78,7 +79,7 @@ def _removal_section(recommendations: list[RemovalRecommendation]) -> list[str]:
 
 def _oof_metric_index(
     evidence: list[FeatureEvidence], experiment: str
-) -> dict[tuple[str, str], float]:
+) -> dict[tuple[str, FeatureBaselineName], float]:
     rows = [row for row in evidence if row.scope == "oof" and row.experiment == experiment]
     indexed = {(row.target, row.baseline): row.result_mae_kg for row in rows}
     return indexed
@@ -86,8 +87,8 @@ def _oof_metric_index(
 
 def _oof_permutation_means(
     evidence: list[FeatureEvidence],
-) -> dict[tuple[str, str], float]:
-    grouped: dict[tuple[str, str], list[float]] = {}
+) -> dict[tuple[str, FeatureBaselineName], float]:
+    grouped: dict[tuple[str, FeatureBaselineName], list[float]] = {}
     rows = [row for row in evidence if row.scope == "oof" and row.experiment == "permutation"]
     for row in rows:
         if row.delta_mae_kg is not None:

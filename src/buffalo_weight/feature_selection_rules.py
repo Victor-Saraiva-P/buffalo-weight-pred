@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import hashlib
 
+from buffalo_weight.feature_selection_types import EvidenceEffect, FeatureBaselineName
+
 PRACTICAL_MARGIN_KG = 1.0
-BASELINE_NAMES = ("random_forest", "dense")
+BASELINE_NAMES: tuple[FeatureBaselineName, ...] = ("random_forest", "dense")
 
 
-def classify_mae_delta(delta_mae_kg: float) -> str:
+def classify_mae_delta(delta_mae_kg: float) -> EvidenceEffect:
     """Classify removal-minus-full MAE; for example, ``classify_mae_delta(-1.2)`` improves."""
     if delta_mae_kg < -PRACTICAL_MARGIN_KG:
         return "improvement"

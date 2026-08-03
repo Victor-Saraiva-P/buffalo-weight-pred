@@ -11,7 +11,15 @@ from pathlib import Path
 from buffalo_weight.csv_io import csv_columns
 from buffalo_weight.feature_evaluation import FeatureEvidence, FeatureSample, RemovalGroup
 from buffalo_weight.feature_selection_manifest import expected_csv_schemas
+from buffalo_weight.feature_selection_contract import REMOVAL_GROUPS, STRUCTURAL_RELATIONS
 from buffalo_weight.feature_selection_rules import classify_mae_delta, permutation_seed
+from buffalo_weight.feature_selection_types import (
+    EVIDENCE_EFFECTS,
+    EVIDENCE_SCOPES,
+    FEATURE_BASELINES,
+    FEATURE_EXPERIMENTS,
+    canonical_evidence_sort_key,
+)
 from buffalo_weight.png_artifact import read_png_artifact_spec
 
 SIX_DECIMALS = re.compile(r"^-?\d+\.\d{6}$")
@@ -43,7 +51,7 @@ def validate_feature_selection_artifacts(
     """Validate public files; for example, schemas, ordering and 300 DPI are mandatory."""
     _validate_csv_schemas(output_dir)
     _validate_evidence_csv(output_dir / "feature_predictive_evidence.csv")
-    _validate_redundancy_order(output_dir / "feature_redundancy.csv", features)
+    _validate_redundancy_csv(output_dir / "feature_redundancy.csv", features)
     provisional_contract = json.loads((output_dir / "shared_feature_contract.json").read_text())
     if (provisional_contract.get("status"), provisional_contract.get("selected_features"),
             provisional_contract.get("human_decision")) != ("provisional", None, None):
@@ -71,9 +79,9 @@ def _expected_evidence_keys(
 
 
 def _evidence_key(row: FeatureEvidence) -> tuple[object, ...]:
-    key = (row.experiment, row.baseline, row.target, row.scope, row.fold, row.repetition)
-    evidence_identity = key
-    return evidence_identity
+    return (
+        row.experiment, row.baseline, row.target, row.scope, row.fold, row.repetition,
+    )
 
 
 def _validate_evidence_values(
@@ -150,13 +158,38 @@ def _validate_evidence_csv(path: Path) -> None:
         raise ValueError(f"evidence CSV rows included {invalid[:1]!r}; expected canonical types/nullability")
 
 
-def _validate_redundancy_order(path: Path, features: tuple[str, ...]) -> None:
+def _validate_redundancy_csv(path: Path, features: tuple[str, ...]) -> None:
     rows = _read_csv(path)
     expected = [(first, second) for index, first in enumerate(features)
                 for second in features[index + 1 :]]
     actual = [(row["feature_a"], row["feature_b"]) for row in rows]
     if actual != expected:
         raise ValueError(f"redundancy pair order began {actual[:3]!r}; expected {expected[:3]!r}")
+    invalid = [row for row in rows if not _valid_redundancy_row(row)]
+    if invalid:
+        raise ValueError(
+            f"redundancy CSV rows included {invalid[:1]!r}; expected canonical enums/correlations"
+        )
+
+
+def _valid_redundancy_row(row: dict[str, str]) -> bool:
+    allowed_groups = {group.name for group in REMOVAL_GROUPS} | {"none"}
+    allowed_relations = {name for name, _ in STRUCTURAL_RELATIONS}
+    relation_parts = row["structural_relation"].split("|")
+    relation_valid = relation_parts == ["none"] or (
+        "none" not in relation_parts and set(relation_parts).issubset(allowed_relations)
+    )
+    correlations_valid = all(_valid_correlation(row[name]) for name in ("pearson", "spearman"))
+    return row["removal_group"] in allowed_groups and relation_valid and correlations_valid
+
+
+def _valid_correlation(value: str) -> bool:
+    if value == "":
+        return True
+    if not SIX_DECIMALS.fullmatch(value):
+        return False
+    numeric_value = float(value)
+    return -1.0 <= numeric_value <= 1.0
 
 
 def _valid_csv_evidence_row(row: dict[str, str]) -> bool:
@@ -168,15 +201,15 @@ def _valid_csv_evidence_row(row: dict[str, str]) -> bool:
         ))
     numeric = all(SIX_DECIMALS.fullmatch(row[name]) for name in
                   ("reference_mae_kg", "delta_mae_kg"))
-    if not numeric or row["effect"] not in {"improvement", "neutral", "harm"}:
+    if not numeric or row["effect"] not in EVIDENCE_EFFECTS:
         return False
     return _valid_csv_experiment_fields(row)
 
 
 def _valid_csv_base_fields(row: dict[str, str]) -> bool:
-    allowed = row["experiment"] in {"isolated", "removal", "permutation"}
-    allowed = allowed and row["baseline"] in {"random_forest", "dense"}
-    allowed = allowed and row["scope"] in {"fold", "oof"} and bool(row["target"])
+    allowed = row["experiment"] in FEATURE_EXPERIMENTS
+    allowed = allowed and row["baseline"] in FEATURE_BASELINES
+    allowed = allowed and row["scope"] in EVIDENCE_SCOPES and bool(row["target"])
     allowed = allowed and row["n"].isdigit() and bool(SIX_DECIMALS.fullmatch(row["result_mae_kg"]))
     fold_valid = row["fold"].isdigit() if row["scope"] == "fold" else row["fold"] == ""
     return allowed and fold_valid
@@ -193,9 +226,11 @@ def _valid_csv_experiment_fields(row: dict[str, str]) -> bool:
 
 
 def _csv_evidence_key(row: dict[str, str]) -> tuple[object, ...]:
-    scope_rank = 0 if row["scope"] == "fold" else 1
-    return (row["experiment"], row["baseline"], row["target"], scope_rank,
-            int(row["fold"] or 0), int(row["repetition"] or 0))
+    key = canonical_evidence_sort_key(
+        row["experiment"], row["baseline"], row["target"], row["scope"],
+        int(row["fold"] or 0), int(row["repetition"] or 0),
+    )
+    return key
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -216,5 +251,4 @@ def _validate_figures(output_dir: Path) -> None:
 def _required_int(value: int | None, name: str) -> int:
     if value is None:
         raise ValueError(f"permutation {name} was null; expected an integer for fold evidence")
-    required = value
-    return required
+    return value

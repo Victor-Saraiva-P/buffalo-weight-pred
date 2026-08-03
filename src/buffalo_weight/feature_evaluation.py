@@ -9,6 +9,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from buffalo_weight.feature_selection_rules import classify_mae_delta, permutation_seed
+from buffalo_weight.feature_selection_types import (
+    EvidenceEffect,
+    EvidenceScope,
+    FeatureBaselineName,
+    FeatureExperiment,
+    canonical_evidence_sort_key,
+)
 
 
 @dataclass(frozen=True)
@@ -48,7 +55,7 @@ class FeaturePredictor(Protocol):
 
 
 class FeatureBaseline(Protocol):
-    name: str
+    name: FeatureBaselineName
 
     def fit(
         self, partition: TrainingPartition, feature_names: tuple[str, ...]
@@ -59,10 +66,10 @@ class FeatureBaseline(Protocol):
 
 @dataclass(frozen=True)
 class FeatureEvidence:
-    experiment: str
-    baseline: str
+    experiment: FeatureExperiment
+    baseline: FeatureBaselineName
     target: str
-    scope: str
+    scope: EvidenceScope
     fold: int | None
     repetition: int | None
     permutation_seed: int | None
@@ -70,13 +77,13 @@ class FeatureEvidence:
     reference_mae_kg: float | None
     result_mae_kg: float
     delta_mae_kg: float | None
-    effect: str | None
+    effect: EvidenceEffect | None
 
 
 @dataclass(frozen=True)
 class _PredictionBatch:
-    experiment: str
-    baseline: str
+    experiment: FeatureExperiment
+    baseline: FeatureBaselineName
     target: str
     fold: int
     repetition: int | None
@@ -158,7 +165,7 @@ def _removal_batch(
 
 
 def _permutation_batches(
-    held_out: list[FeatureSample], feature_names: tuple[str, ...], baseline_name: str,
+    held_out: list[FeatureSample], feature_names: tuple[str, ...], baseline_name: FeatureBaselineName,
     fold: int, predictor: FeaturePredictor, reference: NDArray[np.float64],
     permutation_count: int, split_seed: int,
 ) -> list[_PredictionBatch]:
@@ -212,7 +219,7 @@ def _targets(samples: list[FeatureSample]) -> NDArray[np.float64]:
 
 
 def _batch(
-    experiment: str, baseline: str, target: str, fold: int,
+    experiment: FeatureExperiment, baseline: FeatureBaselineName, target: str, fold: int,
     samples: list[FeatureSample], reference: NDArray[np.float64] | None,
     predictions: NDArray[np.float64], repetition: int | None = None,
     seed: int | None = None,
@@ -228,7 +235,7 @@ def _evidence_rows(batches: list[_PredictionBatch]) -> list[FeatureEvidence]:
         key = (batch.experiment, batch.baseline, batch.target, batch.repetition)
         grouped.setdefault(key, []).append(batch)
     oof_rows = [_oof_evidence(group) for group in grouped.values()]
-    return sorted([*fold_rows, *oof_rows], key=_evidence_sort_key)
+    return sorted([*fold_rows, *oof_rows], key=feature_evidence_sort_key)
 
 
 def _oof_evidence(batches: list[_PredictionBatch]) -> FeatureEvidence:
@@ -247,7 +254,9 @@ def _combined_reference(batches: list[_PredictionBatch]) -> NDArray[np.float64] 
     return np.concatenate([batch.reference for batch in batches if batch.reference is not None])
 
 
-def _evidence_row(batch: _PredictionBatch, scope: str, fold: int | None) -> FeatureEvidence:
+def _evidence_row(
+    batch: _PredictionBatch, scope: EvidenceScope, fold: int | None
+) -> FeatureEvidence:
     result_mae = _mae(batch.targets, batch.predictions)
     reference_mae = None if batch.reference is None else _mae(batch.targets, batch.reference)
     delta = None if reference_mae is None else result_mae - reference_mae
@@ -263,7 +272,8 @@ def _mae(targets: NDArray[np.float64], predictions: NDArray[np.float64]) -> floa
     return float(mean_error)
 
 
-def _evidence_sort_key(row: FeatureEvidence) -> tuple[object, ...]:
-    scope_rank = 0 if row.scope == "fold" else 1
-    return (row.experiment, row.baseline, row.target, row.repetition or 0,
-            scope_rank, row.fold or 0)
+def feature_evidence_sort_key(row: FeatureEvidence) -> tuple[object, ...]:
+    """Order a typed row; for example, CSV and in-memory evidence share one key."""
+    key = canonical_evidence_sort_key(row.experiment, row.baseline, row.target, row.scope,
+                                      row.fold, row.repetition)
+    return key

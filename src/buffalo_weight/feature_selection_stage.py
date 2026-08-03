@@ -129,7 +129,7 @@ def _write_snapshot(
     write_feature_selection_artifacts(output_dir, samples, features, evidence)
     validate_feature_selection_artifacts(output_dir, features)
     _require_unchanged_identity(contract, provenance, identity)
-    _write_stage_manifest(output_dir, contract, provenance, identity)
+    _write_stage_manifest(output_dir, contract, identity)
 
 
 def _evaluate_stage(
@@ -157,11 +157,15 @@ def _require_unchanged_identity(
 
 
 def _write_stage_manifest(
-    output_dir: Path, contract: ReportContract, provenance: FeatureSelectionProvenance,
-    identity: dict[str, object],
+    output_dir: Path, contract: ReportContract, identity: dict[str, object],
 ) -> None:
+    source_commit = identity.get("source_commit")
+    if not isinstance(source_commit, str):
+        raise ValueError(
+            f"selection source commit was {source_commit!r}; expected a Git SHA string"
+        )
     manifest = complete_feature_selection_manifest(
-        contract, output_dir, identity, provenance.repository_commit()
+        contract, output_dir, identity, source_commit
     )
     validate_feature_selection_manifest(manifest, output_dir)
     write_json_artifact(output_dir / "manifest.json", manifest)

@@ -52,6 +52,6 @@ STRUCTURAL_RELATIONS = (
         "end_vertical_occupancy_max", "center_to_end_occupancy_ratio",
     )),
     ("convex_solidity", ("area", "convex_area", "solidity")),
-    ("convexity_ratio", ("perimeter", "convex_area", "convexity")),
+    ("convexity_ratio", ("perimeter", "convexity")),
     ("area_contour_circularity", ("area", "perimeter", "circularity")),
 )

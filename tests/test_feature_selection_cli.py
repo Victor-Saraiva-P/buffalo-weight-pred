@@ -43,6 +43,7 @@ class FeatureSelectionCliTest(unittest.TestCase):
             self.assert_canonical_tables(output_dir)
             self.assertEqual(runner.calls[0][0], 50)
             self.assertEqual(len(runner.calls[0][2]), 6)
+            self.assertEqual(runner.evaluation_count, 1)
             self.assert_package_is_provisional(output_dir)
             self.assert_figures_are_300_dpi(output_dir)
 
@@ -69,6 +70,23 @@ class FeatureSelectionCliTest(unittest.TestCase):
             self.assertEqual(run_feature_selection(fixture, runner, provenance)[0], 0)
             self.assert_reuse_and_tamper(fixture, runner, provenance)
 
+    def test_manifest_metadata_tampering_invalidates_reuse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            provenance = FixedReportProvenance()
+            self.assertEqual(run_main(fixture, "inputs", provenance=provenance), 0)
+            runner = FixedFeatureEvidenceRunner()
+            self.assertEqual(run_feature_selection(fixture, runner, provenance)[0], 0)
+            manifest_path = fixture.root / "generated" / "report" / "feature_selection" / "manifest.json"
+            original = manifest_path.read_text()
+            for field, value in manifest_tampering_cases():
+                manifest = json.loads(original)
+                manifest[field] = value
+                manifest_path.write_text(json.dumps(manifest))
+                plan = run_feature_selection(fixture, runner, provenance, "--dry-run")[1]
+                self.assertIn("feature_selection: obsolete", plan, field)
+                manifest_path.write_text(original)
+
     def assert_reuse_and_tamper(
         self, fixture: CuratedInputsFixture, runner: FixedFeatureEvidenceRunner,
         provenance: FixedReportProvenance,
@@ -92,6 +110,7 @@ class FeatureSelectionCliTest(unittest.TestCase):
         self.assertEqual(len(evidence[1]), 3816)
         self.assertEqual(redundancy[0], REDUNDANCY_COLUMNS)
         self.assertEqual(len(redundancy[1]), 325)
+        self.assertTrue(all(valid_redundancy_row(row) for row in redundancy[1]))
         self.assertEqual(evidence[1], sorted(evidence[1], key=evidence_sort_key))
         self.assertTrue(all(valid_evidence_row(row) for row in evidence[1]))
 
@@ -112,6 +131,7 @@ class FeatureSelectionCliTest(unittest.TestCase):
         self.assertIn("## Desempenho isolado", report)
         self.assertIn("## Redundância estrutural e observada", report)
         self.assertIn("## Efeitos de permutação", report)
+        self.assertEqual(report.count(" / `"), 325)
 
     def assert_manifest_inputs(self, manifest: dict[str, object]) -> None:
         inputs = manifest["inputs"]
@@ -178,6 +198,31 @@ def _valid_nullable_fields(row: dict[str, str], numeric: re.Pattern[str]) -> boo
     if not all(numeric.fullmatch(value) for value in numeric_fields):
         return False
     return row["effect"] in {"improvement", "neutral", "harm"}
+
+
+def valid_redundancy_row(row: dict[str, str]) -> bool:
+    numeric = re.compile(r"^-?\d+\.\d{6}$")
+    groups = {"none", "area_transformations", "bounding_rectangle_relations",
+              "equivalent_ellipse_relation", "vertical_occupancy_relation",
+              "convex_hull_relations", "area_contour_relation"}
+    relations = {"none", "area_bijection", "area_major_axis_product", "bbox_area_product",
+                 "bbox_aspect_ratio", "bbox_extent", "ellipse_roundness",
+                 "vertical_occupancy_ratio", "convex_solidity", "convexity_ratio",
+                 "area_contour_circularity"}
+    correlations = [row["pearson"], row["spearman"]]
+    numeric_valid = all(value == "" or (numeric.fullmatch(value)
+                        and -1.0 <= float(value) <= 1.0) for value in correlations)
+    relation_parts = row["structural_relation"].split("|")
+    return row["removal_group"] in groups and set(relation_parts) <= relations and numeric_valid
+
+
+def manifest_tampering_cases() -> list[tuple[str, object]]:
+    cases: list[tuple[str, object]] = [
+        ("decision_url", "https://example.invalid/decision"), ("report_sha256", "0" * 64),
+        ("source_commit", "0" * 40), ("command", "python main.py inputs"),
+        ("revision", 2), ("validations", []),
+    ]
+    return cases
 
 
 if __name__ == "__main__":

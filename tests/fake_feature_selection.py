@@ -8,12 +8,15 @@ class FixedFeatureEvidenceRunner:
     """Return complete deterministic evidence without scientific model training."""
 
     def __init__(self) -> None:
+        """Initialize call tracking; for example, tests inspect evaluation_count."""
         self.calls: list[tuple[int, tuple[str, ...], tuple[str, ...]]] = []
+        self.evaluation_count = 0
 
     def evaluate(
         self, samples: list[FeatureSample], feature_names: tuple[str, ...],
         removal_groups: tuple[RemovalGroup, ...], permutation_count: int, split_seed: int,
     ) -> list[FeatureEvidence]:
+        self.evaluation_count += 1
         self.calls.append((len(samples), feature_names, tuple(group.name for group in removal_groups)))
         rows: list[FeatureEvidence] = []
         folds = sorted({sample.fold for sample in samples})

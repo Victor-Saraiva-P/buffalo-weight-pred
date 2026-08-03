@@ -88,7 +88,7 @@ class SystemFeatureSelectionProvenance:
 
     def feature_selection_dependencies(self) -> dict[str, str]:
         """Report packages; for example, manifests pin Matplotlib and PyTorch."""
-        distributions = ("numpy", "scipy", "scikit-learn", "matplotlib", "torch")
+        distributions = ("numpy", "scipy", "scikit-learn", "matplotlib", "Pillow", "torch")
         versions = {name: self._environment.distribution_version(name) for name in distributions}
         return versions
 
@@ -107,7 +107,8 @@ def _selection_module_names() -> tuple[str, ...]:
         "feature_selection_io.py", "feature_selection_manifest.py",
         "feature_selection_plots.py", "feature_selection_provenance.py",
         "feature_selection_report.py", "feature_selection_rules.py",
-        "feature_selection_stage.py", "feature_selection_validation.py",
+        "feature_selection_stage.py", "feature_selection_types.py",
+        "feature_selection_validation.py",
         "png_artifact.py", "report_cli.py", "snapshot_io.py",
     )
     return names

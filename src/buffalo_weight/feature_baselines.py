@@ -20,6 +20,7 @@ from buffalo_weight.feature_evaluation import (
     PredictionPartition,
     TrainingPartition,
 )
+from buffalo_weight.feature_selection_types import FeatureBaselineName
 
 
 class SklearnFeaturePredictor:
@@ -40,7 +41,7 @@ class SklearnFeaturePredictor:
 class RandomForestBaseline:
     """Frozen Random Forest baseline; for example, inject it into feature evaluation."""
 
-    name = "random_forest"
+    name: FeatureBaselineName = "random_forest"
     recipe: dict[str, bool | float | int | str | None] = {
         "n_estimators": 500,
         "criterion": "squared_error",
@@ -103,7 +104,7 @@ class DenseFeaturePredictor:
 class DenseFeatureBaseline:
     """Frozen dense baseline with isolated epoch selection and full outer retraining."""
 
-    name = "dense"
+    name: FeatureBaselineName = "dense"
 
     def __init__(
         self, recipe: DenseTrainingRecipe = DENSE_BASELINE_RECIPE,

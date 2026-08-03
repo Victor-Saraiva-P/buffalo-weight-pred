@@ -17,6 +17,10 @@ OUTPUT_FILES = (
     "shared_feature_contract.json", "feature_selection_report.md",
     "redundancy_heatmap.png", "removal_heatmap.png", "permutation_effects.png",
 )
+VALIDATIONS = (
+    "schemas", "ordering", "sha256", "experiment_coverage",
+    "human_decision_absent", "figures_300_dpi",
+)
 
 
 def feature_selection_identity(
@@ -30,6 +34,7 @@ def feature_selection_identity(
         "inputs": _input_records(input_manifest),
         "recipe_sha256": provenance.feature_selection_recipe_hash(),
         "dependencies": provenance.feature_selection_dependencies(),
+        "source_commit": provenance.repository_commit(),
     }
 
 
@@ -60,8 +65,7 @@ def complete_feature_selection_manifest(
         "decision_url": None,
         "report_sha256": sha256_file(output_dir / "feature_selection_report.md"),
         "outputs": _output_records(output_dir),
-        "validations": ["schemas", "ordering", "sha256", "experiment_coverage",
-                        "human_decision_absent", "figures_300_dpi"],
+        "validations": list(VALIDATIONS),
     })
     return manifest
 
@@ -76,10 +80,19 @@ def validate_feature_selection_manifest(
             f"feature manifest status/outputs were {manifest.get('status')!r}/{outputs!r}; "
             "expected provisional status and output mapping"
         )
+    _validate_fixed_fields(manifest)
     _validate_audit_fields(manifest, output_dir)
     current = _output_records(output_dir)
     if outputs != current:
         raise ValueError(f"feature manifest outputs were {outputs!r}; expected {current!r}")
+
+
+def _validate_fixed_fields(manifest: dict[str, object]) -> None:
+    actual = (manifest.get("package_type"), manifest.get("revision"), manifest.get("command"),
+              manifest.get("validations"))
+    expected = ("reconstructible_stage", 1, "python main.py feature-selection", list(VALIDATIONS))
+    if actual != expected:
+        raise ValueError(f"manifest fixed fields were {actual!r}; expected exactly {expected!r}")
 
 
 def _validate_audit_fields(manifest: dict[str, object], output_dir: Path) -> None:
@@ -99,15 +112,17 @@ def _validate_audit_fields(manifest: dict[str, object], output_dir: Path) -> Non
 def _manifest_current(
     manifest: object, contract: ReportContract, provenance: FeatureSelectionProvenance
 ) -> bool:
-    if not isinstance(manifest, dict) or manifest.get("status") != "provisional":
+    if not isinstance(manifest, dict):
         return False
     identity = feature_selection_identity(contract, provenance)
     if any(manifest.get(key) != value for key, value in identity.items()):
         return False
-    outputs = manifest.get("outputs")
-    return isinstance(outputs, dict) and outputs == _output_records_if_present(
-        feature_selection_output_dir(contract)
-    )
+    output_dir = feature_selection_output_dir(contract)
+    try:
+        validate_feature_selection_manifest(manifest, output_dir)
+    except (OSError, ValueError, TypeError):
+        return False
+    return True
 
 
 def feature_selection_output_dir(contract: ReportContract) -> Path:
@@ -117,16 +132,10 @@ def feature_selection_output_dir(contract: ReportContract) -> Path:
     return output_dir
 
 
-def _output_records_if_present(output_dir: Path) -> dict[str, dict[str, object]]:
-    if any(not (output_dir / name).is_file() for name in OUTPUT_FILES):
-        return {}
-    return _output_records(output_dir)
-
-
-def _output_records(output_dir: Path) -> dict[str, dict[str, object]]:
-    records = {name: _output_record(output_dir / name) for name in OUTPUT_FILES}
-    complete_records = records
-    return complete_records
+def _output_records(
+    output_dir: Path,
+) -> dict[str, dict[str, object]]:
+    return {name: _output_record(output_dir / name) for name in OUTPUT_FILES}
 
 
 def _output_record(path: Path) -> dict[str, object]:

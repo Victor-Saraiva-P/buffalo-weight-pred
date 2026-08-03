@@ -11,6 +11,7 @@ from buffalo_weight.feature_evaluation import (
     PredictionPartition,
     TrainingPartition,
 )
+from buffalo_weight.feature_selection_types import FeatureBaselineName
 
 
 class UnavailableCudaRuntime:
@@ -48,7 +49,7 @@ class FirstColumnPredictor(FeaturePredictor):
 class RecordingFeatureBaseline(FeatureBaseline):
     """Record adapter boundaries while predicting from the first selected column."""
 
-    def __init__(self, name: str = "random_forest") -> None:
+    def __init__(self, name: FeatureBaselineName = "random_forest") -> None:
         self.name = name
         self.fit_calls: list[RecordedFit] = []
         self.predicted_partitions: list[PredictionPartition] = []

@@ -6,7 +6,11 @@ import csv
 from pathlib import Path
 
 from buffalo_weight.csv_io import format_csv_number
-from buffalo_weight.feature_evaluation import FeatureEvidence, FeatureSample
+from buffalo_weight.feature_evaluation import (
+    FeatureEvidence,
+    FeatureSample,
+    feature_evidence_sort_key,
+)
 from buffalo_weight.feature_redundancy import FeatureRedundancy
 from buffalo_weight.feature_selection_contract import EVIDENCE_COLUMNS, REDUNDANCY_COLUMNS
 from buffalo_weight.input_schema import FEATURE_COLUMNS, SPLIT_COLUMNS
@@ -30,7 +34,7 @@ def load_feature_samples(
 
 def write_feature_evidence(path: Path, evidence: list[FeatureEvidence]) -> None:
     """Write deterministic tidy evidence; for example, fold rows precede OOF summaries."""
-    rows = [_evidence_record(row) for row in sorted(evidence, key=_evidence_sort_key)]
+    rows = [_evidence_record(row) for row in sorted(evidence, key=feature_evidence_sort_key)]
     _write_csv(path, EVIDENCE_COLUMNS, rows)
 
 
@@ -97,10 +101,3 @@ def _optional_int(value: int | None) -> str:
         return ""
     formatted = str(value)
     return formatted
-
-
-def _evidence_sort_key(row: FeatureEvidence) -> tuple[object, ...]:
-    scope_rank = 0 if row.scope == "fold" else 1
-    key = (row.experiment, row.baseline, row.target, scope_rank,
-           row.fold or 0, row.repetition or 0)
-    return key

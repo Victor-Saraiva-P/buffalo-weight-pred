@@ -8,6 +8,9 @@ from pathlib import Path
 import yaml
 
 
+CANONICAL_FOLD_SEED = 42
+
+
 @dataclass(frozen=True)
 class InputsContract:
     mask_index_path: Path
@@ -74,7 +77,15 @@ def _inputs_contract(values: dict[object, object]) -> InputsContract:
             "category/fold counts were "
             f"{contract.weight_category_count}/{contract.fold_count}; expected both at least 2"
         )
+    _validate_canonical_fold_seed(contract.fold_seed)
     return contract
+
+
+def _validate_canonical_fold_seed(fold_seed: int) -> None:
+    if fold_seed != CANONICAL_FOLD_SEED:
+        raise ValueError(
+            f"fold_seed was {fold_seed!r}; expected canonical seed {CANONICAL_FOLD_SEED}"
+        )
 
 
 def _required_mapping(values: dict[object, object], name: str) -> dict[object, object]:

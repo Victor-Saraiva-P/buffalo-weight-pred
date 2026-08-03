@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from torch import nn
 
 from buffalo_weight.dense_feature_adapter import DenseFeatureAdapter
 from buffalo_weight.feature_baselines import (
@@ -40,6 +41,17 @@ class FeatureBaselinesTest(unittest.TestCase):
 
 
 class DenseFeatureAdapterCudaTest(unittest.TestCase):
+    def test_create_model_uses_configured_dense_architecture(self) -> None:
+        adapter = DenseFeatureAdapter()
+        recipe = replace(DENSE_BASELINE_RECIPE, hidden_layers=(8, 4), dropout=0.35)
+
+        model = adapter.create_model(input_count=2, seed=44, recipe=recipe)
+
+        linear_widths = [layer.out_features for layer in model.layers if isinstance(layer, nn.Linear)]
+        dropout_rates = [layer.p for layer in model.layers if isinstance(layer, nn.Dropout)]
+        self.assertEqual(linear_widths, [8, 4, 1])
+        self.assertEqual(dropout_rates, [0.35, 0.35])
+
     def test_cuda_step_checkpoint_device_and_repetition(self) -> None:
         adapter = DenseFeatureAdapter()
         first = adapter.contract_probe(input_count=2, seed=44)

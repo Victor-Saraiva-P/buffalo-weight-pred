@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 
 from buffalo_weight.csv_io import format_csv_number
@@ -52,13 +53,47 @@ def write_feature_redundancy(path: Path, rows: list[FeatureRedundancy]) -> None:
 def _sample(
     feature_row: dict[str, str], split_row: dict[str, str], feature_names: tuple[str, ...]
 ) -> FeatureSample:
-    name = feature_row["file_name"]
+    name = feature_row.get("file_name")
+    if not name:
+        raise ValueError(f"file_name was {name!r}; expected non-empty text")
+    category = split_row.get("weight_category")
+    if not category:
+        raise ValueError(f"weight_category was {category!r} for {name!r}; expected non-empty text")
+    values = {field: _finite_numeric_field(feature_row, field, name) for field in feature_names}
+    weight_kg = _finite_numeric_field(feature_row, "weight_kg", name)
+    fold = _integer_field(split_row, "fold", name)
+    return FeatureSample(name, fold, category, weight_kg, values)
+
+
+def _finite_numeric_field(row: dict[str, str], field: str, row_name: str) -> float:
+    candidate, message = _required_selection_field(
+        row, field, row_name, "finite numeric text"
+    )
     try:
-        values = {feature: float(feature_row[feature]) for feature in feature_names}
-        return FeatureSample(name, int(split_row["fold"]), split_row["weight_category"],
-                             float(feature_row["weight_kg"]), values)
-    except (KeyError, ValueError) as error:
-        raise ValueError(f"feature row was {name!r}; expected finite numeric features and fold") from error
+        parsed = float(candidate)
+    except ValueError as error:
+        raise ValueError(message) from error
+    if not math.isfinite(parsed):
+        raise ValueError(message)
+    return parsed
+
+
+def _integer_field(row: dict[str, str], field: str, row_name: str) -> int:
+    candidate, message = _required_selection_field(row, field, row_name, "integer text")
+    try:
+        return int(candidate)
+    except ValueError as error:
+        raise ValueError(message) from error
+
+
+def _required_selection_field(
+    row: dict[str, str], field: str, row_name: str, expected: str
+) -> tuple[str, str]:
+    candidate = row.get(field)
+    message = f"{field} was {candidate!r} for {row_name!r}; expected {expected}"
+    if candidate is None:
+        raise ValueError(message)
+    return candidate, message
 
 
 def _read_expected_csv(path: Path, expected: list[str]) -> list[dict[str, str]]:

@@ -168,18 +168,16 @@ def _input_records(manifest_path: Path) -> dict[str, dict[str, object]]:
                           "schema": sorted(manifest)},
     }
     for name in ("feature_index.csv", "canonical_split.csv"):
-        records[name] = _normalized_input_record(manifest["outputs"].get(name), name)
+        records[name] = _live_input_record(manifest_path.parent / name)
     return records
 
 
-def _normalized_input_record(record: object, name: str) -> dict[str, object]:
-    if not isinstance(record, dict):
-        raise ValueError(f"inputs output record was {record!r} for {name}; expected a mapping")
-    normalized = {"sha256": record.get("sha256"), "row_count": record.get("rows"),
-                  "schema": record.get("columns")}
-    if None in normalized.values():
-        raise ValueError(f"inputs output record was {record!r} for {name}; expected hash/schema/count")
-    return normalized
+def _live_input_record(path: Path) -> dict[str, object]:
+    return {
+        "sha256": sha256_file(path),
+        "row_count": csv_row_count(path),
+        "schema": csv_columns(path),
+    }
 
 
 def expected_csv_schemas() -> dict[str, list[str]]:

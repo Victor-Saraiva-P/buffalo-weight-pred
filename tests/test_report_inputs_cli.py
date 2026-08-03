@@ -53,6 +53,19 @@ APPROVED_FEATURES = [
 
 
 class ReportInputsCliTest(unittest.TestCase):
+    def test_rejects_noncanonical_fold_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            contract = json.loads(fixture.config_path.read_text())
+            contract["inputs"]["fold_seed"] = 99
+            fixture.config_path.write_text(json.dumps(contract))
+
+            result = fixture.run("inputs")
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("fold_seed was 99", result.stderr)
+            self.assertIn("expected canonical seed 42", result.stderr)
+
     def test_dry_run_build_resume_and_invalidation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))

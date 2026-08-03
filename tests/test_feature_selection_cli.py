@@ -11,7 +11,10 @@ from pathlib import Path
 from PIL import Image
 
 from buffalo_weight.report_cli import main
-from tests.fake_feature_selection import FixedFeatureEvidenceRunner
+from tests.fake_feature_selection import (
+    FixedFeatureEvidenceRunner,
+    InputMutatingFeatureEvidenceRunner,
+)
 from tests.fake_report_provenance import FixedFeatureSelectionProvenance, FixedReportProvenance
 from tests.report_inputs_fixture import CuratedInputsFixture
 
@@ -28,6 +31,21 @@ REDUNDANCY_COLUMNS = [
 
 
 class FeatureSelectionCliTest(unittest.TestCase):
+    def test_input_change_during_evaluation_aborts_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            provenance = FixedReportProvenance()
+            self.assertEqual(run_main(fixture, "inputs", provenance=provenance), 0)
+            feature_index = fixture.output_dir / "feature_index.csv"
+            runner = InputMutatingFeatureEvidenceRunner(feature_index)
+
+            result, _, stderr = run_feature_selection(fixture, runner, provenance)
+
+            self.assertEqual(result, 1)
+            self.assertIn("selection identity changed", stderr)
+            output_dir = fixture.root / "generated" / "report" / "feature_selection"
+            self.assertFalse((output_dir / "manifest.json").exists())
+
     def test_builds_complete_deterministic_provisional_package(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))

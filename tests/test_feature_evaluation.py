@@ -38,6 +38,8 @@ class FeatureEvaluationTest(unittest.TestCase):
         self.assertEqual(training_sets, {("a", "b"), ("c", "d")})
         predicted_sets = {part.sample_ids for part in baseline.predicted_partitions}
         self.assertEqual(predicted_sets, {("a", "b"), ("c", "d")})
+        for call in baseline.prediction_calls:
+            self.assertTrue(set(call.training_ids).isdisjoint(call.prediction_ids))
         self.assertTrue(any(row.scope == "oof" for row in evidence))
 
     def test_records_repetition_specific_permutation_seeds(self) -> None:

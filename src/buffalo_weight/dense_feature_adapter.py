@@ -46,14 +46,16 @@ class DenseTargetScale:
 
 
 class DenseFeatureNetwork(nn.Module):
-    """Frozen dense architecture; for example, ``DenseFeatureNetwork(26)`` accepts features."""
+    """Frozen dense architecture; for example, the adapter supplies its declared recipe."""
 
-    def __init__(self, input_count: int) -> None:
+    def __init__(self, input_count: int, recipe: DenseTrainingRecipe) -> None:
         super().__init__()
         self.input_count = input_count
+        first_width, second_width = recipe.hidden_layers
         self.layers = nn.Sequential(
-            nn.Linear(input_count, 64), nn.ReLU(), nn.Dropout(0.20),
-            nn.Linear(64, 32), nn.ReLU(), nn.Dropout(0.20), nn.Linear(32, 1),
+            nn.Linear(input_count, first_width), nn.ReLU(), nn.Dropout(recipe.dropout),
+            nn.Linear(first_width, second_width), nn.ReLU(), nn.Dropout(recipe.dropout),
+            nn.Linear(second_width, 1),
         )
         self.apply(_initialize_he)
 
@@ -102,22 +104,28 @@ class DenseFeatureAdapter:
             raise ValueError("CUDA availability was false; expected CUDA for dense feature training")
         self.device = torch.device("cuda")
 
-    def create_model(self, input_count: int, seed: int) -> DenseFeatureNetwork:
+    def create_model(
+        self, input_count: int, seed: int,
+        recipe: DenseTrainingRecipe = DenseTrainingRecipe(),
+    ) -> DenseFeatureNetwork:
         """Create a seeded CUDA model; for example, ``adapter.create_model(26, 44)``."""
         _seed_everything(seed)
-        return DenseFeatureNetwork(input_count).to(self.device)
+        return DenseFeatureNetwork(input_count, recipe).to(self.device)
 
-    def contract_probe(self, input_count: int, seed: int) -> DenseContractProbe:
+    def contract_probe(
+        self, input_count: int, seed: int,
+        recipe: DenseTrainingRecipe = DenseTrainingRecipe(),
+    ) -> DenseContractProbe:
         """Exercise the adapter contract; for example, CUDA tests call one tiny update."""
-        model = self.create_model(input_count, seed)
+        model = self.create_model(input_count, seed, recipe)
         inputs, targets = self._probe_batch(input_count)
         before = [parameter.detach().clone() for parameter in model.parameters()]
-        optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0001)
+        optimizer = self._optimizer(model, recipe)
         loss = nn.functional.l1_loss(model(inputs), targets)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()  # type: ignore[no-untyped-call]
         gradients = all(parameter.grad is not None for parameter in model.parameters())
-        nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+        nn.utils.clip_grad_norm_(model.parameters(), recipe.gradient_clip)
         optimizer.step()
         updated = any(not torch.equal(old, new) for old, new in zip(before, model.parameters()))
         return DenseContractProbe(self.device.type, float(loss.item()), gradients, updated,
@@ -155,7 +163,7 @@ class DenseFeatureAdapter:
         target_scale: DenseTargetScale, recipe: DenseTrainingRecipe,
     ) -> int:
         """Select only epoch count; for example, inner validation never sees the outer fold."""
-        model = self.create_model(train_values.shape[1], recipe.training_seed)
+        model = self.create_model(train_values.shape[1], recipe.training_seed, recipe)
         optimizer, random = self._optimizer(model, recipe), np.random.default_rng(recipe.training_seed)
         best_mae, best_epoch, stale = float("inf"), 1, 0
         for epoch in range(1, recipe.max_epochs + 1):
@@ -175,7 +183,7 @@ class DenseFeatureAdapter:
         epochs: int, recipe: DenseTrainingRecipe,
     ) -> DenseFeatureNetwork:
         """Retrain from scratch; for example, outer training uses the selected epoch count."""
-        model = self.create_model(values.shape[1], recipe.training_seed)
+        model = self.create_model(values.shape[1], recipe.training_seed, recipe)
         optimizer = self._optimizer(model, recipe)
         random = np.random.default_rng(recipe.training_seed)
         for _ in range(epochs):

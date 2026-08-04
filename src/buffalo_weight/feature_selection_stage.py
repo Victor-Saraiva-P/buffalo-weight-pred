@@ -22,6 +22,7 @@ from buffalo_weight.feature_evaluation import (
 from buffalo_weight.feature_selection_contract import PERMUTATION_COUNT, REMOVAL_GROUPS
 from buffalo_weight.feature_selection_io import load_feature_samples
 from buffalo_weight.feature_selection_manifest import (
+    OFFICIAL_EXECUTION,
     complete_feature_selection_manifest,
     feature_selection_identity,
     feature_selection_output_dir,
@@ -53,6 +54,10 @@ class FeatureEvidenceRunner(Protocol):
         """Evaluate all experiments; for example, a fake returns complete deterministic rows."""
         ...
 
+    def execution_metadata(self) -> dict[str, object]:
+        """Describe execution; for example, promotion requires the official CPU/CUDA path."""
+        ...
+
 
 class ScientificFeatureEvidenceRunner:
     """Run frozen RF and CUDA dense baselines; for example, production CLI uses this runner."""
@@ -70,6 +75,13 @@ class ScientificFeatureEvidenceRunner:
         baselines = self._baselines or (RandomForestBaseline(), DenseFeatureBaseline())
         return evaluate_feature_evidence(samples, feature_names, removal_groups, baselines,
                                          permutation_count, split_seed)
+
+    def execution_metadata(self) -> dict[str, object]:
+        """Describe execution; for example, injected baselines cannot attest official work."""
+        if self._baselines is not None:
+            return {"random_forest_device": "injected", "dense_device": "injected",
+                    "official": False}
+        return OFFICIAL_EXECUTION.copy()
 
 
 def run_feature_selection_stage(
@@ -129,7 +141,7 @@ def _write_snapshot(
     write_feature_selection_artifacts(output_dir, samples, features, evidence)
     validate_feature_selection_artifacts(output_dir, features)
     _require_unchanged_identity(contract, provenance, identity)
-    _write_stage_manifest(output_dir, contract, identity)
+    _write_stage_manifest(output_dir, contract, identity, runner.execution_metadata())
 
 
 def _evaluate_stage(
@@ -158,6 +170,7 @@ def _require_unchanged_identity(
 
 def _write_stage_manifest(
     output_dir: Path, contract: ReportContract, identity: dict[str, object],
+    execution: dict[str, object],
 ) -> None:
     source_commit = identity.get("source_commit")
     if not isinstance(source_commit, str):
@@ -165,7 +178,7 @@ def _write_stage_manifest(
             f"selection source commit was {source_commit!r}; expected a Git SHA string"
         )
     manifest = complete_feature_selection_manifest(
-        contract, output_dir, identity, source_commit
+        contract, output_dir, identity, source_commit, execution
     )
     validate_feature_selection_manifest(manifest, output_dir)
     write_json_artifact(output_dir / "manifest.json", manifest)

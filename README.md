@@ -54,6 +54,24 @@ figuras a 300 DPI, a minuta auditável e um contrato que permanece sem
 `python main.py feature-selection --dry-run --config configs/report.yaml` para
 consultar `blocked`, `absent`, `obsolete` ou `reusable` sem gravar arquivos.
 
+Depois da revisão científica, crie manualmente o contrato descrito em
+[`docs/schemas/feature-selection.md`](docs/schemas/feature-selection.md) e uma
+versão revisada da minuta. Ambos devem estar versionados em um worktree limpo.
+Confira o portão sem gravar e então promova o pacote confirmado:
+
+```bash
+python main.py confirm-features --dry-run --config configs/report.yaml \
+  --contract caminho/contrato.json --report caminho/relatorio-revisado.md
+python main.py confirm-features --config configs/report.yaml \
+  --contract caminho/contrato.json --report caminho/relatorio-revisado.md
+python main.py baselines --dry-run --config configs/report.yaml
+```
+
+O snapshot confirmado é escrito em
+`evidence/confirmed/feature_selection/v1/`. O comando `baselines` permanece
+bloqueado antes de treino enquanto esse pacote estiver ausente, provisório,
+adulterado ou incompatível com as entradas atuais.
+
 Criar ambiente e instalar dependências:
 
 ```bash

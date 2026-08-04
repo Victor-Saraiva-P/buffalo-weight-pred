@@ -19,8 +19,11 @@ OUTPUT_FILES = (
 )
 VALIDATIONS = (
     "schemas", "ordering", "sha256", "experiment_coverage",
-    "human_decision_absent", "figures_300_dpi",
+    "human_decision_absent", "figures_300_dpi", "official_execution",
 )
+OFFICIAL_EXECUTION = {
+    "random_forest_device": "cpu", "dense_device": "cuda", "official": True,
+}
 
 
 def feature_selection_identity(
@@ -54,7 +57,7 @@ def feature_selection_status(
 
 def complete_feature_selection_manifest(
     contract: ReportContract, output_dir: Path, identity: dict[str, object],
-    source_commit: str,
+    source_commit: str, execution: dict[str, object],
 ) -> dict[str, object]:
     """Describe a provisional package; for example, output hashes are captured last."""
     manifest = identity.copy()
@@ -63,8 +66,9 @@ def complete_feature_selection_manifest(
         "status": "provisional", "source_commit": source_commit,
         "command": "python main.py feature-selection",
         "decision_url": None,
+        "execution": execution,
         "report_sha256": sha256_file(output_dir / "feature_selection_report.md"),
-        "outputs": _output_records(output_dir),
+        "outputs": artifact_output_records(output_dir, OUTPUT_FILES),
         "validations": list(VALIDATIONS),
     })
     return manifest
@@ -82,15 +86,16 @@ def validate_feature_selection_manifest(
         )
     _validate_fixed_fields(manifest)
     _validate_audit_fields(manifest, output_dir)
-    current = _output_records(output_dir)
+    current = artifact_output_records(output_dir, OUTPUT_FILES)
     if outputs != current:
         raise ValueError(f"feature manifest outputs were {outputs!r}; expected {current!r}")
 
 
 def _validate_fixed_fields(manifest: dict[str, object]) -> None:
     actual = (manifest.get("package_type"), manifest.get("revision"), manifest.get("command"),
-              manifest.get("validations"))
-    expected = ("reconstructible_stage", 1, "python main.py feature-selection", list(VALIDATIONS))
+              manifest.get("validations"), manifest.get("execution"))
+    expected = ("reconstructible_stage", 1, "python main.py feature-selection",
+                list(VALIDATIONS), OFFICIAL_EXECUTION)
     if actual != expected:
         raise ValueError(f"manifest fixed fields were {actual!r}; expected exactly {expected!r}")
 
@@ -132,13 +137,14 @@ def feature_selection_output_dir(contract: ReportContract) -> Path:
     return output_dir
 
 
-def _output_records(
-    output_dir: Path,
+def artifact_output_records(
+    output_dir: Path, file_names: tuple[str, ...],
 ) -> dict[str, dict[str, object]]:
-    return {name: _output_record(output_dir / name) for name in OUTPUT_FILES}
+    """Describe public files; for example, confirmed manifests reuse the same schemas."""
+    return {name: _artifact_output_record(output_dir / name) for name in file_names}
 
 
-def _output_record(path: Path) -> dict[str, object]:
+def _artifact_output_record(path: Path) -> dict[str, object]:
     record: dict[str, object] = {"sha256": sha256_file(path)}
     if path.suffix == ".csv":
         record.update({"row_count": csv_row_count(path), "schema": csv_columns(path)})
@@ -170,6 +176,13 @@ def _input_records(manifest_path: Path) -> dict[str, dict[str, object]]:
     for name in ("feature_index.csv", "canonical_split.csv"):
         records[name] = _live_input_record(manifest_path.parent / name)
     return records
+
+
+def feature_selection_input_records(
+    contract: ReportContract,
+) -> dict[str, dict[str, object]]:
+    """Describe current inputs; for example, the baseline gate detects an incompatible split."""
+    return _input_records(contract.inputs_output_dir / "manifest.json")
 
 
 def _live_input_record(path: Path) -> dict[str, object]:

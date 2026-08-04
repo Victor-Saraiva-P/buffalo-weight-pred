@@ -60,7 +60,7 @@ União das 26 features geométricas já calculadas pelo projeto ou sugeridas pel
 _Avoid_: Conjunto final de features, todas as features do modelo
 
 **Conjunto Compartilhado de Features**:
-Subconjunto definido somente após a análise de redundância e dos Testes de Retirada de Features do Universo de Features Candidatas. Ele é congelado antes da escolha e do ajuste fino das configurações finais e fornecido de forma idêntica ao Random Forest e à Rede Densa por Feições. O ajuste fino não reabre a seleção de features.
+Subconjunto definido pela Seleção Manual de Features após a análise de redundância e os Testes de Retirada de Features; a revisão humana atual mantém 25 candidatas e retira somente `area_power_1_5`. Ele é congelado antes da escolha e do ajuste fino das configurações finais, fornecido de forma idêntica ao Random Forest e à Rede Densa por Feições e não é reaberto pelo ajuste fino.
 _Avoid_: Universo de features candidatas, features específicas de um dos modelos
 
 **Roundness**:

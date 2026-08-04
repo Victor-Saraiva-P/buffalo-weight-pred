@@ -44,6 +44,18 @@ class _GateInspection:
         return f"{self.state}: {self.reason}"
 
 
+@dataclass(frozen=True)
+class _PromotionInspection:
+    human_contract: dict[str, object] | None
+    blocker: str | None
+
+    def blocked_message(self) -> str:
+        """Render a blocker; for example, dry-run reports the validation exception."""
+        if self.blocker is None:
+            raise ValueError("promotion blocker was null; expected a validation error")
+        return f"blocked: {self.blocker}"
+
+
 def confirm_feature_selection(
     report_contract: ReportContract, human_contract_path: Path, reviewed_report_path: Path,
     dry_run: bool = False, environment: FeatureConfirmationEnvironment | None = None,
@@ -56,10 +68,12 @@ def confirm_feature_selection(
         report_contract, human_contract_path, reviewed_report_path, dry_run,
         resolved_environment, resolved_provenance,
     )
-    if isinstance(validation, str) or dry_run:
-        return validation if isinstance(validation, str) else "released"
+    if validation.human_contract is None:
+        return validation.blocked_message()
+    if dry_run:
+        return "released"
     publish_confirmed_feature_package(
-        report_contract, human_contract_path, reviewed_report_path, validation,
+        report_contract, human_contract_path, reviewed_report_path, validation.human_contract,
     )
     return "confirmed"
 
@@ -95,15 +109,16 @@ def _promotion_validation(
     report_contract: ReportContract, human_contract_path: Path, reviewed_report_path: Path,
     dry_run: bool, environment: FeatureConfirmationEnvironment,
     provenance: FeatureSelectionProvenance,
-) -> dict[str, object] | str:
+) -> _PromotionInspection:
     try:
-        return _validate_promotion(
+        human_contract = _validate_promotion(
             report_contract, human_contract_path, reviewed_report_path,
             environment, provenance,
         )
+        return _PromotionInspection(human_contract, None)
     except (OSError, ValueError, TypeError, JSONDecodeError) as error:
         if dry_run:
-            return f"blocked: {error}"
+            return _PromotionInspection(None, str(error))
         raise
 
 

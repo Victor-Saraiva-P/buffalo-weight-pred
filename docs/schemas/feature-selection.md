@@ -72,5 +72,7 @@ all pending placeholders. `report_sha256` is the SHA-256 of that exact report.
 Promotion accepts only an intact provisional package produced by the official
 CPU/CUDA execution and a clean Git worktree. It copies the human contract
 without filling fields, writes the confirmed manifest last, and records the
-decision URL and contract hash. The baseline gate revalidates the confirmed
-contract, report, evidence schemas, output hashes, and current input snapshot.
+decision URL and contract hash. It also preserves the provisional manifest as
+`source_feature_selection_manifest.json`, whose digest and source commit are
+checked by the baseline gate. The gate revalidates the confirmed contract,
+report, evidence schemas, output hashes, and current input snapshot.

@@ -59,9 +59,13 @@ def _validate_reviewed_report(report_path: Path) -> None:
     report = report_path.read_text()
     required = "## Registro de revisão humana\n"
     if required not in report or "- Status: revisado" not in report:
+        observed = tuple(
+            line for line in report.splitlines()
+            if "Registro de revisão humana" in line or "Status:" in line
+        )
         raise ValueError(
-            f"review record in {report_path} was incomplete; expected section "
-            "'Registro de revisão humana' with status 'revisado'"
+            f"review record in {report_path} was {observed!r}; expected section "
+            "'Registro de revisão humana' with status line '- Status: revisado'"
         )
     pending_markers = ("Status: pendente", "não preenchid")
     placeholders = tuple(value for value in pending_markers if value in report)

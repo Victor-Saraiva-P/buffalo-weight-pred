@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
@@ -28,11 +29,19 @@ from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
 
 
+@dataclass(frozen=True)
+class _CliDependencies:
+    services: SetupServices | None
+    snapshot_publisher: SnapshotPublisher | None
+    report_provenance: ReportProvenance | None
+    feature_evidence_runner: FeatureEvidenceRunner | None
+    feature_selection_provenance: FeatureSelectionProvenance | None
+    feature_confirmation_environment: FeatureConfirmationEnvironment | None
+
+
 def main(
-    argv: Sequence[str] | None = None,
-    services: SetupServices | None = None,
-    stdout: TextIO = sys.stdout,
-    stderr: TextIO = sys.stderr,
+    argv: Sequence[str] | None = None, services: SetupServices | None = None,
+    stdout: TextIO = sys.stdout, stderr: TextIO = sys.stderr,
     snapshot_publisher: SnapshotPublisher | None = None,
     report_provenance: ReportProvenance | None = None,
     feature_evidence_runner: FeatureEvidenceRunner | None = None,
@@ -41,45 +50,58 @@ def main(
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
+    dependencies = _CliDependencies(
+        services, snapshot_publisher, report_provenance, feature_evidence_runner,
+        feature_selection_provenance, feature_confirmation_environment,
+    )
     try:
-        return _dispatch(
-            arguments, services, snapshot_publisher, report_provenance,
-            feature_evidence_runner, feature_selection_provenance,
-            feature_confirmation_environment, stdout
-        )
+        return _dispatch(arguments, dependencies, stdout)
     except (OSError, ValueError) as error:
         print(f"rejected: {error}", file=stderr)
         return 1
 
 
 def _dispatch(
-    arguments: argparse.Namespace, services: SetupServices | None,
-    snapshot_publisher: SnapshotPublisher | None, report_provenance: ReportProvenance | None,
-    feature_evidence_runner: FeatureEvidenceRunner | None,
-    feature_selection_provenance: FeatureSelectionProvenance | None,
-    feature_confirmation_environment: FeatureConfirmationEnvironment | None,
-    stdout: TextIO,
+    arguments: argparse.Namespace, dependencies: _CliDependencies, stdout: TextIO,
 ) -> int:
     if arguments.command == "setup":
-        return _run_setup(services or default_setup_services(), stdout)
+        return _run_setup(dependencies.services or default_setup_services(), stdout)
     contract = load_report_contract(Path(arguments.config))
-    if arguments.command == "inputs":
-        return _run_inputs_command(arguments, contract, snapshot_publisher,
-                                   report_provenance, stdout)
-    if arguments.command == "feature-selection":
-        return _run_selection_command(arguments, contract, feature_evidence_runner,
-                                      snapshot_publisher, report_provenance,
-                                      feature_selection_provenance, stdout)
+    return _dispatch_report_command(arguments, dependencies, contract, stdout)
+
+
+def _dispatch_report_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    if arguments.command in {"inputs", "feature-selection"}:
+        return _dispatch_reconstructible_command(arguments, dependencies, contract, stdout)
     if arguments.command == "confirm-features":
         return _run_confirmation_command(
-            arguments, contract, feature_confirmation_environment,
-            feature_selection_provenance, stdout,
+            arguments, contract, dependencies.feature_confirmation_environment,
+            dependencies.feature_selection_provenance, stdout,
         )
     if arguments.command == "baselines":
         return _run_baselines_gate(arguments, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
+
+
+def _dispatch_reconstructible_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    if arguments.command == "inputs":
+        return _run_inputs_command(
+            arguments, contract, dependencies.snapshot_publisher,
+            dependencies.report_provenance, stdout,
+        )
+    return _run_selection_command(
+        arguments, contract, dependencies.feature_evidence_runner,
+        dependencies.snapshot_publisher, dependencies.report_provenance,
+        dependencies.feature_selection_provenance, stdout,
+    )
 
 
 def _run_inputs_command(

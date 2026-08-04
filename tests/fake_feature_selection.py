@@ -39,7 +39,10 @@ class FixedFeatureEvidenceRunner:
         return rows
 
     def execution_metadata(self) -> dict[str, object]:
-        """Attest the official boundary; for example, promotion tests exercise CUDA metadata."""
+        """Attest the official boundary.
+
+        Example: promotion tests exercise CUDA metadata.
+        """
         return OFFICIAL_EXECUTION.copy()
 
     def _baseline_rows(

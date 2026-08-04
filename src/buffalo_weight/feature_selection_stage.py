@@ -55,7 +55,10 @@ class FeatureEvidenceRunner(Protocol):
         ...
 
     def execution_metadata(self) -> dict[str, object]:
-        """Describe execution; for example, promotion requires the official CPU/CUDA path."""
+        """Describe execution.
+
+        Example: promotion requires the official CPU/CUDA path.
+        """
         ...
 
 

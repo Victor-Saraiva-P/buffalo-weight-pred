@@ -11,7 +11,10 @@ class FeatureConfirmationEnvironment(Protocol):
     """Expose repository state; for example, tests inject a named clean environment."""
 
     def worktree_changes(self, repository_root: Path) -> tuple[str, ...]:
-        """Return porcelain entries; for example, an empty tuple permits promotion."""
+        """Return porcelain entries.
+
+        Example: an empty tuple permits promotion.
+        """
         ...
 
 

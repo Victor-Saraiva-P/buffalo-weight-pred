@@ -65,7 +65,10 @@ def confirm_feature_selection(
 
 
 def baselines_gate_status(report_contract: ReportContract) -> str:
-    """Explain the baseline gate; for example, tampering returns ``blocked: <reason>``."""
+    """Explain the baseline gate.
+
+    Example: tampering returns ``blocked: <reason>``.
+    """
     return _inspect_baselines_gate(report_contract).message()
 
 

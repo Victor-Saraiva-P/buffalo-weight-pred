@@ -18,12 +18,12 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_valid_human_contract_is_promoted_and_releases_baselines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area", "perimeter"))
-            result, stdout, stderr = run_confirmation(fixture, contract_path, report_path)
+            contract_path, report_path = _prepare_human_review(fixture, ("area", "perimeter"))
+            result, stdout, stderr = _run_confirmation(fixture, contract_path, report_path)
             self.assertEqual(result, 0, stderr)
             self.assertIn("feature_confirmation: confirmed", stdout)
-            assert_confirmed_package(self, fixture)
-            status, gate_stdout, gate_stderr = run_baselines_gate(fixture)
+            _assert_confirmed_package(self, fixture)
+            status, gate_stdout, gate_stderr = _run_baselines_gate(fixture)
             self.assertEqual(status, 0, gate_stderr)
             self.assertIn("baselines: released", gate_stdout)
 
@@ -31,7 +31,7 @@ class FeatureConfirmationCliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
 
-            result, stdout, stderr = run_baselines_gate(fixture)
+            result, stdout, stderr = _run_baselines_gate(fixture)
 
             self.assertEqual(result, 0, stderr)
             self.assertIn("baselines: blocked", stdout)
@@ -49,12 +49,12 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_report_hash_mismatch_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
             contract = json.loads(contract_path.read_text())
             contract["report_sha256"] = "0" * 64
             contract_path.write_text(json.dumps(contract))
 
-            result, _, stderr = run_confirmation(fixture, contract_path, report_path)
+            result, _, stderr = _run_confirmation(fixture, contract_path, report_path)
 
             self.assertEqual(result, 1)
             self.assertIn("report_sha256 was", stderr)
@@ -63,8 +63,8 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_confirmation_dry_run_reports_gate_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
-            result, stdout, stderr = run_confirmation(
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
+            result, stdout, stderr = _run_confirmation(
                 fixture, contract_path, report_path, dry_run=True,
             )
             self.assertEqual(result, 0, stderr)
@@ -74,11 +74,11 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_confirmation_dry_run_explains_a_blocked_gate_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
             contract = json.loads(contract_path.read_text())
             contract["report_sha256"] = "0" * 64
             contract_path.write_text(json.dumps(contract))
-            result, stdout, stderr = run_confirmation(
+            result, stdout, stderr = _run_confirmation(
                 fixture, contract_path, report_path, dry_run=True,
             )
             self.assertEqual(result, 0, stderr)
@@ -89,7 +89,7 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_nonofficial_feature_evidence_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
             manifest_path = fixture.root / "generated" / "report" / "feature_selection" / (
                 "manifest.json"
             )
@@ -99,7 +99,7 @@ class FeatureConfirmationCliTest(unittest.TestCase):
             }
             manifest_path.write_text(json.dumps(manifest))
 
-            result, _, stderr = run_confirmation(fixture, contract_path, report_path)
+            result, _, stderr = _run_confirmation(fixture, contract_path, report_path)
 
             self.assertEqual(result, 1)
             self.assertIn("feature-selection stage status was 'obsolete'", stderr)
@@ -108,13 +108,13 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_invalid_selected_features_are_rejected_with_context(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area", "perimeter"))
+            contract_path, report_path = _prepare_human_review(fixture, ("area", "perimeter"))
             original_report = report_path.read_text()
-            cases = invalid_feature_cases(original_report)
+            cases = _invalid_feature_cases(original_report)
             for selected, report_text, offending, expected in cases:
                 with self.subTest(selected=selected):
-                    write_human_contract(contract_path, report_path, selected, report_text)
-                    result, _, stderr = run_confirmation(fixture, contract_path, report_path)
+                    _write_human_contract(contract_path, report_path, selected, report_text)
+                    result, _, stderr = _run_confirmation(fixture, contract_path, report_path)
                     self.assertEqual(result, 1)
                     self.assertIn(offending, stderr)
                     self.assertIn(expected, stderr)
@@ -122,10 +122,10 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_dirty_worktree_rejects_promotion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
             environment = FixedFeatureConfirmationEnvironment((" M reviewed_report.md",))
 
-            result, _, stderr = run_confirmation(
+            result, _, stderr = _run_confirmation(
                 fixture, contract_path, report_path, environment
             )
 
@@ -136,26 +136,26 @@ class FeatureConfirmationCliTest(unittest.TestCase):
     def test_provisional_or_tampered_confirmation_blocks_baselines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
-            self.assertEqual(run_confirmation(fixture, contract_path, report_path)[0], 0)
-            confirmed_dir = fixture.root / "evidence" / "confirmed" / "feature_selection" / "v1"
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
+            self.assertEqual(_run_confirmation(fixture, contract_path, report_path)[0], 0)
+            confirmed_dir = _confirmed_feature_dir(fixture)
             confirmed_contract = confirmed_dir / "shared_feature_contract.json"
             original = confirmed_contract.read_text()
             contract = json.loads(original)
             contract["status"] = "provisional"
             confirmed_contract.write_text(json.dumps(contract))
-            self.assertIn("baselines: blocked", run_baselines_gate(fixture)[1])
+            self.assertIn("baselines: blocked", _run_baselines_gate(fixture)[1])
             confirmed_contract.write_text(original)
             report = confirmed_dir / "feature_selection_report.md"
             report.write_text(f"{report.read_text()}\ntampered\n")
-            self.assertIn("baselines: blocked", run_baselines_gate(fixture)[1])
+            self.assertIn("baselines: blocked", _run_baselines_gate(fixture)[1])
 
     def test_confirmed_source_provenance_tampering_blocks_baselines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CuratedInputsFixture(Path(directory))
-            contract_path, report_path = prepare_human_review(fixture, ("area",))
-            self.assertEqual(run_confirmation(fixture, contract_path, report_path)[0], 0)
-            manifest_path = confirmed_feature_dir(fixture) / "manifest.json"
+            contract_path, report_path = _prepare_human_review(fixture, ("area",))
+            self.assertEqual(_run_confirmation(fixture, contract_path, report_path)[0], 0)
+            manifest_path = _confirmed_feature_dir(fixture) / "manifest.json"
             original = manifest_path.read_text()
             for field, value in (("source_commit", "g" * 40),
                                  ("source_feature_selection_manifest_sha256", "f" * 64)):
@@ -163,13 +163,13 @@ class FeatureConfirmationCliTest(unittest.TestCase):
                     manifest = json.loads(original)
                     manifest[field] = value
                     manifest_path.write_text(json.dumps(manifest))
-                    status, stdout, _ = run_baselines_gate(fixture)
+                    status, stdout, _ = _run_baselines_gate(fixture)
                     self.assertEqual(status, 0)
                     self.assertIn("baselines: blocked", stdout)
                     manifest_path.write_text(original)
 
 
-def prepare_human_review(
+def _prepare_human_review(
     fixture: CuratedInputsFixture, selected_features: tuple[str, ...]
 ) -> tuple[Path, Path]:
     provenance = FixedReportProvenance()
@@ -213,11 +213,11 @@ def _write_review_inputs(
     report_text = report_text.replace("não preenchidas", "revisadas")
     report_text = report_text.replace("não preenchido", "registrado no contrato")
     contract_path = fixture.root / "human_feature_contract.json"
-    write_human_contract(contract_path, report_path, selected_features, report_text)
+    _write_human_contract(contract_path, report_path, selected_features, report_text)
     return contract_path, report_path
 
 
-def write_human_contract(
+def _write_human_contract(
     contract_path: Path, report_path: Path, selected_features: tuple[str, ...],
     report_text: str,
 ) -> None:
@@ -237,7 +237,7 @@ def write_human_contract(
     contract_path.write_text(json.dumps(contract))
 
 
-def reviewed_report(feature_mentions: str) -> str:
+def _reviewed_report(feature_mentions: str) -> str:
     return (
         "# Relatório revisado\n\n"
         f"Features consideradas: {feature_mentions}.\n\n"
@@ -248,19 +248,19 @@ def reviewed_report(feature_mentions: str) -> str:
     )
 
 
-def invalid_feature_cases(
+def _invalid_feature_cases(
     original_report: str,
 ) -> tuple[tuple[tuple[str, ...], str, str, str], ...]:
     return (
         (("not_a_feature",), original_report, "not_a_feature", "26 candidate features"),
         (("area", "area"), original_report, "area", "unique features"),
         (("perimeter", "area"), original_report, "perimeter", "candidate order"),
-        (("perimeter",), reviewed_report("`area`"), "perimeter",
+        (("perimeter",), _reviewed_report("`area`"), "perimeter",
          "present in the reviewed report"),
     )
 
 
-def confirmed_feature_dir(fixture: CuratedInputsFixture) -> Path:
+def _confirmed_feature_dir(fixture: CuratedInputsFixture) -> Path:
     """Locate test evidence.
 
     Example: tampering tests edit the confirmed manifest.
@@ -268,10 +268,10 @@ def confirmed_feature_dir(fixture: CuratedInputsFixture) -> Path:
     return fixture.root / "evidence" / "confirmed" / "feature_selection" / "v1"
 
 
-def assert_confirmed_package(
+def _assert_confirmed_package(
     test_case: unittest.TestCase, fixture: CuratedInputsFixture,
 ) -> None:
-    confirmed_dir = confirmed_feature_dir(fixture)
+    confirmed_dir = _confirmed_feature_dir(fixture)
     contract_path = confirmed_dir / "shared_feature_contract.json"
     confirmed_contract = json.loads(contract_path.read_text())
     manifest = json.loads((confirmed_dir / "manifest.json").read_text())
@@ -283,7 +283,7 @@ def assert_confirmed_package(
     test_case.assertTrue((confirmed_dir / "source_feature_selection_manifest.json").is_file())
 
 
-def run_confirmation(
+def _run_confirmation(
     fixture: CuratedInputsFixture, contract_path: Path, report_path: Path,
     environment: FixedFeatureConfirmationEnvironment | None = None,
     dry_run: bool = False,
@@ -300,7 +300,7 @@ def run_confirmation(
     return result, stdout.getvalue(), stderr.getvalue()
 
 
-def run_baselines_gate(fixture: CuratedInputsFixture) -> tuple[int, str, str]:
+def _run_baselines_gate(fixture: CuratedInputsFixture) -> tuple[int, str, str]:
     stdout, stderr = io.StringIO(), io.StringIO()
     result = main(
         ["baselines", "--dry-run", "--config", str(fixture.config_path)],

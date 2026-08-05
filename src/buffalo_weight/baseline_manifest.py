@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from buffalo_weight.baseline_artifacts import (
@@ -39,6 +40,9 @@ MANIFEST_KEYS = {
     "outputs", "validations",
 }
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+InputRecordBuilder = Callable[
+    [ReportContract, tuple[str, ...]], dict[str, dict[str, object]]
+]
 
 
 def complete_baseline_manifest(
@@ -90,17 +94,39 @@ def baseline_identity(
         "dependencies": provenance.baseline_dependencies(configuration),
         "selected_features": list(consumed_features), "fold_seed": contract.inputs.fold_seed,
         "training_seed": 44, "report_contract": contract_identity(contract),
-        "inputs": _input_records(contract, definition.consumes_confirmed_features, features),
+        "inputs": _input_records(contract, configuration, features),
         "validations": BASELINE_VALIDATIONS,
     }
 
 
 def _input_records(
-    contract: ReportContract, consumes_confirmed_features: bool,
+    contract: ReportContract, configuration: BaselineConfiguration,
     features: tuple[str, ...],
 ) -> dict[str, dict[str, object]]:
-    consumed_features = features if consumes_confirmed_features else ()
-    records = {
+    builder = CONFIGURATION_INPUT_BUILDERS[configuration]
+    return builder(contract, features)
+
+
+def _reference_input_records(
+    contract: ReportContract, features: tuple[str, ...],
+) -> dict[str, dict[str, object]]:
+    del features
+    return _projected_model_inputs(contract, ())
+
+
+def _random_forest_input_records(
+    contract: ReportContract, features: tuple[str, ...],
+) -> dict[str, dict[str, object]]:
+    records = _projected_model_inputs(contract, features)
+    paths = _confirmed_input_paths(contract)
+    records.update({name: {"sha256": sha256_file(path)} for name, path in paths.items()})
+    return records
+
+
+def _projected_model_inputs(
+    contract: ReportContract, consumed_features: tuple[str, ...],
+) -> dict[str, dict[str, object]]:
+    return {
         "feature_index.csv": _csv_projection_record(
             contract.inputs_output_dir / "feature_index.csv",
             ("file_name", "weight_kg", *consumed_features),
@@ -110,9 +136,6 @@ def _input_records(
             ("file_name", "weight_category", "fold"),
         ),
     }
-    paths = _confirmed_input_paths(contract) if consumes_confirmed_features else {}
-    records.update({name: {"sha256": sha256_file(path)} for name, path in paths.items()})
-    return records
 
 
 def _confirmed_input_paths(contract: ReportContract) -> dict[str, Path]:
@@ -122,6 +145,18 @@ def _confirmed_input_paths(contract: ReportContract) -> dict[str, Path]:
         "confirmed_manifest.json": confirmed / "manifest.json",
         "source_feature_selection_manifest.json": confirmed / SOURCE_MANIFEST_NAME,
     }
+
+
+CONFIGURATION_INPUT_BUILDERS: dict[BaselineConfiguration, InputRecordBuilder] = {
+    "random_forest_baseline": _random_forest_input_records,
+    "training_mean_reference": _reference_input_records,
+}
+
+
+def baseline_input_builder_symbol(configuration: BaselineConfiguration) -> str:
+    """Name the input builder; for example, provenance hashes only the consumed projection."""
+    builder = CONFIGURATION_INPUT_BUILDERS[configuration]
+    return builder.__name__
 
 
 def _csv_projection_record(path: Path, columns: tuple[str, ...]) -> dict[str, object]:

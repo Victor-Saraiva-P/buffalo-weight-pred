@@ -169,6 +169,7 @@ def _shared_manifest_recipe_symbols() -> tuple[RecipeSymbol, ...]:
         ("buffalo_weight.baseline_manifest", "baseline_configuration_status"),
         ("buffalo_weight.baseline_manifest", "baseline_identity"),
         ("buffalo_weight.baseline_manifest", "_input_records"),
+        ("buffalo_weight.baseline_manifest", "_projected_model_inputs"),
         ("buffalo_weight.baseline_manifest", "_csv_projection_record"),
         ("buffalo_weight.baseline_manifest", "_output_records"),
         ("buffalo_weight.baseline_manifest", "_outputs_match"),
@@ -190,6 +191,7 @@ def _shared_orchestration_recipe_symbols() -> tuple[RecipeSymbol, ...]:
 
 def _random_forest_recipe_symbols() -> tuple[RecipeSymbol, ...]:
     return (
+        *_configuration_input_recipe_symbols("random_forest_baseline"),
         ("buffalo_weight.baseline_evaluation", "evaluate_random_forest_oof"),
         ("buffalo_weight.baseline_evaluation", "_training_partition"),
         ("buffalo_weight.baseline_evaluation", "_prediction_partition"),
@@ -203,13 +205,24 @@ def _random_forest_recipe_symbols() -> tuple[RecipeSymbol, ...]:
 
 def _training_mean_recipe_symbols() -> tuple[RecipeSymbol, ...]:
     return (
+        *_configuration_input_recipe_symbols("training_mean_reference"),
         ("buffalo_weight.baseline_evaluation", "evaluate_training_mean_reference"),
         ("buffalo_weight.baseline_evaluation", "_reference_rows"),
         ("buffalo_weight.baseline_stage", "_training_mean_predictions"),
     )
 
 
+def _configuration_input_recipe_symbols(
+    configuration: BaselineConfiguration,
+) -> tuple[RecipeSymbol, ...]:
+    from buffalo_weight.baseline_manifest import baseline_input_builder_symbol
+
+    symbol = baseline_input_builder_symbol(configuration)
+    return (("buffalo_weight.baseline_manifest", symbol),)
+
+
 def _recipe_constants(configuration: BaselineConfiguration) -> str:
+    from buffalo_weight.baseline_manifest import baseline_input_builder_symbol
     from buffalo_weight.baseline_stage import baseline_evaluator_symbol
 
     definition = baseline_definition(configuration)
@@ -220,6 +233,7 @@ def _recipe_constants(configuration: BaselineConfiguration) -> str:
         "validations": BASELINE_VALIDATIONS, "evaluation_role": definition.evaluation_role,
         "consumes_confirmed_features": definition.consumes_confirmed_features,
         "evaluator_symbol": baseline_evaluator_symbol(configuration),
+        "input_builder_symbol": baseline_input_builder_symbol(configuration),
     }
     if configuration == "random_forest_baseline":
         recipe_contract["model_recipe"] = RandomForestBaseline.recipe

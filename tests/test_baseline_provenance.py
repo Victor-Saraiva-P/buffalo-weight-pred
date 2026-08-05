@@ -60,6 +60,21 @@ class BaselineProvenanceTest(unittest.TestCase):
                     changed.baseline_recipe_hash(configuration),
                 )
 
+    def test_random_forest_input_projection_change_preserves_reference_recipe(self) -> None:
+        original = SystemBaselineProvenance(FixedBaselineEnvironment())
+        changed = SystemBaselineProvenance(FixedBaselineEnvironment(
+            ("buffalo_weight.baseline_manifest", "_random_forest_input_records")
+        ))
+
+        self.assertNotEqual(
+            original.baseline_recipe_hash("random_forest_baseline"),
+            changed.baseline_recipe_hash("random_forest_baseline"),
+        )
+        self.assertEqual(
+            original.baseline_recipe_hash("training_mean_reference"),
+            changed.baseline_recipe_hash("training_mean_reference"),
+        )
+
     def test_local_environment_reads_source_package_and_repository_identity(self) -> None:
         environment = LocalBaselineEnvironment()
 

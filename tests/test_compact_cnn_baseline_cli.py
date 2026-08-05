@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+
+from buffalo_weight.report_cli import main
+from tests.fake_compact_cnn import (
+    FixedCompactCnnProvenance,
+    RecordingCompactCnnAdapter,
+)
+from tests.test_feature_confirmation_cli import _prepare_human_review, _run_confirmation
+from tests.report_inputs_fixture import CuratedInputsFixture
+
+
+class CompactCnnBaselineCliTest(unittest.TestCase):
+    def test_cli_builds_isolated_oof_predictions_and_refits_each_fold(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _confirmed_fixture(Path(directory))
+            adapter = RecordingCompactCnnAdapter()
+
+            result, stdout, stderr = _run_baselines(fixture, adapter)
+
+            self.assertEqual(result, 0, stderr)
+            self.assertIn("baselines: released", stdout)
+            self.assertIn("compact_cnn: rebuilt", stdout)
+            self.assertEqual(len(adapter.selection_calls), 5)
+            self.assertEqual(len(adapter.refit_calls), 5)
+            self._assert_training_isolation(adapter)
+            self._assert_spatial_input_contract(adapter)
+            self._assert_public_artifacts(fixture)
+
+    def test_cli_reuses_current_artifact_and_detects_recipe_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _confirmed_fixture(Path(directory))
+            adapter = RecordingCompactCnnAdapter()
+            provenance = FixedCompactCnnProvenance()
+            self.assertEqual(_run_baselines(fixture, adapter, provenance)[0], 0)
+            selection_count = len(adapter.selection_calls)
+
+            reused = _run_baselines(fixture, adapter, provenance)
+
+            self.assertEqual(reused[0], 0, reused[2])
+            self.assertIn("compact_cnn: reusable", reused[1])
+            self.assertEqual(len(adapter.selection_calls), selection_count)
+            changed = FixedCompactCnnProvenance("7" * 64)
+            dry_run = _run_baselines(fixture, adapter, changed, "--dry-run")
+            self.assertEqual(dry_run[0], 0, dry_run[2])
+            self.assertIn("compact_cnn: obsolete", dry_run[1])
+            output = fixture.root / "generated/report/baselines/compact_cnn/metrics.csv"
+            output.write_text(f"{output.read_text()}tampered\n")
+            tampered = _run_baselines(fixture, adapter, provenance, "--dry-run")
+            self.assertIn("compact_cnn: obsolete", tampered[1])
+
+    def _assert_training_isolation(self, adapter: RecordingCompactCnnAdapter) -> None:
+        for (selection, stopping), (refit, epochs), held_out in zip(
+            adapter.selection_calls, adapter.refit_calls, adapter.prediction_calls
+        ):
+            selected_ids = set(selection.sample_ids)
+            stopping_ids = set(stopping.sample_ids)
+            held_out_ids = set(held_out.sample_ids)
+            self.assertTrue(selected_ids.isdisjoint(stopping_ids))
+            self.assertTrue((selected_ids | stopping_ids).isdisjoint(held_out_ids))
+            self.assertEqual(set(refit.sample_ids), selected_ids | stopping_ids)
+            self.assertEqual(epochs, 2)
+
+    def _assert_spatial_input_contract(self, adapter: RecordingCompactCnnAdapter) -> None:
+        batches = [call[0] for call in adapter.selection_calls]
+        self.assertTrue(all(batch.pixels.shape[1:] == (1, 224, 224) for batch in batches))
+        self.assertTrue(all(set(map(float, np.unique(batch.pixels))) <= {0.0, 1.0}
+                            for batch in batches))
+
+    def _assert_public_artifacts(self, fixture: CuratedInputsFixture) -> None:
+        output_dir = fixture.root / "generated" / "report" / "baselines" / "compact_cnn"
+        predictions = _read_rows(output_dir / "oof_predictions.csv")
+        metrics = _read_rows(output_dir / "metrics.csv")
+        manifest = json.loads((output_dir / "manifest.json").read_text())
+        self.assertEqual(len(predictions), fixture.sample_count)
+        self.assertEqual(len({row["file_name"] for row in predictions}), fixture.sample_count)
+        self.assertEqual({row["model"] for row in predictions}, {"compact_cnn"})
+        self.assertEqual({row["scope"] for row in metrics}, {"fold", "oof", "category"})
+        self.assertEqual(manifest["recipe"]["image_size"], 224)
+        self.assertEqual(manifest["recipe"]["optimizer"], "AdamW")
+        self.assertEqual(manifest["status"], "complete")
+
+
+def _confirmed_fixture(root: Path) -> CuratedInputsFixture:
+    fixture = CuratedInputsFixture(root, sample_count=100)
+    contract_path, report_path = _prepare_human_review(fixture, ("area", "perimeter"))
+    result, _, stderr = _run_confirmation(fixture, contract_path, report_path)
+    if result != 0:
+        raise AssertionError(f"feature confirmation returned {result}: {stderr}")
+    return fixture
+
+
+def _run_baselines(
+    fixture: CuratedInputsFixture, adapter: RecordingCompactCnnAdapter,
+    provenance: FixedCompactCnnProvenance | None = None, *extra: str,
+) -> tuple[int, str, str]:
+    stdout, stderr = io.StringIO(), io.StringIO()
+    result = main(
+        ["baselines", "--config", str(fixture.config_path), *extra],
+        stdout=stdout, stderr=stderr, compact_cnn_adapter=adapter,
+        compact_cnn_provenance=provenance or FixedCompactCnnProvenance(),
+    )
+    return result, stdout.getvalue(), stderr.getvalue()
+
+
+def _read_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as source:
+        return list(csv.DictReader(source))
+
+
+if __name__ == "__main__":
+    unittest.main()

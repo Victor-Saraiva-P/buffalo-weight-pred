@@ -11,6 +11,9 @@ from typing import TextIO
 
 from buffalo_weight.baseline_provenance import BaselineProvenance
 from buffalo_weight.baseline_stage import run_random_forest_baseline_stage
+from buffalo_weight.compact_cnn_adapter import CompactCnnTrainingAdapter
+from buffalo_weight.compact_cnn_provenance import CompactCnnProvenance
+from buffalo_weight.compact_cnn_stage import run_compact_cnn_stage
 from buffalo_weight.dense_baseline_stage import (
     DenseBaselineDependencies,
     run_dense_baseline_stage,
@@ -49,6 +52,8 @@ class _CliDependencies:
     random_forest_baseline: FeatureBaseline | None
     baseline_provenance: BaselineProvenance | None
     dense_baseline_dependencies: DenseBaselineDependencies | None
+    compact_cnn_adapter: CompactCnnTrainingAdapter | None
+    compact_cnn_provenance: CompactCnnProvenance | None
 
 
 def main(
@@ -62,6 +67,8 @@ def main(
     random_forest_baseline: FeatureBaseline | None = None,
     baseline_provenance: BaselineProvenance | None = None,
     dense_baseline_dependencies: DenseBaselineDependencies | None = None,
+    compact_cnn_adapter: CompactCnnTrainingAdapter | None = None,
+    compact_cnn_provenance: CompactCnnProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
@@ -70,6 +77,7 @@ def main(
         feature_selection_provenance, feature_confirmation_environment,
         random_forest_baseline, baseline_provenance,
         dense_baseline_dependencies,
+        compact_cnn_adapter, compact_cnn_provenance,
     )
     return _run_with_errors(arguments, dependencies, stdout, stderr)
 
@@ -191,6 +199,11 @@ def _run_baselines_command(
         dependencies.dense_baseline_dependencies,
     )
     print(dense_status.removeprefix("released; "), file=stdout)
+    compact_status = run_compact_cnn_stage(
+        contract, arguments.dry_run, dependencies.compact_cnn_adapter,
+        dependencies.compact_cnn_provenance,
+    )
+    print(f"compact_cnn: {compact_status}", file=stdout)
     return 0
 
 

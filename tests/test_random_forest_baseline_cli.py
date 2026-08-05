@@ -12,6 +12,7 @@ from buffalo_weight.feature_evaluation import FeatureBaseline
 from buffalo_weight.hashing import sha256_file
 from buffalo_weight.report_cli import main
 from tests.fake_baseline_provenance import FixedBaselineProvenance
+from tests.fake_compact_cnn import FixedCompactCnnProvenance, RecordingCompactCnnAdapter
 from tests.fake_dense_baseline import (
     FixedCudaRuntimeProbe,
     FixedDenseBaselineProvenance,
@@ -176,7 +177,7 @@ class RandomForestBaselineCliTest(unittest.TestCase):
 
 
 def _confirmed_fixture(directory: str) -> CuratedInputsFixture:
-    fixture = CuratedInputsFixture(Path(directory))
+    fixture = CuratedInputsFixture(Path(directory), sample_count=100)
     _confirm_features(fixture, ("area", "perimeter"))
     return fixture
 
@@ -246,8 +247,8 @@ def _assert_metric_artifacts(test_case: unittest.TestCase, output_dir: Path) -> 
 def _known_constant_prediction_metrics() -> dict[str, str]:
     return {
         "configuration": "random_forest_baseline", "evaluation_role": "candidate",
-        "population": "all", "n": "50", "mae_kg": "56.580000",
-        "rmse_kg": "68.822235", "bias_kg": "-53.500000", "r2": "-1.527144",
+        "population": "all", "n": "100", "mae_kg": "130.040000",
+        "rmse_kg": "154.956445", "bias_kg": "-128.500000", "r2": "-2.201854",
     }
 
 
@@ -266,7 +267,7 @@ def _assert_manifest(
 
 def _expected_outputs() -> tuple[tuple[str, int, list[str]], ...]:
     return (
-        ("predictions.csv", 50, PREDICTION_COLUMNS),
+        ("predictions.csv", 100, PREDICTION_COLUMNS),
         ("fold_metrics.csv", 5, METRIC_COLUMNS),
         ("grouped_metrics.csv", 3, GROUPED_METRIC_COLUMNS),
     )
@@ -326,6 +327,8 @@ def _run_baselines(
             FixedDenseBaselineRunner(), FixedDenseBaselineProvenance(),
             FixedCudaRuntimeProbe(),
         ),
+        compact_cnn_adapter=RecordingCompactCnnAdapter(),
+        compact_cnn_provenance=FixedCompactCnnProvenance(),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 

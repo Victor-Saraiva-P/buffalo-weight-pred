@@ -1,0 +1,183 @@
+{
+  "command": "python main.py feature-selection",
+  "decision_url": null,
+  "dependencies": {
+    "Pillow": "12.2.0",
+    "matplotlib": "3.11.0",
+    "numpy": "2.5.0",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.18.0",
+    "torch": "2.13.0"
+  },
+  "execution": {
+    "dense_device": "cuda",
+    "official": true,
+    "random_forest_device": "cpu"
+  },
+  "inputs": {
+    "canonical_split.csv": {
+      "row_count": 132,
+      "schema": [
+        "file_name",
+        "farm",
+        "weight_kg",
+        "weight_category",
+        "fold"
+      ],
+      "sha256": "eb5d8754b3377149ac99671ed66a3e311b6322550db6be89ef6d25c91097551e"
+    },
+    "feature_index.csv": {
+      "row_count": 132,
+      "schema": [
+        "file_name",
+        "farm",
+        "weight_kg",
+        "area",
+        "perimeter",
+        "solidity",
+        "circularity",
+        "equivalent_diameter",
+        "bbox_width",
+        "bbox_height",
+        "bbox_area",
+        "aspect_ratio",
+        "extent",
+        "convex_area",
+        "convexity",
+        "major_axis_length",
+        "minor_axis_length",
+        "roundness",
+        "feret_diameter",
+        "hu_moment_1",
+        "hu_moment_2",
+        "area_power_1_5",
+        "area_major_axis_product",
+        "center_vertical_occupancy",
+        "end_vertical_occupancy_min",
+        "end_vertical_occupancy_max",
+        "center_to_end_occupancy_ratio",
+        "centroid_x_offset",
+        "centroid_y_ratio"
+      ],
+      "sha256": "88d8a089c46a140fc2a1e71dec3029b1d80828573e28a587ea9012891a7fbd57"
+    },
+    "manifest.json": {
+      "row_count": 1,
+      "schema": [
+        "command",
+        "contract",
+        "dependencies",
+        "inputs",
+        "manifest_version",
+        "outputs",
+        "package_type",
+        "recipe_sha256",
+        "revision",
+        "row_count",
+        "source_commit",
+        "stage",
+        "status",
+        "validations"
+      ],
+      "sha256": "3b38c9b9ed2a8bb772cc92fb9d5843fef4f8946bfea571b4b150d2b61079d9d6"
+    }
+  },
+  "manifest_version": 1,
+  "outputs": {
+    "feature_predictive_evidence.csv": {
+      "row_count": 3816,
+      "schema": [
+        "experiment",
+        "baseline",
+        "target",
+        "scope",
+        "fold",
+        "repetition",
+        "permutation_seed",
+        "n",
+        "reference_mae_kg",
+        "result_mae_kg",
+        "delta_mae_kg",
+        "effect"
+      ],
+      "sha256": "ae26a744033488ece90d81931a292ea45df28edd4b34b53e2709d2ec112e160d"
+    },
+    "feature_redundancy.csv": {
+      "row_count": 325,
+      "schema": [
+        "feature_a",
+        "feature_b",
+        "structural_relation",
+        "pearson",
+        "spearman",
+        "removal_group"
+      ],
+      "sha256": "82b2d72b6b61f30ad41a28d5e839cf8b0d3d3be1445e98980d4865a0c3d42b3a"
+    },
+    "feature_selection_report.md": {
+      "row_count": 450,
+      "schema": "markdown",
+      "sha256": "b3fc8d8d52a69bef6a06a65a03e7e816b74cdd5bd3aa77cddfc77414f407e61a"
+    },
+    "permutation_effects.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "ec2ae54abac48c71127b5ee4ddb1cec26038e327767c474e9cfe2030c67ee753"
+    },
+    "redundancy_heatmap.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "d5541fbdb2e3d66557473548bbd738ee82c74f66df109c62f97533341d927e85"
+    },
+    "removal_heatmap.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "61dd4a02a84977ffb37f14258a93f9f80e88675ee302aa2e089cbc443a32c553"
+    },
+    "shared_feature_contract.json": {
+      "row_count": 1,
+      "schema": [
+        "candidate_features",
+        "human_decision",
+        "recommendations",
+        "report_sha256",
+        "schema_version",
+        "selected_features",
+        "standardization",
+        "status"
+      ],
+      "sha256": "7654d346d15f5598c85229e359c54f68a3833e729505d9162f9768b3aa9bc0ce"
+    }
+  },
+  "package_type": "reconstructible_stage",
+  "recipe_sha256": "75fe1863c4298f316041d8e851ebd45c8625a78d2d7589f9e0a115f03891cdf5",
+  "report_sha256": "b3fc8d8d52a69bef6a06a65a03e7e816b74cdd5bd3aa77cddfc77414f407e61a",
+  "revision": 1,
+  "source_commit": "fa1effa892d60d64720f3c13f236b3ca5506e03b",
+  "stage": "feature_selection",
+  "status": "provisional",
+  "validations": [
+    "schemas",
+    "ordering",
+    "sha256",
+    "experiment_coverage",
+    "human_decision_absent",
+    "figures_300_dpi",
+    "official_execution"
+  ]
+}

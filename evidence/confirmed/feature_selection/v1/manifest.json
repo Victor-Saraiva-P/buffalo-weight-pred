@@ -1,0 +1,197 @@
+{
+  "command": "python main.py confirm-features",
+  "decision": {
+    "sha256": "521c71eac312cc333d7cdf8cddc8fb900064fce3a331795007b423fc3d57cb5c",
+    "url": "https://github.com/Victor-Saraiva-P/buffalo-weight-pred/issues/16#issuecomment-5185467162"
+  },
+  "inputs": {
+    "canonical_split.csv": {
+      "row_count": 132,
+      "schema": [
+        "file_name",
+        "farm",
+        "weight_kg",
+        "weight_category",
+        "fold"
+      ],
+      "sha256": "eb5d8754b3377149ac99671ed66a3e311b6322550db6be89ef6d25c91097551e"
+    },
+    "feature_index.csv": {
+      "row_count": 132,
+      "schema": [
+        "file_name",
+        "farm",
+        "weight_kg",
+        "area",
+        "perimeter",
+        "solidity",
+        "circularity",
+        "equivalent_diameter",
+        "bbox_width",
+        "bbox_height",
+        "bbox_area",
+        "aspect_ratio",
+        "extent",
+        "convex_area",
+        "convexity",
+        "major_axis_length",
+        "minor_axis_length",
+        "roundness",
+        "feret_diameter",
+        "hu_moment_1",
+        "hu_moment_2",
+        "area_power_1_5",
+        "area_major_axis_product",
+        "center_vertical_occupancy",
+        "end_vertical_occupancy_min",
+        "end_vertical_occupancy_max",
+        "center_to_end_occupancy_ratio",
+        "centroid_x_offset",
+        "centroid_y_ratio"
+      ],
+      "sha256": "88d8a089c46a140fc2a1e71dec3029b1d80828573e28a587ea9012891a7fbd57"
+    },
+    "manifest.json": {
+      "row_count": 1,
+      "schema": [
+        "command",
+        "contract",
+        "dependencies",
+        "inputs",
+        "manifest_version",
+        "outputs",
+        "package_type",
+        "recipe_sha256",
+        "revision",
+        "row_count",
+        "source_commit",
+        "stage",
+        "status",
+        "validations"
+      ],
+      "sha256": "3b38c9b9ed2a8bb772cc92fb9d5843fef4f8946bfea571b4b150d2b61079d9d6"
+    }
+  },
+  "manifest_version": 1,
+  "outputs": {
+    "feature_predictive_evidence.csv": {
+      "row_count": 3816,
+      "schema": [
+        "experiment",
+        "baseline",
+        "target",
+        "scope",
+        "fold",
+        "repetition",
+        "permutation_seed",
+        "n",
+        "reference_mae_kg",
+        "result_mae_kg",
+        "delta_mae_kg",
+        "effect"
+      ],
+      "sha256": "ae26a744033488ece90d81931a292ea45df28edd4b34b53e2709d2ec112e160d"
+    },
+    "feature_redundancy.csv": {
+      "row_count": 325,
+      "schema": [
+        "feature_a",
+        "feature_b",
+        "structural_relation",
+        "pearson",
+        "spearman",
+        "removal_group"
+      ],
+      "sha256": "82b2d72b6b61f30ad41a28d5e839cf8b0d3d3be1445e98980d4865a0c3d42b3a"
+    },
+    "feature_selection_report.md": {
+      "row_count": 455,
+      "schema": "markdown",
+      "sha256": "fe41afeb97be92d6e35c407d5d195693ea7f904b7b28094fbb9d27f12fe7622a"
+    },
+    "permutation_effects.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "ec2ae54abac48c71127b5ee4ddb1cec26038e327767c474e9cfe2030c67ee753"
+    },
+    "redundancy_heatmap.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "d5541fbdb2e3d66557473548bbd738ee82c74f66df109c62f97533341d927e85"
+    },
+    "removal_heatmap.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "61dd4a02a84977ffb37f14258a93f9f80e88675ee302aa2e089cbc443a32c553"
+    },
+    "shared_feature_contract.json": {
+      "row_count": 1,
+      "schema": [
+        "human_decision",
+        "report_sha256",
+        "schema_version",
+        "selected_features",
+        "standardization",
+        "status"
+      ],
+      "sha256": "521c71eac312cc333d7cdf8cddc8fb900064fce3a331795007b423fc3d57cb5c"
+    },
+    "source_feature_selection_manifest.json": {
+      "row_count": 1,
+      "schema": [
+        "command",
+        "decision_url",
+        "dependencies",
+        "execution",
+        "inputs",
+        "manifest_version",
+        "outputs",
+        "package_type",
+        "recipe_sha256",
+        "report_sha256",
+        "revision",
+        "source_commit",
+        "stage",
+        "status",
+        "validations"
+      ],
+      "sha256": "680cf00b9ed4a6844440d86c55f0b94d9fb766fc5a09e61b0fb224a447d62be5"
+    }
+  },
+  "package_type": "confirmed_evidence",
+  "report_sha256": "fe41afeb97be92d6e35c407d5d195693ea7f904b7b28094fbb9d27f12fe7622a",
+  "revision": 1,
+  "source_commit": "fa1effa892d60d64720f3c13f236b3ca5506e03b",
+  "source_execution": {
+    "dense_device": "cuda",
+    "official": true,
+    "random_forest_device": "cpu"
+  },
+  "source_feature_selection_manifest_sha256": "680cf00b9ed4a6844440d86c55f0b94d9fb766fc5a09e61b0fb224a447d62be5",
+  "status": "confirmed",
+  "validations": [
+    "source_integrity",
+    "schemas",
+    "ordering",
+    "sha256",
+    "human_review",
+    "candidate_subset",
+    "official_execution",
+    "clean_worktree"
+  ]
+}

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 
 from buffalo_weight.report_cli import main
 from tests.fake_compact_cnn import (
@@ -118,6 +119,8 @@ class CompactCnnBaselineCliTest(unittest.TestCase):
             np.testing.assert_array_equal(original.sum(axis=(1, 2, 3)),
                                           augmented.sum(axis=(1, 2, 3)))
             self.assertLessEqual(set(map(float, np.unique(augmented))), {0.0, 1.0})
+            self.assertTrue(all(_is_valid_conservative_transform(before, after)
+                                for before, after in zip(original, augmented, strict=True)))
             changed.append(not np.array_equal(original, augmented))
         self.assertTrue(any(changed))
         self.assertTrue(all(set(map(float, np.unique(pixels))) <= {0.0, 1.0}
@@ -167,6 +170,42 @@ def _read_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as source:
         rows = list(csv.DictReader(source))
     return rows
+
+
+def _is_valid_conservative_transform(
+    original: NDArray[np.float32], augmented: NDArray[np.float32],
+) -> bool:
+    augmented_origin = _foreground_origin(augmented)
+    for candidate in (original, np.flip(original, axis=2)):
+        candidate_origin = _foreground_origin(candidate)
+        shift_y = augmented_origin[0] - candidate_origin[0]
+        shift_x = augmented_origin[1] - candidate_origin[1]
+        if abs(shift_y) > 11 or abs(shift_x) > 11:
+            continue
+        if np.array_equal(_translate_mask(candidate, shift_y, shift_x), augmented):
+            return True
+    return False
+
+
+def _foreground_origin(mask: NDArray[np.float32]) -> tuple[int, int]:
+    coordinates = np.argwhere(mask[0] > 0)
+    origin = (int(coordinates[:, 0].min()), int(coordinates[:, 1].min()))
+    return origin
+
+
+def _translate_mask(
+    mask: NDArray[np.float32], shift_y: int, shift_x: int,
+) -> NDArray[np.float32]:
+    translated = np.roll(mask, shift=(shift_y, shift_x), axis=(1, 2))
+    if shift_y > 0:
+        translated[:, :shift_y, :] = 0
+    elif shift_y < 0:
+        translated[:, shift_y:, :] = 0
+    if shift_x > 0:
+        translated[:, :, :shift_x] = 0
+    elif shift_x < 0:
+        translated[:, :, shift_x:] = 0
+    return translated
 
 
 if __name__ == "__main__":

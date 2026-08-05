@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.metadata
+import inspect
 import subprocess
 from pathlib import Path
 from typing import Protocol
@@ -40,11 +42,12 @@ class SystemCompactCnnProvenance:
 
     def compact_cnn_recipe_hash(self) -> str:
         """Hash compact-CNN knowledge; for example, unrelated diagnostics are excluded."""
-        source_root = Path(__file__).parent
         digest = hashlib.sha256()
-        for name in _recipe_module_names():
-            digest.update(name.encode())
-            digest.update((source_root / name).read_bytes())
+        for module_name, symbol_name in _recipe_source_symbols():
+            qualified_name = f"{module_name}:{symbol_name}"
+            digest.update(qualified_name.encode())
+            module = importlib.import_module(module_name)
+            digest.update(inspect.getsource(getattr(module, symbol_name)).encode())
         return digest.hexdigest()
 
     def compact_cnn_dependencies(self) -> dict[str, str]:
@@ -72,11 +75,37 @@ class SystemCompactCnnProvenance:
         }
 
 
-def _recipe_module_names() -> tuple[str, ...]:
-    names = (
-        "compact_cnn_adapter.py", "compact_cnn_artifacts.py",
-        "compact_cnn_augmentation.py", "compact_cnn_evaluation.py",
-        "compact_cnn_network.py", "compact_cnn_provenance.py",
-        "compact_cnn_stage.py", "compact_cnn_types.py",
+def _recipe_source_symbols() -> tuple[tuple[str, str], ...]:
+    prefix = "buffalo_weight"
+    symbols = (
+        (f"{prefix}.compact_cnn_types", "CompactCnnRecipe"),
+        (f"{prefix}.compact_cnn_types", "CompactCnnTargetScale"),
+        (f"{prefix}.compact_cnn_network", "CompactCnnNetwork"),
+        (f"{prefix}.compact_cnn_network", "DeterministicAdaptiveAveragePool4"),
+        *(_augmentation_symbols(prefix)), *(_training_symbols(prefix)),
+        *(_evaluation_symbols(prefix)),
     )
-    return names
+    return symbols
+
+
+def _augmentation_symbols(prefix: str) -> tuple[tuple[str, str], ...]:
+    module = f"{prefix}.compact_cnn_augmentation"
+    names = ("augment_binary_masks", "_augment_one", "_valid_translation",
+             "_translation_limits", "_sample_shift", "_translate_without_wrap")
+    return tuple((module, name) for name in names)
+
+
+def _training_symbols(prefix: str) -> tuple[tuple[str, str], ...]:
+    module = f"{prefix}.compact_cnn_adapter"
+    names = ("CompactCnnAdapter", "TorchCompactCnnPredictor", "_optimizer",
+             "_train_epoch", "_validation_mae", "_seed_everything")
+    return tuple((module, name) for name in names)
+
+
+def _evaluation_symbols(prefix: str) -> tuple[tuple[str, str], ...]:
+    module = f"{prefix}.compact_cnn_evaluation"
+    names = ("evaluate_compact_cnn", "_evaluate_fold", "_inner_samples", "_mask_batch",
+             "load_compact_cnn_samples", "load_letterboxed_mask",
+             "fit_compact_target_scale", "_sample_from_row", "_nearest_letterbox",
+             "_validate_oof_predictions")
+    return tuple((module, name) for name in names)

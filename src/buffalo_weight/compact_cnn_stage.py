@@ -14,12 +14,12 @@ from buffalo_weight.compact_cnn_types import (
     CompactCnnRunStatus,
     CompactCnnTrainingAdapter,
 )
-from buffalo_weight.compact_cnn_artifacts import (
+from buffalo_weight.compact_cnn_artifacts import write_compact_cnn_artifacts
+from buffalo_weight.compact_cnn_manifest import (
     build_compact_cnn_manifest,
     compact_cnn_output_dir,
     compact_cnn_status,
     validate_compact_cnn_manifest,
-    write_compact_cnn_artifacts,
     write_manifest_last,
 )
 from buffalo_weight.compact_cnn_evaluation import (

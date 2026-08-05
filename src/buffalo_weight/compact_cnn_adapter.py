@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,16 +34,6 @@ class TorchCudaRuntime:
         available = torch.cuda.is_available()
         usable = bool(available)
         return usable
-
-
-@dataclass(frozen=True)
-class CompactCnnContractProbe:
-    device_type: str
-    loss: float
-    has_gradients: bool
-    parameters_updated: bool
-    predictions: tuple[float, ...]
-    model: CompactCnnNetwork
 
 
 class TorchCompactCnnPredictor:
@@ -118,48 +106,6 @@ class CompactCnnAdapter:
         predictor = TorchCompactCnnPredictor(model, target_scale, self.device)
         return predictor
 
-    def contract_probe(self, seed: int = 44) -> CompactCnnContractProbe:
-        """Exercise CUDA behavior; for example, tests perform one tiny parameter update."""
-        model = self.create_model(seed)
-        inputs = _compact_cnn_probe_inputs(self.device)
-        targets = torch.tensor([-0.5, 0.5], device=self.device)
-        before = [parameter.detach().clone() for parameter in model.parameters()]
-        optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0001)
-        loss = nn.functional.l1_loss(model(inputs), targets)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()  # type: ignore[no-untyped-call]
-        gradients = all(parameter.grad is not None for parameter in model.parameters())
-        nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-        optimizer.step()
-        updated = any(not torch.equal(old, new) for old, new in zip(before, model.parameters()))
-        predictions = _probe_predictions(model, inputs)
-        return CompactCnnContractProbe("cuda", float(loss.item()), gradients, updated,
-                                       predictions, model)
-
-    def save_model(self, model: CompactCnnNetwork, path: Path) -> None:
-        """Save an owned checkpoint; for example, CUDA tests reload the same weights."""
-        payload = {"state_dict": model.state_dict()}
-        torch.save(payload, path)
-        return None
-
-    def load_model(self, path: Path, seed: int = 44) -> CompactCnnNetwork:
-        """Load an owned checkpoint; for example, tensors remain on CUDA."""
-        payload = torch.load(path, map_location=self.device, weights_only=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("state_dict"), dict):
-            raise ValueError(
-                f"checkpoint payload was {type(payload).__name__}; expected state_dict"
-            )
-        model = self.create_model(seed)
-        model.load_state_dict(cast(dict[str, torch.Tensor], payload["state_dict"]))
-        return model
-
-    def probe_predictions(self, model: CompactCnnNetwork) -> tuple[float, ...]:
-        """Predict the fixed CUDA probe; for example, checkpoint tests compare values."""
-        inputs = _compact_cnn_probe_inputs(self.device)
-        predictions = _probe_predictions(model, inputs)
-        return predictions
-
-
 def _optimizer(model: CompactCnnNetwork, recipe: CompactCnnRecipe) -> torch.optim.AdamW:
     parameters = model.parameters()
     optimizer = torch.optim.AdamW(parameters, lr=recipe.learning_rate,
@@ -198,20 +144,6 @@ def _validation_mae(
     predictions = target_scale.restore(np.asarray(standardized, dtype=np.float64))
     absolute_errors = np.abs(batch.targets_kg - predictions)
     return float(np.mean(absolute_errors))
-
-
-def _compact_cnn_probe_inputs(device: torch.device) -> torch.Tensor:
-    inputs = torch.zeros((2, 1, 32, 32), device=device)
-    inputs[:, :, 8:24, 6:26] = 1.0
-    return inputs
-
-
-def _probe_predictions(model: CompactCnnNetwork, inputs: torch.Tensor) -> tuple[float, ...]:
-    model.eval()
-    with torch.no_grad():
-        values = model(inputs).detach().cpu().tolist()
-    predictions = tuple(float(value) for value in values)
-    return predictions
 
 
 def _seed_everything(seed: int) -> None:

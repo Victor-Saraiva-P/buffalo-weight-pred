@@ -12,6 +12,7 @@ from torch import nn
 
 from buffalo_weight.compact_cnn_adapter import CompactCnnAdapter
 from buffalo_weight.compact_cnn_augmentation import augment_binary_masks
+from buffalo_weight.compact_cnn_cuda_contract import CompactCnnContractAdapter
 from buffalo_weight.compact_cnn_network import DeterministicAdaptiveAveragePool4
 from buffalo_weight.compact_cnn_types import (
     COMPACT_CNN_RECIPE, CompactCnnTargetScale, MaskBatch,
@@ -34,7 +35,7 @@ class UnavailableCompactCnnRuntime:
 
 class CompactCnnAdapterCudaTest(unittest.TestCase):
     def test_frozen_recipe_and_architecture_match_the_protocol(self) -> None:
-        adapter = CompactCnnAdapter()
+        adapter = CompactCnnContractAdapter()
         model = adapter.create_model(44)
         convolutions = [layer for layer in model.layers if isinstance(layer, nn.Conv2d)]
         pools = [layer for layer in model.layers if isinstance(layer, nn.MaxPool2d)]
@@ -67,7 +68,7 @@ class CompactCnnAdapterCudaTest(unittest.TestCase):
             self.assertLessEqual(abs(int(foreground[:, 1].min()) - 30), 11)
 
     def test_cuda_step_checkpoint_device_and_seed_reproduce(self) -> None:
-        adapter = CompactCnnAdapter()
+        adapter = CompactCnnContractAdapter()
         first = adapter.contract_probe(seed=44)
         second = adapter.contract_probe(seed=44)
         self.assertEqual(first.device_type, "cuda")

@@ -17,7 +17,9 @@ from buffalo_weight.feature_selection_manifest import (
     artifact_output_records,
     feature_selection_input_records,
 )
-from buffalo_weight.feature_selection_validation import validate_feature_selection_evidence_files
+from buffalo_weight.feature_selection_validation import (
+    validate_feature_selection_evidence_files,
+)
 from buffalo_weight.hashing import sha256_file
 from buffalo_weight.reproduction_config import ReportContract
 
@@ -170,11 +172,29 @@ def _validate_manifest_inputs(
     manifest: dict[str, object], report_contract: ReportContract,
 ) -> None:
     expected_inputs = feature_selection_input_records(report_contract)
-    if manifest.get("inputs") != expected_inputs:
+    recorded_inputs = manifest.get("inputs")
+    if not isinstance(recorded_inputs, dict):
         raise ValueError(
-            f"confirmed manifest inputs were {manifest.get('inputs')!r}; "
+            f"confirmed manifest inputs were {recorded_inputs!r}; expected an input mapping"
+        )
+    table_names = ("feature_index.csv", "canonical_split.csv")
+    tables_match = all(recorded_inputs.get(name) == expected_inputs[name]
+                       for name in table_names)
+    manifest_shape_matches = _input_manifest_shape(recorded_inputs) == (
+        _input_manifest_shape(expected_inputs)
+    )
+    if not tables_match or not manifest_shape_matches:
+        raise ValueError(
+            f"confirmed manifest inputs were {recorded_inputs!r}; "
             f"expected current inputs {expected_inputs!r}"
         )
+
+
+def _input_manifest_shape(inputs: dict[str, object]) -> tuple[object, object]:
+    record = inputs.get("manifest.json")
+    if not isinstance(record, dict):
+        return (None, None)
+    return record.get("row_count"), record.get("schema")
 
 
 def _validate_manifest_links(

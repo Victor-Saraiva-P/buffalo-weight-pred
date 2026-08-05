@@ -7,10 +7,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from buffalo_weight.dense_baseline_stage import DenseBaselineDependencies
 from buffalo_weight.feature_evaluation import FeatureBaseline
 from buffalo_weight.hashing import sha256_file
 from buffalo_weight.report_cli import main
 from tests.fake_baseline_provenance import FixedBaselineProvenance
+from tests.fake_dense_baseline import (
+    FixedCudaRuntimeProbe,
+    FixedDenseBaselineProvenance,
+    FixedDenseBaselineRunner,
+)
 from tests.fake_feature_evaluation import (
     ConstantFeatureBaseline,
     FailingFeatureBaseline,
@@ -19,7 +25,6 @@ from tests.fake_feature_evaluation import (
 from tests.fake_report_provenance import FixedReportProvenance
 from tests.report_inputs_fixture import CuratedInputsFixture
 from tests.test_feature_confirmation_cli import _prepare_human_review, _run_confirmation
-
 
 PREDICTION_COLUMNS = [
     "configuration", "evaluation_role", "file_name", "weight_category", "fold",
@@ -317,6 +322,10 @@ def _run_baselines(
         stdout=stdout, stderr=stderr, random_forest_baseline=random_forest,
         baseline_provenance=provenance or FixedBaselineProvenance(),
         report_provenance=FixedReportProvenance(),
+        dense_baseline_dependencies=DenseBaselineDependencies(
+            FixedDenseBaselineRunner(), FixedDenseBaselineProvenance(),
+            FixedCudaRuntimeProbe(),
+        ),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 

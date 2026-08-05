@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from buffalo_weight.dense_feature_adapter import (
+    DEFAULT_DENSE_TRAINING_RECIPE,
     DenseFeatureAdapter,
     DenseFeatureNetwork,
     DenseTargetScale,
@@ -42,7 +44,7 @@ class RandomForestBaseline:
     """Frozen Random Forest baseline; for example, inject it into feature evaluation."""
 
     name: FeatureBaselineName = "random_forest"
-    recipe: dict[str, bool | float | int | str | None] = {
+    recipe: ClassVar[dict[str, bool | float | int | str | None]] = {
         "n_estimators": 500,
         "criterion": "squared_error",
         "bootstrap": True,
@@ -62,7 +64,7 @@ class RandomForestBaseline:
         return SklearnFeaturePredictor(regressor)
 
 
-DENSE_BASELINE_RECIPE = DenseTrainingRecipe()
+DENSE_BASELINE_RECIPE = DEFAULT_DENSE_TRAINING_RECIPE
 
 
 @dataclass(frozen=True)

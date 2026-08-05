@@ -8,8 +8,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from buffalo_weight.dense_baseline_stage import DenseBaselineDependencies
 from buffalo_weight.report_cli import main
 from buffalo_weight.resnet_baseline_artifacts import METRIC_COLUMNS, PREDICTION_COLUMNS
+from tests.fake_baseline_provenance import FixedBaselineProvenance
+from tests.fake_compact_cnn import FixedCompactCnnProvenance, RecordingCompactCnnAdapter
+from tests.fake_dense_baseline import (
+    FixedCudaRuntimeProbe,
+    FixedDenseBaselineProvenance,
+    FixedDenseBaselineRunner,
+)
+from tests.fake_feature_evaluation import RecordingFeatureBaseline
+from tests.fake_report_provenance import FixedReportProvenance
 from tests.fake_resnet_baseline import (
     FailingResNetBaselineRunner,
     FixedResNetBaselineProvenance,
@@ -157,7 +167,7 @@ class ResNetBaselineCliTest(unittest.TestCase):
 
 
 def prepared_fixture(root: Path) -> CuratedInputsFixture:
-    fixture = CuratedInputsFixture(root)
+    fixture = CuratedInputsFixture(root, sample_count=100)
     contract_path, report_path = _prepare_human_review(fixture, ("area", "perimeter"))
     result, _, stderr = _run_confirmation(fixture, contract_path, report_path)
     if result != 0:
@@ -174,6 +184,15 @@ def run_baselines(
         ["baselines", "--config", str(fixture.config_path), *extra],
         stdout=stdout, stderr=stderr, resnet_baseline_runner=runner,
         resnet_baseline_provenance=provenance or FixedResNetBaselineProvenance(),
+        random_forest_baseline=RecordingFeatureBaseline(),
+        baseline_provenance=FixedBaselineProvenance(),
+        report_provenance=FixedReportProvenance(),
+        dense_baseline_dependencies=DenseBaselineDependencies(
+            FixedDenseBaselineRunner(), FixedDenseBaselineProvenance(),
+            FixedCudaRuntimeProbe(),
+        ),
+        compact_cnn_adapter=RecordingCompactCnnAdapter(),
+        compact_cnn_provenance=FixedCompactCnnProvenance(),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 

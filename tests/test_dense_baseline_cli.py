@@ -24,6 +24,7 @@ from buffalo_weight.feature_selection_manifest import artifact_output_records
 from buffalo_weight.report_cli import main
 from buffalo_weight.report_provenance import ReportProvenance
 from tests.fake_baseline_provenance import FixedBaselineProvenance
+from tests.fake_compact_cnn import FixedCompactCnnProvenance, RecordingCompactCnnAdapter
 from tests.fake_dense_baseline import (
     ChangedInputsProvenance,
     FailingDenseBaselineRunner,
@@ -42,7 +43,7 @@ from tests.test_feature_confirmation_cli import _prepare_human_review, _run_conf
 class DenseBaselineCliTest(unittest.TestCase):
     def test_builds_oof_predictions_metrics_and_manifest_from_confirmed_features(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            fixture = CuratedInputsFixture(Path(directory))
+            fixture = CuratedInputsFixture(Path(directory), sample_count=100)
             contract_path, report_path = _prepare_human_review(
                 fixture, ("area", "perimeter"),
             )
@@ -229,12 +230,14 @@ def run_baselines(
         random_forest_baseline=RecordingFeatureBaseline(),
         baseline_provenance=FixedBaselineProvenance(),
         report_provenance=inputs_provenance or FixedReportProvenance(),
+        compact_cnn_adapter=RecordingCompactCnnAdapter(),
+        compact_cnn_provenance=FixedCompactCnnProvenance(),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 
 
 def prepared_fixture(
-    root: Path, sample_count: int = 50,
+    root: Path, sample_count: int = 100,
 ) -> tuple[CuratedInputsFixture, FixedDenseBaselineRunner]:
     """Build a released feature gate; for example, cache tests begin from valid inputs."""
     fixture = CuratedInputsFixture(root, sample_count)

@@ -10,15 +10,24 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
+from buffalo_weight.compact_cnn_types import CompactCnnTrainingAdapter
+from buffalo_weight.dense_baseline_stage import DenseBaselineDependencies
 from buffalo_weight.report_cli import main
+from tests.fake_baseline_provenance import FixedBaselineProvenance
 from tests.fake_compact_cnn import (
     FailingCompactCnnAdapter,
     FixedCompactCnnProvenance,
     RecordingCompactCnnAdapter,
 )
-from buffalo_weight.compact_cnn_types import CompactCnnTrainingAdapter
-from tests.test_feature_confirmation_cli import _prepare_human_review, _run_confirmation
+from tests.fake_dense_baseline import (
+    FixedCudaRuntimeProbe,
+    FixedDenseBaselineProvenance,
+    FixedDenseBaselineRunner,
+)
+from tests.fake_feature_evaluation import RecordingFeatureBaseline
+from tests.fake_report_provenance import FixedReportProvenance
 from tests.report_inputs_fixture import CuratedInputsFixture
+from tests.test_feature_confirmation_cli import _prepare_human_review, _run_confirmation
 
 
 class CompactCnnBaselineCliTest(unittest.TestCase):
@@ -162,6 +171,13 @@ def _run_baselines(
         ["baselines", "--config", str(fixture.config_path), *extra],
         stdout=stdout, stderr=stderr, compact_cnn_adapter=adapter,
         compact_cnn_provenance=provenance or FixedCompactCnnProvenance(),
+        random_forest_baseline=RecordingFeatureBaseline(),
+        baseline_provenance=FixedBaselineProvenance(),
+        report_provenance=FixedReportProvenance(),
+        dense_baseline_dependencies=DenseBaselineDependencies(
+            FixedDenseBaselineRunner(), FixedDenseBaselineProvenance(),
+            FixedCudaRuntimeProbe(),
+        ),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 

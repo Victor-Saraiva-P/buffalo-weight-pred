@@ -5,12 +5,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
-from typing import Protocol
+from typing import Protocol, cast
 
 import numpy as np
-from numpy.typing import NDArray
 import torch
+from numpy.typing import NDArray
 from torch import nn
 
 
@@ -29,6 +28,9 @@ class DenseTrainingRecipe:
     training_seed: int = 44
 
 
+DEFAULT_DENSE_TRAINING_RECIPE = DenseTrainingRecipe()
+
+
 @dataclass(frozen=True)
 class DenseTargetScale:
     mean_kg: float
@@ -45,7 +47,7 @@ class DenseTargetScale:
         return np.asarray(targets_kg, dtype=np.float64)
 
 
-class DenseFeatureNetwork(nn.Module):
+class DenseFeatureNetwork(nn.Module):  # type: ignore[misc]
     """Frozen dense architecture; for example, the adapter supplies its declared recipe."""
 
     def __init__(self, input_count: int, recipe: DenseTrainingRecipe) -> None:
@@ -106,15 +108,17 @@ class DenseFeatureAdapter:
 
     def create_model(
         self, input_count: int, seed: int,
-        recipe: DenseTrainingRecipe = DenseTrainingRecipe(),
+        recipe: DenseTrainingRecipe = DEFAULT_DENSE_TRAINING_RECIPE,
     ) -> DenseFeatureNetwork:
         """Create a seeded CUDA model; for example, ``adapter.create_model(26, 44)``."""
         _seed_everything(seed)
-        return DenseFeatureNetwork(input_count, recipe).to(self.device)
+        model = DenseFeatureNetwork(input_count, recipe)
+        model.to(self.device)
+        return model
 
     def contract_probe(
         self, input_count: int, seed: int,
-        recipe: DenseTrainingRecipe = DenseTrainingRecipe(),
+        recipe: DenseTrainingRecipe = DEFAULT_DENSE_TRAINING_RECIPE,
     ) -> DenseContractProbe:
         """Exercise the adapter contract; for example, CUDA tests call one tiny update."""
         model = self.create_model(input_count, seed, recipe)
@@ -123,7 +127,7 @@ class DenseFeatureAdapter:
         optimizer = self._optimizer(model, recipe)
         loss = nn.functional.l1_loss(model(inputs), targets)
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()  # type: ignore[no-untyped-call]
+        loss.backward()
         gradients = all(parameter.grad is not None for parameter in model.parameters())
         nn.utils.clip_grad_norm_(model.parameters(), recipe.gradient_clip)
         optimizer.step()
@@ -135,7 +139,6 @@ class DenseFeatureAdapter:
         """Save an owned checkpoint; for example, ``adapter.save_model(model, path)``."""
         payload = {"state_dict": model.state_dict(), "input_count": model.input_count}
         torch.save(payload, path)
-        return None
 
     def load_model(self, path: Path, input_count: int) -> DenseFeatureNetwork:
         """Load an owned checkpoint; for example, ``adapter.load_model(path, 26)``."""
@@ -218,7 +221,7 @@ class DenseFeatureAdapter:
             inputs = torch.as_tensor(values[indices], dtype=torch.float32, device=self.device)
             expected = torch.as_tensor(targets[indices], dtype=torch.float32, device=self.device)
             optimizer.zero_grad(set_to_none=True)
-            nn.functional.l1_loss(model(inputs), expected).backward()  # type: ignore[no-untyped-call]
+            nn.functional.l1_loss(model(inputs), expected).backward()
             nn.utils.clip_grad_norm_(model.parameters(), recipe.gradient_clip)
             optimizer.step()
 

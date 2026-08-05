@@ -11,6 +11,10 @@ from typing import TextIO
 
 from buffalo_weight.baseline_provenance import BaselineProvenance
 from buffalo_weight.baseline_stage import run_random_forest_baseline_stage
+from buffalo_weight.dense_baseline_stage import (
+    DenseBaselineDependencies,
+    run_dense_baseline_stage,
+)
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.feature_confirmation import (
@@ -18,13 +22,15 @@ from buffalo_weight.feature_confirmation import (
     confirm_feature_selection,
     require_baselines_gate,
 )
-from buffalo_weight.feature_confirmation_environment import FeatureConfirmationEnvironment
+from buffalo_weight.feature_confirmation_environment import (
+    FeatureConfirmationEnvironment,
+)
 from buffalo_weight.feature_evaluation import FeatureBaseline
+from buffalo_weight.feature_selection_provenance import FeatureSelectionProvenance
 from buffalo_weight.feature_selection_stage import (
     FeatureEvidenceRunner,
     run_feature_selection_stage,
 )
-from buffalo_weight.feature_selection_provenance import FeatureSelectionProvenance
 from buffalo_weight.report_inputs import clean_reconstructible_stage, run_inputs_stage
 from buffalo_weight.report_provenance import ReportProvenance
 from buffalo_weight.reproduction_config import ReportContract, load_report_contract
@@ -42,6 +48,7 @@ class _CliDependencies:
     feature_confirmation_environment: FeatureConfirmationEnvironment | None
     random_forest_baseline: FeatureBaseline | None
     baseline_provenance: BaselineProvenance | None
+    dense_baseline_dependencies: DenseBaselineDependencies | None
 
 
 def main(
@@ -54,6 +61,7 @@ def main(
     feature_confirmation_environment: FeatureConfirmationEnvironment | None = None,
     random_forest_baseline: FeatureBaseline | None = None,
     baseline_provenance: BaselineProvenance | None = None,
+    dense_baseline_dependencies: DenseBaselineDependencies | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
@@ -61,6 +69,7 @@ def main(
         services, snapshot_publisher, report_provenance, feature_evidence_runner,
         feature_selection_provenance, feature_confirmation_environment,
         random_forest_baseline, baseline_provenance,
+        dense_baseline_dependencies,
     )
     return _run_with_errors(arguments, dependencies, stdout, stderr)
 
@@ -177,6 +186,11 @@ def _run_baselines_command(
     )
     for configuration, result in results.items():
         print(f"{configuration}: {result}", file=stdout)
+    dense_status = run_dense_baseline_stage(
+        contract, arguments.dry_run, dependencies.snapshot_publisher,
+        dependencies.dense_baseline_dependencies,
+    )
+    print(dense_status.removeprefix("released; "), file=stdout)
     return 0
 
 

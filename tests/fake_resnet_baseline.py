@@ -30,7 +30,16 @@ class FixedResNetBaselineRunner:
 
     def execution_metadata(self) -> dict[str, object]:
         """Identify an injected run; for example, manifests distinguish test execution."""
-        return {"device": "injected", "deterministic": True, "official": False}
+        return {"device": "cuda", "deterministic": True, "official": True}
+
+
+class FailingResNetBaselineRunner(FixedResNetBaselineRunner):
+    """Fail after preflight; for example, stale artifacts must disappear before retraining."""
+
+    def evaluate(self, samples: tuple[ResNetSample, ...]) -> list[ResNetOofPrediction]:
+        """Represent interrupted training; for example, publication must remain absent."""
+        self.evaluation_count += 1
+        raise ValueError("injected ResNet training failure; expected atomic cleanup")
 
 
 class FixedResNetBaselineProvenance:
@@ -56,3 +65,7 @@ class FixedResNetBaselineProvenance:
     def repository_commit(self) -> str:
         """Return an audit commit; for example, manifests retain source provenance."""
         return "b" * 40
+
+    def recipe_hash_at_commit(self, commit: str) -> str | None:
+        """Attest the fixed commit; for example, another SHA is not trusted by tests."""
+        return self._recipe_hash if commit == "b" * 40 else None

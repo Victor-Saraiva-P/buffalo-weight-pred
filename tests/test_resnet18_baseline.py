@@ -13,15 +13,17 @@ from torch import nn
 from buffalo_weight.resnet_baseline_adapter import (
     RESNET18_BASELINE_RECIPE,
     ResNet18BaselineAdapter,
-    ResNet18MaskNetwork,
-    augment_binary_mask,
-    load_letterboxed_mask,
 )
 from tests.fake_compute import fake_available_cuda
 from buffalo_weight.resnet_baseline_evaluation import (
     ResNetBaselineEvaluator,
     ResNetBaselinePredictor,
     ResNetSample,
+)
+from buffalo_weight.resnet_mask import (
+    ResNet18MaskNetwork,
+    augment_binary_mask,
+    load_letterboxed_mask,
 )
 
 
@@ -159,9 +161,14 @@ class ResNet18BaselineTest(unittest.TestCase):
         backbone = TinyResNet18()
         network = ResNet18MaskNetwork(backbone)
 
+        self.assert_approved_trainability(network, backbone)
+        self.assert_imagenet_normalization(network)
+
+    def assert_approved_trainability(
+        self, network: ResNet18MaskNetwork, backbone: TinyResNet18
+    ) -> None:
         network.prepare_head_warmup()
         self.assertEqual(trainable_names(network), {"backbone.fc.weight", "backbone.fc.bias"})
-
         network.prepare_partial_fit()
         self.assertTrue(all(
             name.startswith("backbone.layer4") or name.startswith("backbone.fc")
@@ -172,6 +179,7 @@ class ResNet18BaselineTest(unittest.TestCase):
         self.assertFalse(backbone.layer3[1].training)
         self.assertTrue(backbone.layer4[1].training)
 
+    def assert_imagenet_normalization(self, network: ResNet18MaskNetwork) -> None:
         normalized = network.normalize_inputs(torch.zeros((1, 1, 2, 2)))
         self.assertEqual(tuple(normalized.shape), (1, 3, 2, 2))
         expected = -torch.tensor([0.485, 0.456, 0.406]) / torch.tensor([0.229, 0.224, 0.225])
@@ -189,13 +197,7 @@ class ResNet18BaselineTest(unittest.TestCase):
 
     def test_external_folds_are_isolated_and_refit_uses_all_permitted_rows(self) -> None:
         adapter = RecordingResNetAdapter()
-        samples = tuple(
-            ResNetSample(
-                f"mask-{index:03d}.png", Path(f"mask-{index:03d}.png"),
-                f"B{index % 10 + 1}", index % 5 + 1, float(80 + index),
-            )
-            for index in range(50)
-        )
+        samples = tiny_evaluation_samples()
 
         predictions = ResNetBaselineEvaluator(adapter).evaluate(samples)
 
@@ -238,6 +240,16 @@ def tiny_mask_samples(root: Path) -> tuple[ResNetSample, ...]:
         Image.fromarray(pixels).save(path)
         samples.append(ResNetSample(path.name, path, f"B{index + 1}", 1, 90.0 + index * 5))
     return tuple(samples)
+
+
+def tiny_evaluation_samples() -> tuple[ResNetSample, ...]:
+    return tuple(
+        ResNetSample(
+            f"mask-{index:03d}.png", Path(f"mask-{index:03d}.png"),
+            f"B{index % 10 + 1}", index % 5 + 1, float(80 + index),
+        )
+        for index in range(50)
+    )
 
 
 if __name__ == "__main__":

@@ -215,7 +215,7 @@ def _run_baselines_command(
     print(f"compact_cnn: {compact_status}", file=stdout)
     baseline_status = run_resnet_baseline_stage(
         contract, arguments.dry_run, dependencies.resnet_baseline_runner,
-        dependencies.resnet_baseline_provenance, dependencies.report_provenance,
+        dependencies.resnet_baseline_provenance,
     )
     print(f"resnet18_baseline: {baseline_status}", file=stdout)
     return 0

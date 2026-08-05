@@ -24,18 +24,19 @@ class ResNetBaselineProvenance(Protocol):
         """Return an audit commit; for example, manifests record the producing checkout."""
         ...
 
+    def recipe_hash_at_commit(self, commit: str) -> str | None:
+        """Attest source identity; for example, a forged commit returns no recipe hash."""
+        ...
+
 
 class SystemResNetBaselineProvenance:
     """Read local source, packages and Git; for example, production stages use this."""
 
     def recipe_hash(self) -> str:
         """Hash pertinent source; for example, unrelated baseline files are excluded."""
-        digest = hashlib.sha256()
         source_root = Path(__file__).parent
-        for name in _recipe_module_names():
-            digest.update(name.encode())
-            digest.update((source_root / name).read_bytes())
-        return digest.hexdigest()
+        sources = [(name, (source_root / name).read_bytes()) for name in _recipe_module_names()]
+        return _source_digest(sources)
 
     def dependency_versions(self) -> dict[str, str]:
         """Resolve exact versions; for example, all mask-training dependencies are listed."""
@@ -51,10 +52,33 @@ class SystemResNetBaselineProvenance:
         )
         return result.stdout.strip()
 
+    def recipe_hash_at_commit(self, commit: str) -> str | None:
+        """Hash recipe files from Git; for example, audit commits bind to their source."""
+        repository_root = Path(__file__).parents[2]
+        sources = []
+        for name in _recipe_module_names():
+            relative = f"src/buffalo_weight/{name}"
+            result = subprocess.run(
+                ["git", "-C", str(repository_root), "show", f"{commit}:{relative}"],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                return None
+            sources.append((name, result.stdout))
+        return _source_digest(sources)
+
 
 def _recipe_module_names() -> tuple[str, ...]:
     return (
         "resnet18_weights.py", "resnet_baseline_adapter.py",
         "resnet_baseline_artifacts.py", "resnet_baseline_evaluation.py",
-        "resnet_baseline_stage.py",
+        "resnet_baseline_provenance.py", "resnet_baseline_stage.py", "resnet_mask.py",
     )
+
+
+def _source_digest(sources: list[tuple[str, bytes]]) -> str:
+    digest = hashlib.sha256()
+    for name, content in sources:
+        digest.update(name.encode())
+        digest.update(content)
+    return digest.hexdigest()

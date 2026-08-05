@@ -21,7 +21,8 @@ PREDICTION_COLUMNS = [
     "prediction_kg", "residual_kg", "absolute_error_kg",
 ]
 METRIC_COLUMNS = [
-    "model_config", "scope", "fold", "n", "mae_kg", "rmse_kg", "bias_kg", "r2",
+    "model_config", "scope", "fold", "population", "n", "mae_kg", "rmse_kg",
+    "bias_kg", "r2",
 ]
 
 
@@ -56,13 +57,13 @@ def write_resnet_outputs(
     ordered = sorted(predictions, key=lambda row: row.file_name)
     _write_csv(output_dir / "predictions.csv", PREDICTION_COLUMNS,
                [_prediction_row(row) for row in ordered])
-    _write_csv(output_dir / "metrics.csv", METRIC_COLUMNS, _metric_rows(ordered))
+    _write_csv(output_dir / "fold_metrics.csv", METRIC_COLUMNS, _metric_rows(ordered))
 
 
 def output_metadata(output_dir: Path) -> dict[str, dict[str, object]]:
     """Describe complete outputs; for example, manifests bind hashes and schemas."""
     return {
-        "metrics.csv": _artifact_record(output_dir / "metrics.csv", METRIC_COLUMNS),
+        "fold_metrics.csv": _artifact_record(output_dir / "fold_metrics.csv", METRIC_COLUMNS),
         "predictions.csv": _artifact_record(
             output_dir / "predictions.csv", PREDICTION_COLUMNS
         ),
@@ -79,11 +80,11 @@ def validate_output_metadata(
     if outputs != expected:
         raise ValueError(f"baseline outputs were {outputs!r}; expected {expected!r}")
     prediction_rows = _read_csv(output_dir / "predictions.csv", PREDICTION_COLUMNS)
-    metric_rows = _read_csv(output_dir / "metrics.csv", METRIC_COLUMNS)
-    if len(prediction_rows) != expected_predictions or len(metric_rows) != expected_folds + 1:
+    metric_rows = _read_csv(output_dir / "fold_metrics.csv", METRIC_COLUMNS)
+    if len(prediction_rows) != expected_predictions or len(metric_rows) != expected_folds + 3:
         raise ValueError(
             f"baseline row counts were {len(prediction_rows)}/{len(metric_rows)}; "
-            f"expected {expected_predictions}/{expected_folds + 1}"
+            f"expected {expected_predictions}/{expected_folds + 3}"
         )
 
 
@@ -123,24 +124,36 @@ def _metric_rows(predictions: list[ResNetOofPrediction]) -> list[dict[str, str]]
     rows = []
     for fold in sorted({prediction.fold for prediction in predictions}):
         fold_predictions = [row for row in predictions if row.fold == fold]
-        rows.append(_metric_row("fold", str(fold), fold_predictions))
-    rows.append(_metric_row("oof", "", predictions))
+        rows.append(_metric_row("fold", str(fold), "all", fold_predictions))
+    rows.append(_metric_row("oof", "", "all", predictions))
+    rows.append(_metric_row("oof", "", "B1", _category_predictions(predictions, "B1")))
+    rows.append(_metric_row("oof", "", "B10", _category_predictions(predictions, "B10")))
     return rows
 
 
 def _metric_row(
-    scope: str, fold: str, predictions: list[ResNetOofPrediction]
+    scope: str, fold: str, population: str, predictions: list[ResNetOofPrediction]
 ) -> dict[str, str]:
     observed = np.asarray([row.weight_kg for row in predictions], dtype=np.float64)
     estimated = np.asarray([row.prediction_kg for row in predictions], dtype=np.float64)
     residuals = estimated - observed
     return {
         "model_config": MODEL_CONFIG, "scope": scope, "fold": fold,
+        "population": population,
         "n": str(len(predictions)), "mae_kg": format_csv_number(np.mean(np.abs(residuals))),
-        "rmse_kg": format_csv_number(np.sqrt(np.mean(np.square(residuals)))),
+        "rmse_kg": _global_metric(population, np.sqrt(np.mean(np.square(residuals)))),
         "bias_kg": format_csv_number(np.mean(residuals)),
-        "r2": format_csv_number(_r2_score(observed, estimated)),
+        "r2": _global_metric(population, _r2_score(observed, estimated)),
     }
+
+
+def _category_predictions(
+    predictions: list[ResNetOofPrediction], category: str
+) -> list[ResNetOofPrediction]:
+    selected = [row for row in predictions if row.weight_category == category]
+    if not selected:
+        raise ValueError(f"metric population was {category!r}; expected at least one prediction")
+    return selected
 
 
 def _r2_score(observed: np.ndarray, estimated: np.ndarray) -> float:
@@ -149,6 +162,12 @@ def _r2_score(observed: np.ndarray, estimated: np.ndarray) -> float:
         return 0.0
     numerator = float(np.sum(np.square(observed - estimated)))
     return 1.0 - numerator / denominator
+
+
+def _global_metric(population: str, value: float) -> str:
+    if population != "all":
+        return ""
+    return format_csv_number(value)
 
 
 def _artifact_record(path: Path, columns: list[str]) -> dict[str, object]:

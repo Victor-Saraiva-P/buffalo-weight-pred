@@ -38,6 +38,19 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 def validate_confirmed_feature_package(report_contract: ReportContract) -> tuple[str, ...]:
     """Validate the gate package; for example, callers receive the frozen feature order."""
+    features = _validate_confirmed_feature_package(report_contract, require_current_inputs=True)
+    return features
+
+
+def validate_frozen_feature_contract(report_contract: ReportContract) -> tuple[str, ...]:
+    """Validate frozen evidence; for example, baselines fingerprint only consumed columns."""
+    features = _validate_confirmed_feature_package(report_contract, require_current_inputs=False)
+    return features
+
+
+def _validate_confirmed_feature_package(
+    report_contract: ReportContract, require_current_inputs: bool,
+) -> tuple[str, ...]:
     package_dir = report_contract.confirmed_feature_selection_dir
     manifest = read_json_mapping(package_dir / "manifest.json", "confirmed manifest")
     contract = read_json_mapping(
@@ -45,7 +58,9 @@ def validate_confirmed_feature_package(report_contract: ReportContract) -> tuple
     )
     report_path = package_dir / "feature_selection_report.md"
     validated = validate_confirmed_feature_contract(contract, report_path, APPROVED_FEATURES)
-    validate_confirmed_manifest(manifest, package_dir, validated, report_contract)
+    validate_confirmed_manifest(
+        manifest, package_dir, validated, report_contract, require_current_inputs,
+    )
     validate_feature_selection_evidence_files(package_dir, APPROVED_FEATURES)
     return _validated_selection(validated.get("selected_features"))
 
@@ -67,13 +82,14 @@ def build_confirmed_manifest(
 
 def validate_confirmed_manifest(
     manifest: dict[str, object], output_dir: Path, human_contract: dict[str, object],
-    report_contract: ReportContract,
+    report_contract: ReportContract, require_current_inputs: bool = True,
 ) -> None:
     """Validate the root manifest; for example, copied source provenance is rehashed."""
     _validate_manifest_fixed_fields(manifest)
     _validate_source_identity(manifest, output_dir)
     _validate_manifest_links(manifest, output_dir, human_contract)
-    _validate_manifest_inputs(manifest, report_contract)
+    if require_current_inputs:
+        _validate_manifest_inputs(manifest, report_contract)
     expected_outputs = artifact_output_records(output_dir, CONFIRMED_OUTPUT_FILES)
     if manifest.get("outputs") != expected_outputs:
         raise ValueError(

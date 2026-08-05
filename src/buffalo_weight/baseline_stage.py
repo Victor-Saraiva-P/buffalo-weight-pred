@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -16,14 +17,24 @@ from buffalo_weight.baseline_manifest import (
     complete_baseline_manifest,
 )
 from buffalo_weight.baseline_provenance import BaselineProvenance, SystemBaselineProvenance
-from buffalo_weight.baseline_types import BaselineConfiguration, BaselinePrediction
+from buffalo_weight.baseline_types import (
+    BaselineConfiguration,
+    BaselinePrediction,
+    BaselineStatus,
+)
 from buffalo_weight.feature_baselines import RandomForestBaseline
-from buffalo_weight.feature_confirmation_manifest import validate_confirmed_feature_package
+from buffalo_weight.feature_confirmation_manifest import validate_frozen_feature_contract
 from buffalo_weight.feature_evaluation import FeatureBaseline, FeatureSample
 from buffalo_weight.feature_selection_io import load_feature_samples
 from buffalo_weight.feature_selection_artifacts import write_json_artifact
+from buffalo_weight.inputs_manifest import expected_identity as expected_inputs_identity
+from buffalo_weight.report_provenance import ReportProvenance, SystemReportProvenance
 from buffalo_weight.reproduction_config import ReportContract
-from buffalo_weight.snapshot_io import FilesystemSnapshotPublisher, SnapshotPublisher
+from buffalo_weight.snapshot_io import (
+    FilesystemSnapshotPublisher,
+    SnapshotPublisher,
+    clean_snapshot_stage,
+)
 
 
 def run_random_forest_baseline_stage(
@@ -31,11 +42,25 @@ def run_random_forest_baseline_stage(
     random_forest: FeatureBaseline | None = None,
     provenance: BaselineProvenance | None = None,
     publisher: SnapshotPublisher | None = None,
-) -> dict[BaselineConfiguration, str]:
+    inputs_provenance: ReportProvenance | None = None,
+) -> dict[BaselineConfiguration, BaselineStatus]:
     """Build RF and reference OOF artifacts; for example, dry-run only reports the gate."""
     resolved_provenance = provenance or SystemBaselineProvenance()
-    features = validate_confirmed_feature_package(contract)
-    statuses = _configuration_statuses(contract, features, resolved_provenance)
+    features = validate_frozen_feature_contract(contract)
+    resolved_inputs = inputs_provenance or SystemReportProvenance()
+    if not _inputs_identity_is_current(contract, resolved_inputs):
+        return _blocked_or_raise(contract, resolved_inputs, dry_run)
+    return _run_current_baseline_inputs(
+        contract, features, dry_run, random_forest, resolved_provenance, publisher,
+    )
+
+
+def _run_current_baseline_inputs(
+    contract: ReportContract, features: tuple[str, ...], dry_run: bool,
+    random_forest: FeatureBaseline | None, provenance: BaselineProvenance,
+    publisher: SnapshotPublisher | None,
+) -> dict[BaselineConfiguration, BaselineStatus]:
+    statuses = _configuration_statuses(contract, features, provenance)
     if dry_run:
         return statuses
     if all(status == "reusable" for status in statuses.values()):
@@ -44,23 +69,25 @@ def run_random_forest_baseline_stage(
     resolved_publisher = publisher or FilesystemSnapshotPublisher()
     return _rebuild_obsolete_configurations(
         contract, samples, features, statuses, random_forest,
-        resolved_provenance, resolved_publisher,
+        provenance, resolved_publisher,
     )
 
 
 def _rebuild_obsolete_configurations(
     contract: ReportContract, samples: list[FeatureSample], features: tuple[str, ...],
-    statuses: dict[BaselineConfiguration, str], random_forest: FeatureBaseline | None,
+    statuses: dict[BaselineConfiguration, BaselineStatus],
+    random_forest: FeatureBaseline | None,
     provenance: BaselineProvenance, publisher: SnapshotPublisher,
-) -> dict[BaselineConfiguration, str]:
+) -> dict[BaselineConfiguration, BaselineStatus]:
     if statuses["random_forest_baseline"] != "reusable":
-        candidate = evaluate_random_forest_oof(
-            samples, features, random_forest or RandomForestBaseline()
-        )
-        _publish_configuration(contract, "random_forest_baseline", candidate, features,
-                               provenance, publisher)
+        _remove_obsolete(contract, "random_forest_baseline", statuses)
+        candidate = evaluate_random_forest_oof(samples, features,
+                                               random_forest or RandomForestBaseline())
+        _publish_configuration(contract, "random_forest_baseline", candidate,
+                               features, provenance, publisher)
         statuses["random_forest_baseline"] = "rebuilt"
     if statuses["training_mean_reference"] != "reusable":
+        _remove_obsolete(contract, "training_mean_reference", statuses)
         reference = evaluate_training_mean_reference(samples)
         _publish_configuration(contract, "training_mean_reference", reference, features,
                                provenance, publisher)
@@ -70,7 +97,7 @@ def _rebuild_obsolete_configurations(
 
 def _configuration_statuses(
     contract: ReportContract, features: tuple[str, ...], provenance: BaselineProvenance,
-) -> dict[BaselineConfiguration, str]:
+) -> dict[BaselineConfiguration, BaselineStatus]:
     return {
         "random_forest_baseline": baseline_configuration_status(
             contract, "random_forest_baseline", "candidate", features, provenance,
@@ -79,6 +106,41 @@ def _configuration_statuses(
             contract, "training_mean_reference", "reference", features, provenance,
         ),
     }
+
+
+def _inputs_identity_is_current(
+    contract: ReportContract, provenance: ReportProvenance,
+) -> bool:
+    manifest_path = contract.inputs_output_dir / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        expected = expected_inputs_identity(contract, provenance)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return isinstance(manifest, dict) and all(
+        manifest.get(key) == value for key, value in expected.items()
+    )
+
+
+def _blocked_or_raise(
+    contract: ReportContract, provenance: ReportProvenance, dry_run: bool,
+) -> dict[BaselineConfiguration, BaselineStatus]:
+    if dry_run:
+        return {"random_forest_baseline": "blocked", "training_mean_reference": "blocked"}
+    manifest_path = contract.inputs_output_dir / "manifest.json"
+    actual = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
+    expected = expected_inputs_identity(contract, provenance)
+    raise ValueError(f"inputs identity was {actual!r}; expected current identity {expected!r}")
+
+
+def _remove_obsolete(
+    contract: ReportContract, configuration: BaselineConfiguration,
+    statuses: dict[BaselineConfiguration, BaselineStatus],
+) -> None:
+    if statuses[configuration] != "obsolete":
+        return
+    output_dir = contract.artifacts_root / "baselines" / configuration
+    clean_snapshot_stage(output_dir)
 
 
 def _publish_configuration(

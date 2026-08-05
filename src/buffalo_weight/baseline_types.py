@@ -8,6 +8,10 @@ from typing import Literal
 
 BaselineConfiguration = Literal["random_forest_baseline", "training_mean_reference"]
 EvaluationRole = Literal["candidate", "reference"]
+BaselineStatus = Literal["absent", "blocked", "obsolete", "rebuilt", "reusable"]
+BASELINE_VALIDATIONS = [
+    "schemas", "ordering", "sha256", "oof_uniqueness", "outer_fold_isolation",
+]
 
 
 @dataclass(frozen=True)

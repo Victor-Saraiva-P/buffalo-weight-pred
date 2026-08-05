@@ -15,7 +15,7 @@ from buffalo_weight.feature_confirmation_environment import (
 )
 from buffalo_weight.feature_confirmation_manifest import (
     read_json_mapping,
-    validate_confirmed_feature_package,
+    validate_frozen_feature_contract,
 )
 from buffalo_weight.feature_confirmation_publication import publish_confirmed_feature_package
 from buffalo_weight.feature_selection_manifest import (
@@ -99,7 +99,7 @@ def require_baselines_gate(report_contract: ReportContract) -> None:
 
 def _inspect_baselines_gate(report_contract: ReportContract) -> _GateInspection:
     try:
-        validate_confirmed_feature_package(report_contract)
+        validate_frozen_feature_contract(report_contract)
     except (OSError, ValueError, TypeError, JSONDecodeError) as error:
         return _GateInspection("blocked", str(error))
     return _GateInspection("released", None)

@@ -43,8 +43,11 @@ from all 132 pooled OOF predictions, never as an average of fold metrics.
 ## `manifest.json`
 
 The manifest is written last. It records configuration and role, the ordered
-confirmed feature contract, fold seed 42, training seed 44, pertinent input,
-recipe and dependency identities, and the SHA-256, schema and row count of all
-three CSV outputs. A missing or divergent identity, schema, row count or output
-hash makes only that configuration obsolete. Changing Random Forest-specific
-knowledge does not invalidate the training-mean reference.
+confirmed feature contract, normalized report contract, fold seed 42, training
+seed 44, pertinent input, recipe and dependency identities, and the SHA-256,
+schema and row count of all three CSV outputs. Input hashes project only the
+rows and columns consumed by each configuration. A missing or divergent
+identity, schema, row count or output hash makes only that configuration
+obsolete. The obsolete snapshot is removed before retraining, so a failed run
+cannot leave stale evidence published. Changing Random Forest-specific
+knowledge or features does not invalidate the training-mean reference.

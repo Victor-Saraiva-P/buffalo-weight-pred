@@ -173,7 +173,7 @@ def _run_baselines_command(
         return 0
     results = run_random_forest_baseline_stage(
         contract, arguments.dry_run, dependencies.random_forest_baseline,
-        dependencies.baseline_provenance,
+        dependencies.baseline_provenance, inputs_provenance=dependencies.report_provenance,
     )
     for configuration, result in results.items():
         print(f"{configuration}: {result}", file=stdout)

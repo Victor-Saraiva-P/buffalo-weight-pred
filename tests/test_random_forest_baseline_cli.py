@@ -11,7 +11,12 @@ from buffalo_weight.feature_evaluation import FeatureBaseline
 from buffalo_weight.hashing import sha256_file
 from buffalo_weight.report_cli import main
 from tests.fake_baseline_provenance import FixedBaselineProvenance
-from tests.fake_feature_evaluation import ConstantFeatureBaseline, RecordingFeatureBaseline
+from tests.fake_feature_evaluation import (
+    ConstantFeatureBaseline,
+    FailingFeatureBaseline,
+    RecordingFeatureBaseline,
+)
+from tests.fake_report_provenance import FixedReportProvenance
 from tests.report_inputs_fixture import CuratedInputsFixture
 from tests.test_feature_confirmation_cli import _prepare_human_review, _run_confirmation
 
@@ -70,8 +75,7 @@ class RandomForestBaselineCliTest(unittest.TestCase):
             self.assertEqual(_run_baselines(fixture, first_model, provenance)[0], 0)
             candidate_manifest = _manifest_path(fixture, "random_forest_baseline")
             reference_manifest = _manifest_path(fixture, "training_mean_reference")
-            modified = (candidate_manifest.stat().st_mtime_ns,
-                        reference_manifest.stat().st_mtime_ns)
+            snapshots = _snapshot_targets(fixture)
             _assert_reuse(self, fixture, provenance, candidate_manifest, reference_manifest)
             changed_model = RecordingFeatureBaseline()
             changed = FixedBaselineProvenance(random_forest_hash="7" * 64)
@@ -80,8 +84,9 @@ class RandomForestBaselineCliTest(unittest.TestCase):
             self.assertIn("random_forest_baseline: rebuilt", stdout)
             self.assertIn("training_mean_reference: reusable", stdout)
             self.assertEqual(len(changed_model.fit_calls), 5)
-            self.assertNotEqual(candidate_manifest.stat().st_mtime_ns, modified[0])
-            self.assertEqual(reference_manifest.stat().st_mtime_ns, modified[1])
+            changed_targets = _snapshot_targets(fixture)
+            self.assertNotEqual(changed_targets[0], snapshots[0])
+            self.assertEqual(changed_targets[1], snapshots[1])
 
     def test_tampered_output_is_obsolete_in_dry_run_and_rebuilt_on_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -109,6 +114,58 @@ class RandomForestBaselineCliTest(unittest.TestCase):
             manifest_path = _manifest_path(fixture, "random_forest_baseline")
             original = json.loads(manifest_path.read_text())
             _assert_manifest_tampering(self, fixture, provenance, manifest_path, original)
+
+    def test_changed_report_contract_blocks_stale_input_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _confirmed_fixture(directory)
+            provenance = FixedBaselineProvenance()
+            self.assertEqual(_run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance,
+            )[0], 0)
+            _replace_canonical_scale(fixture, 2048)
+            result, stdout, stderr = _run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance, "--dry-run"
+            )
+            self.assertEqual(result, 0, stderr)
+            self.assertIn("random_forest_baseline: blocked", stdout)
+            execution = _run_baselines(fixture, RecordingFeatureBaseline(), provenance)
+            self.assertEqual(execution[0], 1)
+            self.assertIn("inputs identity", execution[2])
+
+    def test_obsolete_candidate_is_removed_before_failed_retraining(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _confirmed_fixture(directory)
+            provenance = FixedBaselineProvenance()
+            self.assertEqual(_run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance,
+            )[0], 0)
+            predictions = _configuration_dir(fixture, "random_forest_baseline") / "predictions.csv"
+            predictions.write_text(f"{predictions.read_text()}tampered\n")
+            result, _, stderr = _run_baselines(fixture, FailingFeatureBaseline(), provenance)
+            self.assertEqual(result, 1)
+            self.assertIn("training state was failed", stderr)
+            self.assertFalse(_configuration_dir(fixture, "random_forest_baseline").exists())
+            self.assertTrue(_configuration_dir(fixture, "training_mean_reference").exists())
+
+    def test_feature_input_invalidation_tracks_only_consumed_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _confirmed_fixture(directory)
+            provenance = FixedBaselineProvenance()
+            self.assertEqual(_run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance,
+            )[0], 0)
+            _replace_feature_value(fixture, "solidity", "0.123456")
+            _, unused_stdout, _ = _run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance, "--dry-run"
+            )
+            self.assertIn("random_forest_baseline: reusable", unused_stdout)
+            self.assertIn("training_mean_reference: reusable", unused_stdout)
+            _replace_feature_value(fixture, "area", "123.000000")
+            _, selected_stdout, _ = _run_baselines(
+                fixture, RecordingFeatureBaseline(), provenance, "--dry-run"
+            )
+            self.assertIn("random_forest_baseline: obsolete", selected_stdout)
+            self.assertIn("training_mean_reference: reusable", selected_stdout)
 
 
 def _confirmed_fixture(directory: str) -> CuratedInputsFixture:
@@ -200,15 +257,17 @@ def _assert_reuse(
     test_case: unittest.TestCase, fixture: CuratedInputsFixture,
     provenance: FixedBaselineProvenance, candidate_manifest: Path, reference_manifest: Path,
 ) -> None:
-    modified = (candidate_manifest.stat().st_mtime_ns, reference_manifest.stat().st_mtime_ns)
+    contents = (candidate_manifest.read_bytes(), reference_manifest.read_bytes())
+    snapshots = _snapshot_targets(fixture)
     reused_model = RecordingFeatureBaseline()
     result, stdout, stderr = _run_baselines(fixture, reused_model, provenance)
     test_case.assertEqual(result, 0, stderr)
     test_case.assertIn("random_forest_baseline: reusable", stdout)
     test_case.assertIn("training_mean_reference: reusable", stdout)
     test_case.assertEqual(reused_model.fit_calls, [])
-    test_case.assertEqual(candidate_manifest.stat().st_mtime_ns, modified[0])
-    test_case.assertEqual(reference_manifest.stat().st_mtime_ns, modified[1])
+    test_case.assertEqual(candidate_manifest.read_bytes(), contents[0])
+    test_case.assertEqual(reference_manifest.read_bytes(), contents[1])
+    test_case.assertEqual(_snapshot_targets(fixture), snapshots)
 
 
 def _assert_manifest_tampering(
@@ -243,6 +302,7 @@ def _run_baselines(
         ["baselines", "--config", str(fixture.config_path), *extra],
         stdout=stdout, stderr=stderr, random_forest_baseline=random_forest,
         baseline_provenance=provenance or FixedBaselineProvenance(),
+        report_provenance=FixedReportProvenance(),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 
@@ -254,13 +314,39 @@ def _read_predictions(
 
 
 def _configuration_dir(fixture: CuratedInputsFixture, configuration: str) -> Path:
+    # Keeping path knowledge here makes artifact assertions insensitive to storage layout.
     output_dir = fixture.root / "generated" / "report" / "baselines" / configuration
     return output_dir
 
 
 def _manifest_path(fixture: CuratedInputsFixture, configuration: str) -> Path:
+    # Callers name configurations while this helper owns the manifest basename.
     manifest_path = _configuration_dir(fixture, configuration) / "manifest.json"
     return manifest_path
+
+
+def _snapshot_targets(fixture: CuratedInputsFixture) -> tuple[Path, Path]:
+    candidate = _configuration_dir(fixture, "random_forest_baseline").resolve()
+    reference = _configuration_dir(fixture, "training_mean_reference").resolve()
+    return candidate, reference
+
+
+def _replace_canonical_scale(fixture: CuratedInputsFixture, scale: int) -> None:
+    loaded = json.loads(fixture.config_path.read_text())
+    loaded["inputs"]["canonical_long_side"] = scale
+    fixture.config_path.write_text(json.dumps(loaded))
+
+
+def _replace_feature_value(
+    fixture: CuratedInputsFixture, column: str, replacement: str,
+) -> None:
+    path = fixture.output_dir / "feature_index.csv"
+    fields, rows = _read_csv(path)
+    rows[0][column] = replacement
+    with path.open("w", newline="", encoding="utf-8") as destination:
+        writer = csv.DictWriter(destination, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:

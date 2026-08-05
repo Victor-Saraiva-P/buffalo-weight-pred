@@ -72,3 +72,38 @@ class RecordingFeatureBaseline(FeatureBaseline):
     ) -> FeaturePredictor:
         self.fit_calls.append(RecordedFit(partition.sample_ids, feature_names))
         return FirstColumnPredictor(self, partition.sample_ids)
+
+
+class ConstantFeaturePredictor(FeaturePredictor):
+    """Return a known literal so artifact metrics have an independent oracle."""
+
+    def predict(self, partition: PredictionPartition) -> NDArray[np.float64]:
+        """Predict a known weight; for example, metric tests receive exactly 100 kg."""
+        predictions = np.full(len(partition.sample_ids), 100.0, dtype=np.float64)
+        return predictions
+
+
+class ConstantFeatureBaseline(FeatureBaseline):
+    """Fit a deterministic boundary whose predictions are always 100 kg."""
+
+    name: FeatureBaselineName = "random_forest"
+
+    def fit(
+        self, partition: TrainingPartition, feature_names: tuple[str, ...]
+    ) -> FeaturePredictor:
+        """Return the constant predictor; for example, training values cannot affect it."""
+        del partition, feature_names
+        return ConstantFeaturePredictor()
+
+
+class FailingFeatureBaseline(FeatureBaseline):
+    """Fail during retraining so tests can verify fail-closed cache removal."""
+
+    name: FeatureBaselineName = "random_forest"
+
+    def fit(
+        self, partition: TrainingPartition, feature_names: tuple[str, ...]
+    ) -> FeaturePredictor:
+        """Reject retraining; for example, stale artifacts must already be absent."""
+        del partition, feature_names
+        raise ValueError("training state was failed; expected successful Random Forest fit")

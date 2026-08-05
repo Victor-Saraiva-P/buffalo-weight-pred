@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from buffalo_weight.baseline_provenance import BaselineProvenance
+from buffalo_weight.baseline_stage import run_random_forest_baseline_stage
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.feature_confirmation import (
@@ -17,6 +19,7 @@ from buffalo_weight.feature_confirmation import (
     require_baselines_gate,
 )
 from buffalo_weight.feature_confirmation_environment import FeatureConfirmationEnvironment
+from buffalo_weight.feature_evaluation import FeatureBaseline
 from buffalo_weight.feature_selection_stage import (
     FeatureEvidenceRunner,
     run_feature_selection_stage,
@@ -37,6 +40,8 @@ class _CliDependencies:
     feature_evidence_runner: FeatureEvidenceRunner | None
     feature_selection_provenance: FeatureSelectionProvenance | None
     feature_confirmation_environment: FeatureConfirmationEnvironment | None
+    random_forest_baseline: FeatureBaseline | None
+    baseline_provenance: BaselineProvenance | None
 
 
 def main(
@@ -47,13 +52,23 @@ def main(
     feature_evidence_runner: FeatureEvidenceRunner | None = None,
     feature_selection_provenance: FeatureSelectionProvenance | None = None,
     feature_confirmation_environment: FeatureConfirmationEnvironment | None = None,
+    random_forest_baseline: FeatureBaseline | None = None,
+    baseline_provenance: BaselineProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
     dependencies = _CliDependencies(
         services, snapshot_publisher, report_provenance, feature_evidence_runner,
         feature_selection_provenance, feature_confirmation_environment,
+        random_forest_baseline, baseline_provenance,
     )
+    return _run_with_errors(arguments, dependencies, stdout, stderr)
+
+
+def _run_with_errors(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    stdout: TextIO, stderr: TextIO,
+) -> int:
     try:
         return _dispatch(arguments, dependencies, stdout)
     except (OSError, ValueError) as error:
@@ -82,7 +97,7 @@ def _dispatch_report_command(
             dependencies.feature_selection_provenance, stdout,
         )
     if arguments.command == "baselines":
-        return _run_baselines_gate(arguments, contract, stdout)
+        return _run_baselines_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -146,13 +161,22 @@ def _run_confirmation_command(
     return 0
 
 
-def _run_baselines_gate(
-    arguments: argparse.Namespace, contract: ReportContract, stdout: TextIO,
+def _run_baselines_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
 ) -> int:
     status = baselines_gate_status(contract)
     print(f"baselines: {status}", file=stdout)
-    if not arguments.dry_run:
-        require_baselines_gate(contract)
+    if status != "released":
+        if not arguments.dry_run:
+            require_baselines_gate(contract)
+        return 0
+    results = run_random_forest_baseline_stage(
+        contract, arguments.dry_run, dependencies.random_forest_baseline,
+        dependencies.baseline_provenance, inputs_provenance=dependencies.report_provenance,
+    )
+    for configuration, result in results.items():
+        print(f"{configuration}: {result}", file=stdout)
     return 0
 
 
@@ -192,7 +216,7 @@ def _add_confirmation_parsers(
     confirmation.add_argument("--report", required=True)
     confirmation.add_argument("--dry-run", action="store_true")
     baselines = subcommands.add_parser(
-        "baselines", help="audit the confirmed shared-feature gate"
+        "baselines", help="evaluate frozen baselines after the shared-feature gate"
     )
     baselines.add_argument("--config", default="configs/report.yaml")
     baselines.add_argument("--dry-run", action="store_true")

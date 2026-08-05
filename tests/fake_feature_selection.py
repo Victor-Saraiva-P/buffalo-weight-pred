@@ -4,6 +4,7 @@ from pathlib import Path
 
 from buffalo_weight.feature_evaluation import FeatureEvidence, FeatureSample, RemovalGroup
 from buffalo_weight.feature_selection_rules import classify_mae_delta, permutation_seed
+from buffalo_weight.feature_selection_manifest import OFFICIAL_EXECUTION
 from buffalo_weight.feature_selection_types import (
     EvidenceScope,
     FeatureBaselineName,
@@ -36,6 +37,13 @@ class FixedFeatureEvidenceRunner:
             rows.extend(self._baseline_rows(feature_names, removal_groups, scopes, baseline,
                                             permutation_count, split_seed))
         return rows
+
+    def execution_metadata(self) -> dict[str, object]:
+        """Attest the official boundary.
+
+        Example: promotion tests exercise CUDA metadata.
+        """
+        return OFFICIAL_EXECUTION.copy()
 
     def _baseline_rows(
         self, features: tuple[str, ...], groups: tuple[RemovalGroup, ...],

@@ -1,5 +1,7 @@
 SHARED_CONFIG ?= configs/shared.yaml
 REPORT_CONFIG ?= configs/report.yaml
+FEATURE_CONTRACT ?=
+FEATURE_REPORT ?=
 CLASSICAL_MODELS_CONFIG ?= configs/classical_models.yaml
 CNN_MASK_MODELS_CONFIG ?= configs/cnn_mask_models.yaml
 MASK_CLASSICAL_EXPERIMENTS_CONFIG ?= configs/mask_classical_experiments.yaml
@@ -26,7 +28,7 @@ TRAIN_DRY_RUN = --dry-run
 endif
 ENSEMBLE_MODELS ?= dual_pca24_canonical16,tuned_96_pca24,fusion_original_stretch_log,fusion_original_stretch_cube_root,geometry_resnet18_pretrained_last_block,hist_gradient_boosting_baseline
 
-.PHONY: setup inputs feature-selection report-clean features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
+.PHONY: setup inputs feature-selection confirm-features baselines report-clean features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
 
 setup: $(PYTHON)
 	$(PYTHON) main.py setup
@@ -36,6 +38,12 @@ inputs: setup
 
 feature-selection: setup
 	$(PYTHON) main.py feature-selection --config $(REPORT_CONFIG)
+
+confirm-features: setup
+	$(PYTHON) main.py confirm-features --config $(REPORT_CONFIG) --contract $(FEATURE_CONTRACT) --report $(FEATURE_REPORT)
+
+baselines: setup
+	$(PYTHON) main.py baselines --config $(REPORT_CONFIG)
 
 report-clean: setup
 	$(PYTHON) main.py clean $(STAGE) --config $(REPORT_CONFIG)

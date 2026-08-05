@@ -35,6 +35,15 @@ class ReportContract:
         """
         return self.artifacts_root / "inputs"
 
+    @property
+    def confirmed_feature_selection_dir(self) -> Path:
+        """Locate confirmed feature evidence.
+
+        Example: an artifact root ending in ``generated/report`` resolves under ``evidence``.
+        """
+        repository_root = self.artifacts_root.parents[1]
+        return repository_root / "evidence" / "confirmed" / "feature_selection" / "v1"
+
 
 def load_report_contract(path: Path) -> ReportContract:
     """Load the report contract; for example, ``load_report_contract(Path('report.yaml'))``."""

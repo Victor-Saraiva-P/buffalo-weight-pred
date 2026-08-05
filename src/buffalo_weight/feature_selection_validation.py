@@ -49,9 +49,7 @@ def validate_feature_selection_artifacts(
     output_dir: Path, features: tuple[str, ...]
 ) -> None:
     """Validate public files; for example, schemas, ordering and 300 DPI are mandatory."""
-    _validate_csv_schemas(output_dir)
-    _validate_evidence_csv(output_dir / "feature_predictive_evidence.csv")
-    _validate_redundancy_csv(output_dir / "feature_redundancy.csv", features)
+    validate_feature_selection_evidence_files(output_dir, features)
     provisional_contract = json.loads((output_dir / "shared_feature_contract.json").read_text())
     if (provisional_contract.get("status"), provisional_contract.get("selected_features"),
             provisional_contract.get("human_decision")) != ("provisional", None, None):
@@ -59,6 +57,15 @@ def validate_feature_selection_artifacts(
             f"shared feature contract gate was {provisional_contract!r}; "
             "expected provisional status with null selection and human decision"
         )
+
+
+def validate_feature_selection_evidence_files(
+    output_dir: Path, features: tuple[str, ...]
+) -> None:
+    """Validate shared evidence; for example, promotion checks copied CSVs and figures."""
+    _validate_csv_schemas(output_dir)
+    _validate_evidence_csv(output_dir / "feature_predictive_evidence.csv")
+    _validate_redundancy_csv(output_dir / "feature_redundancy.csv", features)
     _validate_figures(output_dir)
 
 

@@ -5,12 +5,22 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
-from buffalo_weight.feature_selection_stage import FeatureEvidenceRunner, run_feature_selection_stage
+from buffalo_weight.feature_confirmation import (
+    baselines_gate_status,
+    confirm_feature_selection,
+    require_baselines_gate,
+)
+from buffalo_weight.feature_confirmation_environment import FeatureConfirmationEnvironment
+from buffalo_weight.feature_selection_stage import (
+    FeatureEvidenceRunner,
+    run_feature_selection_stage,
+)
 from buffalo_weight.feature_selection_provenance import FeatureSelectionProvenance
 from buffalo_weight.report_inputs import clean_reconstructible_stage, run_inputs_stage
 from buffalo_weight.report_provenance import ReportProvenance
@@ -19,48 +29,79 @@ from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
 
 
+@dataclass(frozen=True)
+class _CliDependencies:
+    services: SetupServices | None
+    snapshot_publisher: SnapshotPublisher | None
+    report_provenance: ReportProvenance | None
+    feature_evidence_runner: FeatureEvidenceRunner | None
+    feature_selection_provenance: FeatureSelectionProvenance | None
+    feature_confirmation_environment: FeatureConfirmationEnvironment | None
+
+
 def main(
-    argv: Sequence[str] | None = None,
-    services: SetupServices | None = None,
-    stdout: TextIO = sys.stdout,
-    stderr: TextIO = sys.stderr,
+    argv: Sequence[str] | None = None, services: SetupServices | None = None,
+    stdout: TextIO = sys.stdout, stderr: TextIO = sys.stderr,
     snapshot_publisher: SnapshotPublisher | None = None,
     report_provenance: ReportProvenance | None = None,
     feature_evidence_runner: FeatureEvidenceRunner | None = None,
     feature_selection_provenance: FeatureSelectionProvenance | None = None,
+    feature_confirmation_environment: FeatureConfirmationEnvironment | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     arguments = _build_parser().parse_args(argv)
+    dependencies = _CliDependencies(
+        services, snapshot_publisher, report_provenance, feature_evidence_runner,
+        feature_selection_provenance, feature_confirmation_environment,
+    )
     try:
-        return _dispatch(
-            arguments, services, snapshot_publisher, report_provenance,
-            feature_evidence_runner, feature_selection_provenance, stdout
-        )
+        return _dispatch(arguments, dependencies, stdout)
     except (OSError, ValueError) as error:
         print(f"rejected: {error}", file=stderr)
         return 1
 
 
 def _dispatch(
-    arguments: argparse.Namespace, services: SetupServices | None,
-    snapshot_publisher: SnapshotPublisher | None, report_provenance: ReportProvenance | None,
-    feature_evidence_runner: FeatureEvidenceRunner | None,
-    feature_selection_provenance: FeatureSelectionProvenance | None,
-    stdout: TextIO,
+    arguments: argparse.Namespace, dependencies: _CliDependencies, stdout: TextIO,
 ) -> int:
     if arguments.command == "setup":
-        return _run_setup(services or default_setup_services(), stdout)
+        return _run_setup(dependencies.services or default_setup_services(), stdout)
     contract = load_report_contract(Path(arguments.config))
-    if arguments.command == "inputs":
-        return _run_inputs_command(arguments, contract, snapshot_publisher,
-                                   report_provenance, stdout)
-    if arguments.command == "feature-selection":
-        return _run_selection_command(arguments, contract, feature_evidence_runner,
-                                      snapshot_publisher, report_provenance,
-                                      feature_selection_provenance, stdout)
+    return _dispatch_report_command(arguments, dependencies, contract, stdout)
+
+
+def _dispatch_report_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    if arguments.command in {"inputs", "feature-selection"}:
+        return _dispatch_reconstructible_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "confirm-features":
+        return _run_confirmation_command(
+            arguments, contract, dependencies.feature_confirmation_environment,
+            dependencies.feature_selection_provenance, stdout,
+        )
+    if arguments.command == "baselines":
+        return _run_baselines_gate(arguments, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
+
+
+def _dispatch_reconstructible_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    if arguments.command == "inputs":
+        return _run_inputs_command(
+            arguments, contract, dependencies.snapshot_publisher,
+            dependencies.report_provenance, stdout,
+        )
+    return _run_selection_command(
+        arguments, contract, dependencies.feature_evidence_runner,
+        dependencies.snapshot_publisher, dependencies.report_provenance,
+        dependencies.feature_selection_provenance, stdout,
+    )
 
 
 def _run_inputs_command(
@@ -92,10 +133,44 @@ def _run_setup(services: SetupServices, stdout: TextIO) -> int:
     return 0
 
 
+def _run_confirmation_command(
+    arguments: argparse.Namespace, contract: ReportContract,
+    environment: FeatureConfirmationEnvironment | None,
+    provenance: FeatureSelectionProvenance | None, stdout: TextIO,
+) -> int:
+    status = confirm_feature_selection(
+        contract, Path(arguments.contract), Path(arguments.report), arguments.dry_run,
+        environment, provenance,
+    )
+    print(f"feature_confirmation: {status}", file=stdout)
+    return 0
+
+
+def _run_baselines_gate(
+    arguments: argparse.Namespace, contract: ReportContract, stdout: TextIO,
+) -> int:
+    status = baselines_gate_status(contract)
+    print(f"baselines: {status}", file=stdout)
+    if not arguments.dry_run:
+        require_baselines_gate(contract)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Reproduce buffalo-weight report evidence")
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("setup", help="prepare and audit the official environment")
+    _add_reconstructible_stage_parsers(subcommands)
+    _add_confirmation_parsers(subcommands)
+    clean = subcommands.add_parser("clean", help="remove reconstructible stage artifacts")
+    clean.add_argument("stage")
+    clean.add_argument("--config", default="configs/report.yaml")
+    return parser
+
+
+def _add_reconstructible_stage_parsers(
+    subcommands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     inputs = subcommands.add_parser("inputs", help="validate masks and build features and folds")
     inputs.add_argument("--config", default="configs/report.yaml")
     inputs.add_argument("--dry-run", action="store_true")
@@ -104,7 +179,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     selection.add_argument("--config", default="configs/report.yaml")
     selection.add_argument("--dry-run", action="store_true")
-    clean = subcommands.add_parser("clean", help="remove reconstructible stage artifacts")
-    clean.add_argument("stage")
-    clean.add_argument("--config", default="configs/report.yaml")
-    return parser
+
+
+def _add_confirmation_parsers(
+    subcommands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    confirmation = subcommands.add_parser(
+        "confirm-features", help="promote a reviewed shared-feature decision"
+    )
+    confirmation.add_argument("--config", default="configs/report.yaml")
+    confirmation.add_argument("--contract", required=True)
+    confirmation.add_argument("--report", required=True)
+    confirmation.add_argument("--dry-run", action="store_true")
+    baselines = subcommands.add_parser(
+        "baselines", help="audit the confirmed shared-feature gate"
+    )
+    baselines.add_argument("--config", default="configs/report.yaml")
+    baselines.add_argument("--dry-run", action="store_true")

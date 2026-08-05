@@ -41,3 +41,38 @@ dependency identity, source commit, exact output hashes, CSV schemas and row
 counts, JSON keys, PNG dimensions and DPI, and the validations performed. Its
 status is also `provisional`; a missing or divergent output makes the stage
 absent or obsolete rather than reusable.
+
+## Human confirmation
+
+A human-authored contract and reviewed report are promoted together to
+`evidence/confirmed/feature_selection/v1/`. Promotion never derives
+`selected_features` from recommendations. The contract has exactly this shape:
+
+```json
+{
+  "schema_version": 1,
+  "status": "confirmed",
+  "selected_features": ["area", "perimeter"],
+  "standardization": "fit within each permitted training partition",
+  "report_sha256": "<64 lowercase hexadecimal characters>",
+  "human_decision": {
+    "decision_url": "https://github.com/owner/repository/issues/16#issuecomment-...",
+    "reviewer": "<reviewer name>",
+    "reviewed_at": "2026-08-04"
+  }
+}
+```
+
+The selected list is non-empty, unique, limited to the 26 candidates, and a
+subsequence of their canonical order. Every selected name must occur in
+backticks in the reviewed report. The report must retain the
+`Registro de revisão humana` section, set its status to `revisado`, and replace
+all pending placeholders. `report_sha256` is the SHA-256 of that exact report.
+
+Promotion accepts only an intact provisional package produced by the official
+CPU/CUDA execution and a clean Git worktree. It copies the human contract
+without filling fields, writes the confirmed manifest last, and records the
+decision URL and contract hash. It also preserves the provisional manifest as
+`source_feature_selection_manifest.json`, whose digest and source commit are
+checked by the baseline gate. The gate revalidates the confirmed contract,
+report, evidence schemas, output hashes, and current input snapshot.

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "status": "confirmed",
+  "selected_features": [
+    "area",
+    "perimeter",
+    "solidity",
+    "circularity",
+    "equivalent_diameter",
+    "bbox_width",
+    "bbox_height",
+    "bbox_area",
+    "aspect_ratio",
+    "extent",
+    "convex_area",
+    "convexity",
+    "major_axis_length",
+    "minor_axis_length",
+    "roundness",
+    "feret_diameter",
+    "hu_moment_1",
+    "hu_moment_2",
+    "area_major_axis_product",
+    "center_vertical_occupancy",
+    "end_vertical_occupancy_min",
+    "end_vertical_occupancy_max",
+    "center_to_end_occupancy_ratio",
+    "centroid_x_offset",
+    "centroid_y_ratio"
+  ],
+  "standardization": "fit within each permitted training partition",
+  "report_sha256": "fe41afeb97be92d6e35c407d5d195693ea7f904b7b28094fbb9d27f12fe7622a",
+  "human_decision": {
+    "decision_url": "https://github.com/Victor-Saraiva-P/buffalo-weight-pred/issues/16#issuecomment-5185467162",
+    "reviewer": "Victor Alexandre Saraiva Pimentel",
+    "reviewed_at": "2026-08-04"
+  }
+}

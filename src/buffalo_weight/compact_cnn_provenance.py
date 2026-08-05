@@ -16,18 +16,22 @@ class CompactCnnProvenance(Protocol):
 
     def compact_cnn_recipe_hash(self) -> str:
         """Hash pertinent source; for example, augmentation edits invalidate reuse."""
+        # Implementations resolve source knowledge rather than trusting manual versions.
         ...
 
     def compact_cnn_dependencies(self) -> dict[str, str]:
         """Report scientific packages; for example, include exact PyTorch."""
+        # Exact versions participate in scientific freshness.
         ...
 
     def repository_commit(self) -> str:
         """Report source identity; for example, manifests record the full HEAD SHA."""
+        # Commit identity remains audit metadata rather than a freshness key.
         ...
 
     def compact_cnn_execution(self) -> dict[str, str]:
         """Audit CUDA host details; for example, record GPU and driver without invalidation."""
+        # Hardware metadata documents a run without invalidating it.
         ...
 
 
@@ -69,8 +73,10 @@ class SystemCompactCnnProvenance:
 
 
 def _recipe_module_names() -> tuple[str, ...]:
-    return (
+    names = (
         "compact_cnn_adapter.py", "compact_cnn_artifacts.py",
-        "compact_cnn_evaluation.py", "compact_cnn_provenance.py",
-        "compact_cnn_stage.py", "report_cli.py", "snapshot_io.py",
+        "compact_cnn_augmentation.py", "compact_cnn_evaluation.py",
+        "compact_cnn_network.py", "compact_cnn_provenance.py",
+        "compact_cnn_stage.py", "compact_cnn_types.py",
     )
+    return names

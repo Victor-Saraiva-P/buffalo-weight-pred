@@ -1,9 +1,9 @@
-"""Project-owned CUDA boundary for the frozen compact CNN baseline."""
+"""Project-owned deterministic CUDA training boundary for the compact CNN."""
 
 from __future__ import annotations
 
 import random
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -12,113 +12,19 @@ from numpy.typing import NDArray
 import torch
 from torch import nn
 
-
-@dataclass(frozen=True)
-class CompactCnnRecipe:
-    """Declare the frozen recipe; for example, manifests serialize ``as_mapping()``."""
-
-    image_size: int = 224
-    input_channels: int = 1
-    optimizer: str = "AdamW"
-    learning_rate: float = 0.001
-    batch_size: int = 16
-    weight_decay: float = 0.0001
-    loss: str = "L1"
-    max_epochs: int = 300
-    patience: int = 40
-    minimum_improvement_kg: float = 0.1
-    gradient_clip: float = 5.0
-    horizontal_flip_probability: float = 0.5
-    translation_fraction: float = 0.05
-    inner_seed: int = 43
-    training_seed: int = 44
-
-    def as_mapping(self) -> dict[str, bool | float | int | str]:
-        """Return manifest values; for example, the optimizer remains ``AdamW``."""
-        return cast(dict[str, bool | float | int | str], asdict(self))
-
-
-COMPACT_CNN_RECIPE = CompactCnnRecipe()
-
-
-@dataclass(frozen=True)
-class CompactCnnTargetScale:
-    mean_kg: float
-    scale_kg: float
-
-    def standardize(self, targets_kg: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Scale permitted targets; for example, validation uses selection statistics."""
-        return np.asarray((targets_kg - self.mean_kg) / self.scale_kg, dtype=np.float64)
-
-    def restore(self, standardized: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Restore kilograms; for example, OOF predictions use report units."""
-        return np.asarray(standardized * self.scale_kg + self.mean_kg, dtype=np.float64)
-
-
-@dataclass(frozen=True)
-class MaskBatch:
-    pixels: NDArray[np.float32]
-    targets_kg: NDArray[np.float64]
-    sample_ids: tuple[str, ...]
-    strata: tuple[str, ...]
-
-
-class CompactCnnNetwork(nn.Module):
-    """Frozen compact architecture; for example, it consumes one 224×224 mask channel."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.Conv2d(1, 16, 5, padding=2), nn.BatchNorm2d(16), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(),
-            DeterministicAdaptiveAveragePool4(), nn.Flatten(), nn.Dropout(0.25),
-            nn.Linear(64 * 4 * 4, 64), nn.ReLU(), nn.Linear(64, 1),
-        )
-
-    def forward(self, masks: torch.Tensor) -> torch.Tensor:
-        """Predict standardized weight; for example, a batch of two returns shape ``(2,)``."""
-        return cast(torch.Tensor, self.layers(masks).squeeze(1))
-
-
-class DeterministicAdaptiveAveragePool4(nn.Module):
-    """Pool to 4×4 deterministically; for example, 56×56 becomes sixteen 14×14 means."""
-
-    def forward(self, values: torch.Tensor) -> torch.Tensor:
-        """Average equal spatial bins; for example, frozen 224px inputs reach 56px here."""
-        height, width = values.shape[-2:]
-        if height % 4 or width % 4:
-            raise ValueError(f"pool input was {(height, width)!r}; expected dimensions divisible by 4")
-        # Issue #19 requires deterministic CUDA, whose adaptive-pool backward is unavailable.
-        blocked = values.reshape(*values.shape[:-2], 4, height // 4, 4, width // 4)
-        return blocked.mean(dim=(3, 5))
-
-
-class CompactCnnPredictor(Protocol):
-    def predict_kg(self, batch: MaskBatch) -> NDArray[np.float64]:
-        """Predict held-out masks; for example, values are restored to kilograms."""
-        ...
-
-
-class CompactCnnTrainingAdapter(Protocol):
-    def select_epoch_count(
-        self, selection: MaskBatch, stopping: MaskBatch,
-        target_scale: CompactCnnTargetScale, recipe: CompactCnnRecipe,
-    ) -> int:
-        """Select epochs using only an inner split; for example, return the best epoch."""
-        ...
-
-    def fit_epochs(
-        self, training: MaskBatch, target_scale: CompactCnnTargetScale,
-        epochs: int, recipe: CompactCnnRecipe,
-    ) -> CompactCnnPredictor:
-        """Refit from scratch; for example, consume all external-train masks."""
-        ...
+from buffalo_weight.compact_cnn_augmentation import augment_binary_masks
+from buffalo_weight.compact_cnn_network import CompactCnnNetwork
+from buffalo_weight.compact_cnn_types import (
+    CompactCnnRecipe,
+    CompactCnnTargetScale,
+    MaskBatch,
+)
 
 
 class CudaRuntime(Protocol):
     def cuda_available(self) -> bool:
         """Report usability; for example, false stops before model creation."""
+        # Runtime probing remains injectable so CPU-only tests fail before allocation.
         ...
 
 
@@ -127,7 +33,9 @@ class TorchCudaRuntime:
 
     def cuda_available(self) -> bool:
         """Report PyTorch CUDA availability; for example, a configured GPU returns true."""
-        return bool(torch.cuda.is_available())
+        available = torch.cuda.is_available()
+        usable = bool(available)
+        return usable
 
 
 @dataclass(frozen=True)
@@ -147,7 +55,9 @@ class TorchCompactCnnPredictor:
         self, model: CompactCnnNetwork, target_scale: CompactCnnTargetScale,
         device: torch.device,
     ) -> None:
-        self.model, self.target_scale, self.device = model, target_scale, device
+        self.model = model
+        self.target_scale = target_scale
+        self.device = device
 
     def predict_kg(self, batch: MaskBatch) -> NDArray[np.float64]:
         """Predict without augmentation; for example, held-out pixels remain unchanged."""
@@ -155,7 +65,8 @@ class TorchCompactCnnPredictor:
         inputs = torch.as_tensor(batch.pixels, dtype=torch.float32, device=self.device)
         with torch.no_grad():
             standardized = self.model(inputs).detach().cpu().numpy()
-        return self.target_scale.restore(np.asarray(standardized, dtype=np.float64))
+        typed = np.asarray(standardized, dtype=np.float64)
+        return self.target_scale.restore(typed)
 
 
 class CompactCnnAdapter:
@@ -170,7 +81,9 @@ class CompactCnnAdapter:
     def create_model(self, seed: int) -> CompactCnnNetwork:
         """Create a seeded CUDA network; for example, outer refit uses seed 44."""
         _seed_everything(seed)
-        return CompactCnnNetwork().to(self.device)
+        model = CompactCnnNetwork()
+        cuda_model = model.to(self.device)
+        return cuda_model
 
     def select_epoch_count(
         self, selection: MaskBatch, stopping: MaskBatch,
@@ -202,13 +115,13 @@ class CompactCnnAdapter:
         generator = torch.Generator().manual_seed(recipe.training_seed)
         for _ in range(epochs):
             _train_epoch(model, optimizer, training, target_scale, recipe, generator)
-        return TorchCompactCnnPredictor(model, target_scale, self.device)
+        predictor = TorchCompactCnnPredictor(model, target_scale, self.device)
+        return predictor
 
     def contract_probe(self, seed: int = 44) -> CompactCnnContractProbe:
         """Exercise CUDA behavior; for example, tests perform one tiny parameter update."""
         model = self.create_model(seed)
-        inputs = torch.zeros((2, 1, 32, 32), device=self.device)
-        inputs[:, :, 8:24, 6:26] = 1.0
+        inputs = _compact_cnn_probe_inputs(self.device)
         targets = torch.tensor([-0.5, 0.5], device=self.device)
         before = [parameter.detach().clone() for parameter in model.parameters()]
         optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0001)
@@ -225,87 +138,33 @@ class CompactCnnAdapter:
 
     def save_model(self, model: CompactCnnNetwork, path: Path) -> None:
         """Save an owned checkpoint; for example, CUDA tests reload the same weights."""
-        torch.save({"state_dict": model.state_dict()}, path)
+        payload = {"state_dict": model.state_dict()}
+        torch.save(payload, path)
+        return None
 
     def load_model(self, path: Path, seed: int = 44) -> CompactCnnNetwork:
         """Load an owned checkpoint; for example, tensors remain on CUDA."""
         payload = torch.load(path, map_location=self.device, weights_only=True)
         if not isinstance(payload, dict) or not isinstance(payload.get("state_dict"), dict):
-            raise ValueError(f"checkpoint payload was {type(payload).__name__}; expected state_dict")
+            raise ValueError(
+                f"checkpoint payload was {type(payload).__name__}; expected state_dict"
+            )
         model = self.create_model(seed)
         model.load_state_dict(cast(dict[str, torch.Tensor], payload["state_dict"]))
         return model
 
     def probe_predictions(self, model: CompactCnnNetwork) -> tuple[float, ...]:
         """Predict the fixed CUDA probe; for example, checkpoint tests compare values."""
-        inputs = torch.zeros((2, 1, 32, 32), device=self.device)
-        inputs[:, :, 8:24, 6:26] = 1.0
-        return _probe_predictions(model, inputs)
+        inputs = _compact_cnn_probe_inputs(self.device)
+        predictions = _probe_predictions(model, inputs)
+        return predictions
 
 
-def augment_binary_masks(
-    masks: torch.Tensor, generator: torch.Generator,
-    recipe: CompactCnnRecipe = COMPACT_CNN_RECIPE,
-) -> torch.Tensor:
-    """Apply only valid flips/translations; for example, foreground pixel count is preserved."""
-    augmented = [_augment_one(mask, generator, recipe) for mask in masks]
-    return torch.stack(augmented)
-
-
-def _augment_one(
-    mask: torch.Tensor, generator: torch.Generator, recipe: CompactCnnRecipe,
-) -> torch.Tensor:
-    transformed = mask.clone()
-    if torch.rand((), generator=generator) < recipe.horizontal_flip_probability:
-        transformed = torch.flip(transformed, dims=[2])
-    shift_y, shift_x = _valid_translation(transformed, generator, recipe.translation_fraction)
-    return _translate_without_wrap(transformed, shift_y, shift_x)
-
-
-def _valid_translation(
-    mask: torch.Tensor, generator: torch.Generator, fraction: float,
-) -> tuple[int, int]:
-    foreground = torch.nonzero(mask[0] > 0, as_tuple=False)
-    if foreground.numel() == 0:
-        return (0, 0)
-    height, width = mask.shape[1:]
-    y_limits = _translation_limits(foreground[:, 0], height, fraction)
-    x_limits = _translation_limits(foreground[:, 1], width, fraction)
-    return (_sample_shift(y_limits, generator), _sample_shift(x_limits, generator))
-
-
-def _translation_limits(
-    coordinates: torch.Tensor, size: int, fraction: float,
-) -> tuple[int, int]:
-    maximum = int(size * fraction)
-    lower = max(-maximum, -int(coordinates.min().item()))
-    upper = min(maximum, size - 1 - int(coordinates.max().item()))
-    return lower, upper
-
-
-def _sample_shift(limits: tuple[int, int], generator: torch.Generator) -> int:
-    lower, upper = limits
-    return int(torch.randint(lower, upper + 1, (), generator=generator).item())
-
-
-def _translate_without_wrap(mask: torch.Tensor, shift_y: int, shift_x: int) -> torch.Tensor:
-    translated = torch.roll(mask, shifts=(shift_y, shift_x), dims=(1, 2))
-    if shift_y > 0:
-        translated[:, :shift_y, :] = 0
-    elif shift_y < 0:
-        translated[:, shift_y:, :] = 0
-    if shift_x > 0:
-        translated[:, :, :shift_x] = 0
-    elif shift_x < 0:
-        translated[:, :, shift_x:] = 0
-    return translated
-
-
-def _optimizer(
-    model: CompactCnnNetwork, recipe: CompactCnnRecipe,
-) -> torch.optim.AdamW:
-    return torch.optim.AdamW(model.parameters(), lr=recipe.learning_rate,
-                             weight_decay=recipe.weight_decay)
+def _optimizer(model: CompactCnnNetwork, recipe: CompactCnnRecipe) -> torch.optim.AdamW:
+    parameters = model.parameters()
+    optimizer = torch.optim.AdamW(parameters, lr=recipe.learning_rate,
+                                  weight_decay=recipe.weight_decay)
+    return optimizer
 
 
 def _train_epoch(
@@ -337,16 +196,22 @@ def _validation_mae(
     with torch.no_grad():
         standardized = model(inputs).detach().cpu().numpy()
     predictions = target_scale.restore(np.asarray(standardized, dtype=np.float64))
-    return float(np.mean(np.abs(batch.targets_kg - predictions)))
+    absolute_errors = np.abs(batch.targets_kg - predictions)
+    return float(np.mean(absolute_errors))
 
 
-def _probe_predictions(
-    model: CompactCnnNetwork, inputs: torch.Tensor,
-) -> tuple[float, ...]:
+def _compact_cnn_probe_inputs(device: torch.device) -> torch.Tensor:
+    inputs = torch.zeros((2, 1, 32, 32), device=device)
+    inputs[:, :, 8:24, 6:26] = 1.0
+    return inputs
+
+
+def _probe_predictions(model: CompactCnnNetwork, inputs: torch.Tensor) -> tuple[float, ...]:
     model.eval()
     with torch.no_grad():
         values = model(inputs).detach().cpu().tolist()
-    return tuple(float(value) for value in values)
+    predictions = tuple(float(value) for value in values)
+    return predictions
 
 
 def _seed_everything(seed: int) -> None:

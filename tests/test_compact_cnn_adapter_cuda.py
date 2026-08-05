@@ -6,16 +6,15 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 import torch
 from torch import nn
 
-from buffalo_weight.compact_cnn_adapter import (
-    COMPACT_CNN_RECIPE,
-    CompactCnnAdapter,
-    CompactCnnTargetScale,
-    DeterministicAdaptiveAveragePool4,
-    MaskBatch,
-    augment_binary_masks,
+from buffalo_weight.compact_cnn_adapter import CompactCnnAdapter
+from buffalo_weight.compact_cnn_augmentation import augment_binary_masks
+from buffalo_weight.compact_cnn_network import DeterministicAdaptiveAveragePool4
+from buffalo_weight.compact_cnn_types import (
+    COMPACT_CNN_RECIPE, CompactCnnTargetScale, MaskBatch,
 )
 
 
@@ -23,7 +22,9 @@ class UnavailableCompactCnnRuntime:
     """Reject CUDA without touching model operations."""
 
     def __init__(self) -> None:
+        """Start without probes; for example, construction performs the first check."""
         self.availability_checks = 0
+        return None
 
     def cuda_available(self) -> bool:
         """Return false; for example, adapter construction must stop immediately."""
@@ -119,7 +120,7 @@ def _expected_recipe() -> dict[str, bool | float | int | str]:
 
 
 def _mask_batch(count: int, offset: int = 0) -> MaskBatch:
-    pixels = np.zeros((count, 1, 224, 224), dtype=np.float32)
+    pixels: NDArray[np.float32] = np.zeros((count, 1, 224, 224), dtype=np.float32)
     for index in range(count):
         pixels[index, 0, 30:190, 20 + index : 180 + index] = 1.0
     targets = np.asarray([100.0 + (offset + index) * 2 for index in range(count)])

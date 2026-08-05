@@ -11,7 +11,7 @@ from PIL import Image
 from sklearn.metrics import r2_score
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from buffalo_weight.compact_cnn_adapter import (
+from buffalo_weight.compact_cnn_types import (
     COMPACT_CNN_RECIPE,
     CompactCnnRecipe,
     CompactCnnTargetScale,
@@ -194,8 +194,11 @@ def _nearest_letterbox(image: Image.Image, image_size: int) -> Image.Image:
 
 
 def _prediction(sample: CompactCnnSample, predicted_kg: float) -> CompactCnnPrediction:
-    return CompactCnnPrediction(sample.file_name, sample.farm, sample.weight_category,
-                                sample.fold, sample.weight_kg, predicted_kg)
+    prediction = CompactCnnPrediction(
+        sample.file_name, sample.farm, sample.weight_category,
+        sample.fold, sample.weight_kg, predicted_kg,
+    )
+    return prediction
 
 
 def _metric_row(

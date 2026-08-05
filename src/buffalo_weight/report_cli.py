@@ -11,9 +11,9 @@ from typing import TextIO
 
 from buffalo_weight.baseline_provenance import BaselineProvenance
 from buffalo_weight.baseline_stage import run_random_forest_baseline_stage
-from buffalo_weight.compact_cnn_adapter import CompactCnnTrainingAdapter
 from buffalo_weight.compact_cnn_provenance import CompactCnnProvenance
 from buffalo_weight.compact_cnn_stage import run_compact_cnn_stage
+from buffalo_weight.compact_cnn_types import CompactCnnTrainingAdapter
 from buffalo_weight.dense_baseline_stage import (
     DenseBaselineDependencies,
     run_dense_baseline_stage,
@@ -71,7 +71,6 @@ def main(
     compact_cnn_provenance: CompactCnnProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
-    arguments = _build_parser().parse_args(argv)
     dependencies = _CliDependencies(
         services, snapshot_publisher, report_provenance, feature_evidence_runner,
         feature_selection_provenance, feature_confirmation_environment,
@@ -79,13 +78,14 @@ def main(
         dense_baseline_dependencies,
         compact_cnn_adapter, compact_cnn_provenance,
     )
-    return _run_with_errors(arguments, dependencies, stdout, stderr)
+    return _execute_cli(argv, dependencies, stdout, stderr)
 
 
-def _run_with_errors(
-    arguments: argparse.Namespace, dependencies: _CliDependencies,
+def _execute_cli(
+    argv: Sequence[str] | None, dependencies: _CliDependencies,
     stdout: TextIO, stderr: TextIO,
 ) -> int:
+    arguments = _build_parser().parse_args(argv)
     try:
         return _dispatch(arguments, dependencies, stdout)
     except (OSError, ValueError) as error:

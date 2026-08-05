@@ -72,3 +72,22 @@ class RecordingFeatureBaseline(FeatureBaseline):
     ) -> FeaturePredictor:
         self.fit_calls.append(RecordedFit(partition.sample_ids, feature_names))
         return FirstColumnPredictor(self, partition.sample_ids)
+
+
+class ConstantFeaturePredictor(FeaturePredictor):
+    """Return a known literal so artifact metrics have an independent oracle."""
+
+    def predict(self, partition: PredictionPartition) -> NDArray[np.float64]:
+        return np.full(len(partition.sample_ids), 100.0, dtype=np.float64)
+
+
+class ConstantFeatureBaseline(FeatureBaseline):
+    """Fit a deterministic boundary whose predictions are always 100 kg."""
+
+    name: FeatureBaselineName = "random_forest"
+
+    def fit(
+        self, partition: TrainingPartition, feature_names: tuple[str, ...]
+    ) -> FeaturePredictor:
+        del partition, feature_names
+        return ConstantFeaturePredictor()

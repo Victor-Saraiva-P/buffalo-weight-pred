@@ -64,8 +64,10 @@ def _prediction_partition(
 def _feature_matrix(
     samples: list[FeatureSample], feature_names: tuple[str, ...],
 ) -> NDArray[np.float64]:
-    values = [[sample.feature_values[name] for name in feature_names] for sample in samples]
-    return np.asarray(values, dtype=np.float64)
+    feature_matrix_rows = [
+        [sample.feature_values[name] for name in feature_names] for sample in samples
+    ]
+    return np.asarray(feature_matrix_rows, dtype=np.float64)
 
 
 def _outer_fold_partitions(

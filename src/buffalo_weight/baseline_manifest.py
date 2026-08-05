@@ -19,6 +19,7 @@ from buffalo_weight.baseline_types import (
     BaselineConfiguration,
     BaselineStatus,
     EvaluationRole,
+    baseline_definition,
 )
 from buffalo_weight.csv_io import csv_columns, csv_row_count
 from buffalo_weight.feature_confirmation_manifest import SOURCE_MANIFEST_NAME
@@ -79,24 +80,26 @@ def baseline_identity(
     role: EvaluationRole, features: tuple[str, ...], provenance: BaselineProvenance,
 ) -> dict[str, object]:
     """Build freshness identity; for example, output hashes are deliberately separate."""
+    definition = baseline_definition(configuration)
+    consumed_features = features if definition.consumes_confirmed_features else ()
     return {
         "manifest_version": 1, "package_type": "reconstructible_configuration",
         "stage": "baselines", "status": "complete", "configuration": configuration,
         "evaluation_role": role, "command": "python main.py baselines",
         "recipe_sha256": provenance.baseline_recipe_hash(configuration),
         "dependencies": provenance.baseline_dependencies(configuration),
-        "selected_features": list(features), "fold_seed": contract.inputs.fold_seed,
+        "selected_features": list(consumed_features), "fold_seed": contract.inputs.fold_seed,
         "training_seed": 44, "report_contract": contract_identity(contract),
-        "inputs": _input_records(contract, configuration, features),
+        "inputs": _input_records(contract, definition.consumes_confirmed_features, features),
         "validations": BASELINE_VALIDATIONS,
     }
 
 
 def _input_records(
-    contract: ReportContract, configuration: BaselineConfiguration,
+    contract: ReportContract, consumes_confirmed_features: bool,
     features: tuple[str, ...],
 ) -> dict[str, dict[str, object]]:
-    consumed_features = features if configuration == "random_forest_baseline" else ()
+    consumed_features = features if consumes_confirmed_features else ()
     records = {
         "feature_index.csv": _csv_projection_record(
             contract.inputs_output_dir / "feature_index.csv",
@@ -107,7 +110,7 @@ def _input_records(
             ("file_name", "weight_category", "fold"),
         ),
     }
-    paths = _confirmed_input_paths(contract)
+    paths = _confirmed_input_paths(contract) if consumes_confirmed_features else {}
     records.update({name: {"sha256": sha256_file(path)} for name, path in paths.items()})
     return records
 

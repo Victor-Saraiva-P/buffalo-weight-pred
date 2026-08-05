@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from buffalo_weight.baseline_artifacts import write_baseline_metrics, write_baseline_predictions
@@ -18,6 +20,7 @@ from buffalo_weight.baseline_manifest import (
 )
 from buffalo_weight.baseline_provenance import BaselineProvenance, SystemBaselineProvenance
 from buffalo_weight.baseline_types import (
+    BASELINE_DEFINITIONS,
     BaselineConfiguration,
     BaselinePrediction,
     BaselineStatus,
@@ -35,6 +38,16 @@ from buffalo_weight.snapshot_io import (
     SnapshotPublisher,
     clean_snapshot_stage,
 )
+
+
+@dataclass(frozen=True)
+class _BaselineBuildContext:
+    samples: list[FeatureSample]
+    features: tuple[str, ...]
+    random_forest: FeatureBaseline | None
+
+
+ConfigurationEvaluator = Callable[[_BaselineBuildContext], list[BaselinePrediction]]
 
 
 def run_random_forest_baseline_stage(
@@ -79,19 +92,18 @@ def _rebuild_obsolete_configurations(
     random_forest: FeatureBaseline | None,
     provenance: BaselineProvenance, publisher: SnapshotPublisher,
 ) -> dict[BaselineConfiguration, BaselineStatus]:
-    if statuses["random_forest_baseline"] != "reusable":
-        _remove_obsolete(contract, "random_forest_baseline", statuses)
-        candidate = evaluate_random_forest_oof(samples, features,
-                                               random_forest or RandomForestBaseline())
-        _publish_configuration(contract, "random_forest_baseline", candidate,
-                               features, provenance, publisher)
-        statuses["random_forest_baseline"] = "rebuilt"
-    if statuses["training_mean_reference"] != "reusable":
-        _remove_obsolete(contract, "training_mean_reference", statuses)
-        reference = evaluate_training_mean_reference(samples)
-        _publish_configuration(contract, "training_mean_reference", reference, features,
-                               provenance, publisher)
-        statuses["training_mean_reference"] = "rebuilt"
+    _remove_all_obsolete(contract, statuses)
+    context = _BaselineBuildContext(samples, features, random_forest)
+    for definition in BASELINE_DEFINITIONS:
+        configuration = definition.configuration
+        if statuses[configuration] == "reusable":
+            continue
+        evaluator = CONFIGURATION_EVALUATORS[configuration]
+        predictions = evaluator(context)
+        _publish_configuration(
+            contract, configuration, predictions, features, provenance, publisher,
+        )
+        statuses[configuration] = "rebuilt"
     return statuses
 
 
@@ -99,12 +111,11 @@ def _configuration_statuses(
     contract: ReportContract, features: tuple[str, ...], provenance: BaselineProvenance,
 ) -> dict[BaselineConfiguration, BaselineStatus]:
     return {
-        "random_forest_baseline": baseline_configuration_status(
-            contract, "random_forest_baseline", "candidate", features, provenance,
-        ),
-        "training_mean_reference": baseline_configuration_status(
-            contract, "training_mean_reference", "reference", features, provenance,
-        ),
+        definition.configuration: baseline_configuration_status(
+            contract, definition.configuration, definition.evaluation_role,
+            features, provenance,
+        )
+        for definition in BASELINE_DEFINITIONS
     }
 
 
@@ -133,14 +144,39 @@ def _blocked_or_raise(
     raise ValueError(f"inputs identity was {actual!r}; expected current identity {expected!r}")
 
 
-def _remove_obsolete(
-    contract: ReportContract, configuration: BaselineConfiguration,
+def _remove_all_obsolete(
+    contract: ReportContract,
     statuses: dict[BaselineConfiguration, BaselineStatus],
 ) -> None:
-    if statuses[configuration] != "obsolete":
-        return
-    output_dir = contract.artifacts_root / "baselines" / configuration
-    clean_snapshot_stage(output_dir)
+    obsolete = [configuration for configuration, status in statuses.items()
+                if status == "obsolete"]
+    for configuration in obsolete:
+        output_dir = contract.artifacts_root / "baselines" / configuration
+        clean_snapshot_stage(output_dir)
+
+
+def _random_forest_predictions(context: _BaselineBuildContext) -> list[BaselinePrediction]:
+    model = context.random_forest or RandomForestBaseline()
+    predictions = evaluate_random_forest_oof(context.samples, context.features, model)
+    return predictions
+
+
+def _training_mean_predictions(context: _BaselineBuildContext) -> list[BaselinePrediction]:
+    # The reference deliberately ignores confirmed scalar features.
+    predictions = evaluate_training_mean_reference(context.samples)
+    return predictions
+
+
+CONFIGURATION_EVALUATORS: dict[BaselineConfiguration, ConfigurationEvaluator] = {
+    "random_forest_baseline": _random_forest_predictions,
+    "training_mean_reference": _training_mean_predictions,
+}
+
+
+def baseline_evaluator_symbol(configuration: BaselineConfiguration) -> str:
+    """Name the configured evaluator; for example, provenance records the actual mapping."""
+    evaluator = CONFIGURATION_EVALUATORS[configuration]
+    return evaluator.__name__
 
 
 def _publish_configuration(

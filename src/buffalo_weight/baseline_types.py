@@ -15,6 +15,34 @@ BASELINE_VALIDATIONS = [
 
 
 @dataclass(frozen=True)
+class BaselineDefinition:
+    configuration: BaselineConfiguration
+    evaluation_role: EvaluationRole
+    consumes_confirmed_features: bool
+    dependencies: tuple[str, ...]
+
+
+BASELINE_DEFINITIONS = (
+    BaselineDefinition(
+        "random_forest_baseline", "candidate", True, ("numpy", "scikit-learn"),
+    ),
+    BaselineDefinition(
+        "training_mean_reference", "reference", False, ("numpy",),
+    ),
+)
+
+
+def baseline_definition(configuration: BaselineConfiguration) -> BaselineDefinition:
+    """Return frozen metadata; for example, the mean reference consumes no features."""
+    matching = [item for item in BASELINE_DEFINITIONS if item.configuration == configuration]
+    if len(matching) != 1:
+        raise ValueError(
+            f"baseline configuration was {configuration!r}; expected one frozen definition"
+        )
+    return matching[0]
+
+
+@dataclass(frozen=True)
 class BaselinePrediction:
     file_name: str
     weight_category: str

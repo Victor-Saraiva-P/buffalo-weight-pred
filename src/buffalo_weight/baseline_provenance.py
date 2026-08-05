@@ -16,7 +16,11 @@ from buffalo_weight.baseline_artifacts import (
     GROUPED_METRIC_COLUMNS,
     PREDICTION_COLUMNS,
 )
-from buffalo_weight.baseline_types import BASELINE_VALIDATIONS, BaselineConfiguration
+from buffalo_weight.baseline_types import (
+    BASELINE_VALIDATIONS,
+    BaselineConfiguration,
+    baseline_definition,
+)
 from buffalo_weight.feature_baselines import RandomForestBaseline
 
 
@@ -108,9 +112,8 @@ class SystemBaselineProvenance:
         self, configuration: BaselineConfiguration,
     ) -> dict[str, str]:
         """Report pertinent packages; for example, RF additionally records scikit-learn."""
-        names = ["numpy"]
-        if configuration == "random_forest_baseline":
-            names.append("scikit-learn")
+        definition = baseline_definition(configuration)
+        names = list(definition.dependencies)
         return {name: self._environment.distribution_version(name) for name in names}
 
     def repository_commit(self) -> str:
@@ -143,7 +146,7 @@ def _shared_recipe_symbols() -> tuple[RecipeSymbol, ...]:
         *_shared_manifest_recipe_symbols(),
         ("buffalo_weight.baseline_evaluation", "_outer_fold_partitions"),
         ("buffalo_weight.baseline_evaluation", "_baseline_prediction"),
-        ("buffalo_weight.baseline_stage", "_publish_configuration"),
+        *_shared_orchestration_recipe_symbols(),
     )
 
 
@@ -169,8 +172,19 @@ def _shared_manifest_recipe_symbols() -> tuple[RecipeSymbol, ...]:
         ("buffalo_weight.baseline_manifest", "_csv_projection_record"),
         ("buffalo_weight.baseline_manifest", "_output_records"),
         ("buffalo_weight.baseline_manifest", "_outputs_match"),
+    )
+
+
+def _shared_orchestration_recipe_symbols() -> tuple[RecipeSymbol, ...]:
+    return (
+        ("buffalo_weight.baseline_stage", "run_random_forest_baseline_stage"),
+        ("buffalo_weight.baseline_stage", "_run_current_baseline_inputs"),
+        ("buffalo_weight.baseline_stage", "_rebuild_obsolete_configurations"),
+        ("buffalo_weight.baseline_stage", "_configuration_statuses"),
         ("buffalo_weight.baseline_stage", "_inputs_identity_is_current"),
-        ("buffalo_weight.baseline_stage", "_remove_obsolete"),
+        ("buffalo_weight.baseline_stage", "_blocked_or_raise"),
+        ("buffalo_weight.baseline_stage", "_remove_all_obsolete"),
+        ("buffalo_weight.baseline_stage", "_publish_configuration"),
     )
 
 
@@ -183,6 +197,7 @@ def _random_forest_recipe_symbols() -> tuple[RecipeSymbol, ...]:
         ("buffalo_weight.baseline_evaluation", "_prediction_rows"),
         ("buffalo_weight.feature_baselines", "RandomForestBaseline"),
         ("buffalo_weight.feature_baselines", "SklearnFeaturePredictor"),
+        ("buffalo_weight.baseline_stage", "_random_forest_predictions"),
     )
 
 
@@ -190,16 +205,22 @@ def _training_mean_recipe_symbols() -> tuple[RecipeSymbol, ...]:
     return (
         ("buffalo_weight.baseline_evaluation", "evaluate_training_mean_reference"),
         ("buffalo_weight.baseline_evaluation", "_reference_rows"),
+        ("buffalo_weight.baseline_stage", "_training_mean_predictions"),
     )
 
 
 def _recipe_constants(configuration: BaselineConfiguration) -> str:
-    values: dict[str, object] = {
+    from buffalo_weight.baseline_stage import baseline_evaluator_symbol
+
+    definition = baseline_definition(configuration)
+    recipe_contract: dict[str, object] = {
         "configuration": configuration, "prediction_columns": PREDICTION_COLUMNS,
         "fold_metric_columns": FOLD_METRIC_COLUMNS,
         "grouped_metric_columns": GROUPED_METRIC_COLUMNS,
-        "validations": BASELINE_VALIDATIONS,
+        "validations": BASELINE_VALIDATIONS, "evaluation_role": definition.evaluation_role,
+        "consumes_confirmed_features": definition.consumes_confirmed_features,
+        "evaluator_symbol": baseline_evaluator_symbol(configuration),
     }
     if configuration == "random_forest_baseline":
-        values["model_recipe"] = RandomForestBaseline.recipe
-    return json.dumps(values, sort_keys=True, separators=(",", ":"))
+        recipe_contract["model_recipe"] = RandomForestBaseline.recipe
+    return json.dumps(recipe_contract, sort_keys=True, separators=(",", ":"))

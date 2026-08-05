@@ -54,6 +54,7 @@ class RandomForestBaselineCliTest(unittest.TestCase):
             candidate = _read_predictions(fixture, "random_forest_baseline")
             reference = _read_predictions(fixture, "training_mean_reference")
             _assert_prediction_artifacts(self, fixture, candidate, reference)
+            _assert_reference_feature_independence(self, fixture)
             _assert_random_forest_partitions(self, random_forest)
             _assert_fold_training_means(self, reference)
 
@@ -139,13 +140,14 @@ class RandomForestBaselineCliTest(unittest.TestCase):
             self.assertEqual(_run_baselines(
                 fixture, RecordingFeatureBaseline(), provenance,
             )[0], 0)
-            predictions = _configuration_dir(fixture, "random_forest_baseline") / "predictions.csv"
-            predictions.write_text(f"{predictions.read_text()}tampered\n")
+            for configuration in ("random_forest_baseline", "training_mean_reference"):
+                predictions = _configuration_dir(fixture, configuration) / "predictions.csv"
+                predictions.write_text(f"{predictions.read_text()}tampered\n")
             result, _, stderr = _run_baselines(fixture, FailingFeatureBaseline(), provenance)
             self.assertEqual(result, 1)
             self.assertIn("training state was failed", stderr)
             self.assertFalse(_configuration_dir(fixture, "random_forest_baseline").exists())
-            self.assertTrue(_configuration_dir(fixture, "training_mean_reference").exists())
+            self.assertFalse(_configuration_dir(fixture, "training_mean_reference").exists())
 
     def test_feature_input_invalidation_tracks_only_consumed_columns(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -212,6 +214,18 @@ def _assert_random_forest_partitions(
         {call.feature_names for call in random_forest.fit_calls},
         {("area", "perimeter")},
     )
+
+
+def _assert_reference_feature_independence(
+    test_case: unittest.TestCase, fixture: CuratedInputsFixture,
+) -> None:
+    manifest = json.loads(_manifest_path(fixture, "training_mean_reference").read_text())
+    test_case.assertEqual(manifest["selected_features"], [])
+    test_case.assertEqual(manifest["inputs"]["feature_index.csv"]["columns"], [
+        "file_name", "weight_kg",
+    ])
+    test_case.assertNotIn("shared_feature_contract.json", manifest["inputs"])
+    test_case.assertNotIn("confirmed_manifest.json", manifest["inputs"])
 
 
 def _assert_metric_artifacts(test_case: unittest.TestCase, output_dir: Path) -> None:

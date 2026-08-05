@@ -40,6 +40,7 @@ from buffalo_weight.reproduction_config import ReportContract, load_report_contr
 from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance
 from buffalo_weight.resnet_baseline_stage import (
     ResNetBaselineRunner,
+    plan_resnet_baseline_stage,
     run_resnet_baseline_stage,
 )
 from buffalo_weight.snapshot_io import SnapshotPublisher
@@ -213,8 +214,12 @@ def _run_baselines_command(
         dependencies.compact_cnn_provenance,
     )
     print(f"compact_cnn: {compact_status}", file=stdout)
+    plan = plan_resnet_baseline_stage(contract, dependencies.resnet_baseline_provenance)
+    print(f"resnet18_baseline: {plan}", file=stdout)
+    if arguments.dry_run or plan == "reusable":
+        return 0
     baseline_status = run_resnet_baseline_stage(
-        contract, arguments.dry_run, dependencies.resnet_baseline_runner,
+        contract, False, dependencies.resnet_baseline_runner,
         dependencies.resnet_baseline_provenance,
     )
     print(f"resnet18_baseline: {baseline_status}", file=stdout)

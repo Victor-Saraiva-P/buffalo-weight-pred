@@ -68,11 +68,19 @@ class CudaAvailability(Protocol):
         """Report CUDA usability; for example, false stops before model creation."""
         ...
 
+    def training_device(self) -> torch.device:
+        """Select the training device; for example, production returns CUDA."""
+        ...
+
 
 class TorchCudaAvailability:
     def cuda_available(self) -> bool:
         """Read PyTorch CUDA state; for example, production requires an available GPU."""
         return bool(torch.cuda.is_available())
+
+    def training_device(self) -> torch.device:
+        """Select CUDA; for example, official baseline training never falls back to CPU."""
+        return torch.device("cuda")
 
 
 @dataclass(frozen=True)
@@ -114,9 +122,10 @@ class ResNet18BaselineAdapter:
     ) -> None:
         self.recipe = recipe
         self._network_builder = network_builder
-        if not (runtime or TorchCudaAvailability()).cuda_available():
+        resolved_runtime = runtime or TorchCudaAvailability()
+        if not resolved_runtime.cuda_available():
             raise ValueError("CUDA availability was false; expected CUDA for ResNet-18 training")
-        self._device = torch.device("cuda")
+        self._device = resolved_runtime.training_device()
 
     def contract_probe(self) -> ResNetContractProbe:
         """Exercise one CUDA update; for example, tests verify gradients and determinism."""

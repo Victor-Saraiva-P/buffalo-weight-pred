@@ -114,15 +114,24 @@ def run_resnet_baseline_stage(
     publisher: SnapshotPublisher | None = None,
 ) -> str:
     """Run or reuse the baseline; for example, dry-run never probes CUDA or weights."""
-    require_baselines_gate(contract)
-    _require_current_mask_inputs(contract)
     resolved_provenance = provenance or SystemResNetBaselineProvenance()
-    status = resnet_baseline_status(contract, resolved_provenance)
+    status = plan_resnet_baseline_stage(contract, resolved_provenance)
     if dry_run or status == "reusable":
         return status
     resolved_runner = runner or ScientificResNetBaselineRunner()
     return _run_locked_rebuild(contract, resolved_runner, resolved_provenance,
                                publisher or FilesystemSnapshotPublisher())
+
+
+def plan_resnet_baseline_stage(
+    contract: ReportContract, provenance: ResNetBaselineProvenance | None = None
+) -> str:
+    """Plan without writes; for example, the CLI prints ``absent`` before execution."""
+    require_baselines_gate(contract)
+    _require_current_mask_inputs(contract)
+    return resnet_baseline_status(
+        contract, provenance or SystemResNetBaselineProvenance()
+    )
 
 
 def resnet_baseline_status(
@@ -187,8 +196,12 @@ def _write_snapshot(
     predictions = runner.evaluate(samples)
     validate_predictions(predictions, samples)
     write_resnet_outputs(output_dir, predictions)
-    if _baseline_identity(contract, provenance) != identity:
-        raise ValueError("ResNet baseline identity changed; expected an unchanged evaluation")
+    current_identity = _baseline_identity(contract, provenance)
+    if current_identity != identity:
+        raise ValueError(
+            f"ResNet baseline identity changed to {current_identity!r}; "
+            f"expected unchanged identity {identity!r}"
+        )
     manifest = _complete_manifest(output_dir, identity, provenance, runner)
     write_manifest(output_dir / "manifest.json", manifest)
 

@@ -29,28 +29,77 @@ class ResNetBaselineProvenance(Protocol):
         ...
 
 
+class ResNetBaselineEnvironment(Protocol):
+    """External provenance I/O; for example, tests supply in-memory source files."""
+
+    def read_source(self, path: Path) -> bytes:
+        """Read working source; for example, recipe identity includes the adapter."""
+        ...
+
+    def distribution_version(self, name: str) -> str:
+        """Resolve one package version; for example, record the installed torch build."""
+        ...
+
+    def repository_commit(self, root: Path) -> str:
+        """Resolve HEAD; for example, manifests bind results to a full Git SHA."""
+        ...
+
+    def committed_source(self, root: Path, commit: str, relative: str) -> bytes | None:
+        """Read committed source; for example, an unknown SHA returns ``None``."""
+        ...
+
+
+class LocalResNetBaselineEnvironment:
+    """Perform local provenance I/O; for example, production reads packages and Git."""
+
+    def read_source(self, path: Path) -> bytes:
+        """Read one source path; for example, bytes preserve exact recipe identity."""
+        return path.read_bytes()
+
+    def distribution_version(self, name: str) -> str:
+        """Read installed metadata; for example, torchvision changes invalidate reuse."""
+        return importlib.metadata.version(name)
+
+    def repository_commit(self, root: Path) -> str:
+        """Read HEAD; for example, audit metadata stores the producing checkout."""
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        )
+        return result.stdout.strip()
+
+    def committed_source(self, root: Path, commit: str, relative: str) -> bytes | None:
+        """Read a Git blob; for example, missing objects cannot attest a manifest."""
+        result = subprocess.run(
+            ["git", "-C", str(root), "show", f"{commit}:{relative}"],
+            capture_output=True,
+        )
+        return result.stdout if result.returncode == 0 else None
+
+
 class SystemResNetBaselineProvenance:
     """Read local source, packages and Git; for example, production stages use this."""
+
+    def __init__(self, environment: ResNetBaselineEnvironment | None = None) -> None:
+        self._environment = environment or LocalResNetBaselineEnvironment()
 
     def recipe_hash(self) -> str:
         """Hash pertinent source; for example, unrelated baseline files are excluded."""
         source_root = Path(__file__).parent
-        sources = [(name, (source_root / name).read_bytes()) for name in _recipe_module_names()]
+        sources = [
+            (name, self._environment.read_source(source_root / name))
+            for name in _recipe_module_names()
+        ]
         return _source_digest(sources)
 
     def dependency_versions(self) -> dict[str, str]:
         """Resolve exact versions; for example, all mask-training dependencies are listed."""
         names = ("numpy", "Pillow", "scikit-learn", "torch", "torchvision")
-        return {name: importlib.metadata.version(name) for name in names}
+        return {name: self._environment.distribution_version(name) for name in names}
 
     def repository_commit(self) -> str:
         """Read HEAD; for example, provenance records the full Git SHA."""
-        repository_root = Path(__file__).parents[2]
-        result = subprocess.run(
-            ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True,
-        )
-        return result.stdout.strip()
+        return self._environment.repository_commit(Path(__file__).parents[2])
 
     def recipe_hash_at_commit(self, commit: str) -> str | None:
         """Hash recipe files from Git; for example, audit commits bind to their source."""
@@ -58,13 +107,12 @@ class SystemResNetBaselineProvenance:
         sources = []
         for name in _recipe_module_names():
             relative = f"src/buffalo_weight/{name}"
-            result = subprocess.run(
-                ["git", "-C", str(repository_root), "show", f"{commit}:{relative}"],
-                capture_output=True,
+            content = self._environment.committed_source(
+                repository_root, commit, relative
             )
-            if result.returncode != 0:
+            if content is None:
                 return None
-            sources.append((name, result.stdout))
+            sources.append((name, content))
         return _source_digest(sources)
 
 

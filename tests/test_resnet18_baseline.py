@@ -82,46 +82,35 @@ class RecordingResNetAdapter:
 
 
 class ResNet18BaselineTest(unittest.TestCase):
+    def test_adapter_contract_and_checkpoint_use_injected_training_device(self) -> None:
+        adapter, builder = tiny_training_adapter(CpuTrainingRuntime())
+
+        assert_adapter_contract_and_checkpoint(self, adapter)
+
+        self.assertEqual(builder.calls, 3)
+
+    def test_two_phase_training_uses_injected_training_device(self) -> None:
+        adapter, builder = tiny_training_adapter(CpuTrainingRuntime())
+
+        assert_two_phase_training(self, adapter)
+
+        self.assertEqual(builder.calls, 2)
+
     @unittest.skipUnless(torch.cuda.is_available(), "requires real CUDA")
     def test_cuda_adapter_updates_reloads_and_reproduces_tiny_network(self) -> None:
-        builder = TinyResNet18Builder()
-        adapter = ResNet18BaselineAdapter(
-            network_builder=builder, runtime=CallableCudaAvailability()
-        )
+        adapter, builder = tiny_training_adapter(CallableCudaAvailability())
 
-        first = adapter.contract_probe()
-        second = adapter.contract_probe()
+        assert_adapter_contract_and_checkpoint(self, adapter)
 
-        self.assertEqual(first.device_type, "cuda")
-        self.assertTrue(first.has_gradients)
-        self.assertTrue(first.parameters_updated)
-        self.assertEqual(first.predictions, second.predictions)
-        with tempfile.TemporaryDirectory() as directory:
-            checkpoint = Path(directory) / "resnet.pt"
-            adapter.save_model(first.model, checkpoint)
-            restored = adapter.load_model(checkpoint)
-            self.assertEqual(adapter.predict_probe(first.model), adapter.predict_probe(restored))
         self.assertEqual(builder.calls, 3)
 
     @unittest.skipUnless(torch.cuda.is_available(), "requires real CUDA")
     def test_refit_builds_fresh_weights_and_repeats_two_phase_training(self) -> None:
-        recipe = replace(
-            RESNET18_BASELINE_RECIPE, image_size=16, warmup_epochs=1,
-            max_partial_epochs=1, patience=1, batch_size=2,
-        )
-        builder = TinyResNet18Builder()
-        adapter = ResNet18BaselineAdapter(
-            recipe=recipe, network_builder=builder, runtime=CallableCudaAvailability()
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            samples = tiny_mask_samples(Path(directory))
-            epochs = adapter.select_epoch_count(samples[:4], samples[4:])
-            predictor = adapter.fit_epochs(samples[:4], epochs)
-            predictions = predictor.predict(samples[4:])
+        adapter, builder = tiny_training_adapter(CallableCudaAvailability())
+
+        assert_two_phase_training(self, adapter)
 
         self.assertEqual(builder.calls, 2)
-        self.assertEqual(epochs, 1)
-        self.assertTrue(np.isfinite(predictions).all())
 
     def test_frozen_recipe_matches_approved_protocol(self) -> None:
         recipe = RESNET18_BASELINE_RECIPE
@@ -229,6 +218,58 @@ class CallableCudaAvailability:
     def cuda_available(self) -> bool:
         """Expose real-test CUDA availability through the project-owned seam."""
         return fake_available_cuda()
+
+    def training_device(self) -> torch.device:
+        """Select real CUDA; for example, conditional integration tests use the GPU."""
+        return torch.device("cuda")
+
+
+class CpuTrainingRuntime:
+    def cuda_available(self) -> bool:
+        """Pass the production guard; for example, adapter logic can run on CI CPUs."""
+        return True
+
+    def training_device(self) -> torch.device:
+        """Select CPU; for example, tests exercise training without weakening production."""
+        return torch.device("cpu")
+
+
+def tiny_training_adapter(
+    runtime: CallableCudaAvailability | CpuTrainingRuntime,
+) -> tuple[ResNet18BaselineAdapter, TinyResNet18Builder]:
+    recipe = replace(
+        RESNET18_BASELINE_RECIPE, image_size=16, warmup_epochs=1,
+        max_partial_epochs=1, patience=1, batch_size=2,
+    )
+    builder = TinyResNet18Builder()
+    return ResNet18BaselineAdapter(recipe, builder, runtime), builder
+
+
+def assert_adapter_contract_and_checkpoint(
+    test_case: unittest.TestCase, adapter: ResNet18BaselineAdapter
+) -> None:
+    first = adapter.contract_probe()
+    second = adapter.contract_probe()
+    test_case.assertTrue(first.has_gradients)
+    test_case.assertTrue(first.parameters_updated)
+    test_case.assertEqual(first.predictions, second.predictions)
+    with tempfile.TemporaryDirectory() as directory:
+        checkpoint = Path(directory) / "resnet.pt"
+        adapter.save_model(first.model, checkpoint)
+        restored = adapter.load_model(checkpoint)
+        test_case.assertEqual(adapter.predict_probe(first.model), adapter.predict_probe(restored))
+
+
+def assert_two_phase_training(
+    test_case: unittest.TestCase, adapter: ResNet18BaselineAdapter
+) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        samples = tiny_mask_samples(Path(directory))
+        epochs = adapter.select_epoch_count(samples[:4], samples[4:])
+        predictor = adapter.fit_epochs(samples[:4], epochs)
+        predictions = predictor.predict(samples[4:])
+    test_case.assertEqual(epochs, 1)
+    test_case.assertTrue(np.isfinite(predictions).all())
 
 
 def tiny_mask_samples(root: Path) -> tuple[ResNetSample, ...]:

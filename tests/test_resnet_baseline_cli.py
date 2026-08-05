@@ -30,6 +30,10 @@ class ResNetBaselineCliTest(unittest.TestCase):
             self.assertEqual(result, 0, stderr)
             self.assertIn("baselines: released", stdout)
             self.assertIn("resnet18_baseline: rebuilt", stdout)
+            self.assertLess(
+                stdout.index("resnet18_baseline: absent"),
+                stdout.index("resnet18_baseline: rebuilt"),
+            )
             output_dir = baseline_output_dir(fixture)
             prediction_columns, predictions = read_csv(output_dir / "predictions.csv")
             metric_columns, metrics = read_csv(output_dir / "fold_metrics.csv")

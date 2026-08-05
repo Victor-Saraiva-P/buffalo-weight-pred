@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from buffalo_weight.resnet_baseline_evaluation import ResNetOofPrediction, ResNetSample
 
 
@@ -69,3 +71,32 @@ class FixedResNetBaselineProvenance:
     def recipe_hash_at_commit(self, commit: str) -> str | None:
         """Attest the fixed commit; for example, another SHA is not trusted by tests."""
         return self._recipe_hash if commit == "b" * 40 else None
+
+
+class FakeResNetBaselineEnvironment:
+    """Provide provenance without external I/O; for example, system tests stay repeatable."""
+
+    def __init__(self) -> None:
+        self.commit = "c" * 40
+        self.versions = {
+            "numpy": "2.5.0", "Pillow": "12.2.0", "scikit-learn": "1.9.0",
+            "torch": "2.13.0", "torchvision": "0.28.0",
+        }
+
+    def read_source(self, path: Path) -> bytes:
+        """Return stable working bytes; for example, module names distinguish sources."""
+        return f"working:{path.name}".encode()
+
+    def distribution_version(self, name: str) -> str:
+        """Return a fixed package version; for example, no metadata lookup is needed."""
+        return self.versions[name]
+
+    def repository_commit(self, root: Path) -> str:
+        """Return a fixed SHA; for example, no Git process is started."""
+        return self.commit
+
+    def committed_source(self, root: Path, commit: str, relative: str) -> bytes | None:
+        """Mirror working bytes for the fixed SHA; for example, other SHAs fail audit."""
+        if commit != self.commit:
+            return None
+        return f"working:{Path(relative).name}".encode()

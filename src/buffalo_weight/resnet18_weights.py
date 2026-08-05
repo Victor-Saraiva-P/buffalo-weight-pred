@@ -53,7 +53,7 @@ class TorchResNet18StateReader:
         """Load a verified torch state mapping; for example, read the setup cache on CPU."""
         import torch
 
-        validate_resnet18_sha256(path, expected_sha256)
+        require_offline_resnet18_weights(path, expected_sha256)
         loaded_state: object = torch.load(path, map_location="cpu", weights_only=True)
         if not isinstance(loaded_state, dict):
             raise ValueError(
@@ -93,6 +93,21 @@ def validate_resnet18_sha256(path: Path, expected_sha256: str) -> None:
     raise ValueError(
         f"ResNet-18 cache SHA-256 was {actual_sha256!r} for {path}; expected {expected_sha256!r}"
     )
+
+
+def require_offline_resnet18_weights(path: Path, expected_sha256: str) -> None:
+    """Require setup-managed weights; for example, a missing cache explains recovery."""
+    if not path.exists():
+        raise ValueError(
+            f"ResNet-18 cache was missing at {path}; expected verified offline weights. "
+            "Run `python main.py setup` before the baseline."
+        )
+    try:
+        validate_resnet18_sha256(path, expected_sha256)
+    except ValueError as error:
+        raise ValueError(
+            f"{error} Run `python main.py setup` to restore verified offline weights."
+        ) from error
 
 
 def _file_sha256(path: Path) -> str:

@@ -37,6 +37,11 @@ from buffalo_weight.feature_selection_stage import (
 from buffalo_weight.report_inputs import clean_reconstructible_stage, run_inputs_stage
 from buffalo_weight.report_provenance import ReportProvenance
 from buffalo_weight.reproduction_config import ReportContract, load_report_contract
+from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance
+from buffalo_weight.resnet_baseline_stage import (
+    ResNetBaselineRunner,
+    run_resnet_baseline_stage,
+)
 from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
 
@@ -54,13 +59,14 @@ class _CliDependencies:
     dense_baseline_dependencies: DenseBaselineDependencies | None
     compact_cnn_adapter: CompactCnnTrainingAdapter | None
     compact_cnn_provenance: CompactCnnProvenance | None
+    resnet_baseline_runner: ResNetBaselineRunner | None
+    resnet_baseline_provenance: ResNetBaselineProvenance | None
 
 
 def main(
     argv: Sequence[str] | None = None, services: SetupServices | None = None,
     stdout: TextIO = sys.stdout, stderr: TextIO = sys.stderr,
-    snapshot_publisher: SnapshotPublisher | None = None,
-    report_provenance: ReportProvenance | None = None,
+    snapshot_publisher: SnapshotPublisher | None = None, report_provenance: ReportProvenance | None = None,
     feature_evidence_runner: FeatureEvidenceRunner | None = None,
     feature_selection_provenance: FeatureSelectionProvenance | None = None,
     feature_confirmation_environment: FeatureConfirmationEnvironment | None = None,
@@ -69,6 +75,8 @@ def main(
     dense_baseline_dependencies: DenseBaselineDependencies | None = None,
     compact_cnn_adapter: CompactCnnTrainingAdapter | None = None,
     compact_cnn_provenance: CompactCnnProvenance | None = None,
+    resnet_baseline_runner: ResNetBaselineRunner | None = None,
+    resnet_baseline_provenance: ResNetBaselineProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     dependencies = _CliDependencies(
@@ -77,6 +85,7 @@ def main(
         random_forest_baseline, baseline_provenance,
         dense_baseline_dependencies,
         compact_cnn_adapter, compact_cnn_provenance,
+        resnet_baseline_runner, resnet_baseline_provenance,
     )
     return _execute_cli(argv, dependencies, stdout, stderr)
 
@@ -204,6 +213,11 @@ def _run_baselines_command(
         dependencies.compact_cnn_provenance,
     )
     print(f"compact_cnn: {compact_status}", file=stdout)
+    baseline_status = run_resnet_baseline_stage(
+        contract, arguments.dry_run, dependencies.resnet_baseline_runner,
+        dependencies.resnet_baseline_provenance, dependencies.report_provenance,
+    )
+    print(f"resnet18_baseline: {baseline_status}", file=stdout)
     return 0
 
 

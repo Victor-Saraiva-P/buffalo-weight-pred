@@ -305,6 +305,7 @@ def _run_baselines_gate(fixture: CuratedInputsFixture) -> tuple[int, str, str]:
     result = main(
         ["baselines", "--dry-run", "--config", str(fixture.config_path)],
         stdout=stdout, stderr=stderr,
+        report_provenance=FixedReportProvenance(),
     )
     return result, stdout.getvalue(), stderr.getvalue()
 

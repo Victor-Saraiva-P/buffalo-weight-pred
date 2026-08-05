@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from buffalo_weight.baseline_comparison_provenance import BaselineComparisonProvenance
+from buffalo_weight.baseline_comparison_stage import (
+    BaselineComparisonUpstreamDependencies,
+    run_baseline_comparison_stage,
+)
 from buffalo_weight.baseline_provenance import BaselineProvenance
 from buffalo_weight.baseline_stage import run_random_forest_baseline_stage
 from buffalo_weight.compact_cnn_provenance import CompactCnnProvenance
@@ -62,6 +67,7 @@ class _CliDependencies:
     compact_cnn_provenance: CompactCnnProvenance | None
     resnet_baseline_runner: ResNetBaselineRunner | None
     resnet_baseline_provenance: ResNetBaselineProvenance | None
+    baseline_comparison_provenance: BaselineComparisonProvenance | None
 
 
 def main(
@@ -78,6 +84,7 @@ def main(
     compact_cnn_provenance: CompactCnnProvenance | None = None,
     resnet_baseline_runner: ResNetBaselineRunner | None = None,
     resnet_baseline_provenance: ResNetBaselineProvenance | None = None,
+    baseline_comparison_provenance: BaselineComparisonProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     dependencies = _CliDependencies(
@@ -87,6 +94,7 @@ def main(
         dense_baseline_dependencies,
         compact_cnn_adapter, compact_cnn_provenance,
         resnet_baseline_runner, resnet_baseline_provenance,
+        baseline_comparison_provenance,
     )
     return _execute_cli(argv, dependencies, stdout, stderr)
 
@@ -125,6 +133,8 @@ def _dispatch_report_command(
         )
     if arguments.command == "baselines":
         return _run_baselines_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "compare-baselines":
+        return _run_baseline_comparison_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -226,6 +236,29 @@ def _run_baselines_command(
     return 0
 
 
+def _run_baseline_comparison_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    status = run_baseline_comparison_stage(
+        contract, arguments.dry_run, dependencies.snapshot_publisher,
+        dependencies.baseline_comparison_provenance,
+        _comparison_upstream_dependencies(dependencies),
+    )
+    print(f"baseline_comparison: {status}", file=stdout)
+    return 0
+
+
+def _comparison_upstream_dependencies(
+    dependencies: _CliDependencies,
+) -> BaselineComparisonUpstreamDependencies:
+    return BaselineComparisonUpstreamDependencies(
+        dependencies.report_provenance, dependencies.baseline_provenance,
+        dependencies.dense_baseline_dependencies, dependencies.compact_cnn_provenance,
+        dependencies.resnet_baseline_provenance,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Reproduce buffalo-weight report evidence")
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -249,6 +282,11 @@ def _add_reconstructible_stage_parsers(
     )
     selection.add_argument("--config", default="configs/report.yaml")
     selection.add_argument("--dry-run", action="store_true")
+    baseline_comparison_parser = subcommands.add_parser(
+        "compare-baselines", help="consolidate current baselines for human review"
+    )
+    baseline_comparison_parser.add_argument("--config", default="configs/report.yaml")
+    baseline_comparison_parser.add_argument("--dry-run", action="store_true")
 
 
 def _add_confirmation_parsers(

@@ -6,7 +6,7 @@ import csv
 import math
 from pathlib import Path
 
-from buffalo_weight.csv_io import format_csv_number
+from buffalo_weight.csv_io import format_csv_number, format_optional_csv_number
 from buffalo_weight.feature_evaluation import (
     FeatureEvidence,
     FeatureSample,
@@ -44,7 +44,8 @@ def write_feature_redundancy(path: Path, rows: list[FeatureRedundancy]) -> None:
     records = [{
         "feature_a": row.feature_a, "feature_b": row.feature_b,
         "structural_relation": row.structural_relation,
-        "pearson": _optional_number(row.pearson), "spearman": _optional_number(row.spearman),
+        "pearson": format_optional_csv_number(row.pearson),
+        "spearman": format_optional_csv_number(row.spearman),
         "removal_group": row.removal_group,
     } for row in rows]
     _write_csv(path, REDUNDANCY_COLUMNS, records)
@@ -111,9 +112,10 @@ def _evidence_record(row: FeatureEvidence) -> dict[str, str]:
         "scope": row.scope, "fold": _optional_int(row.fold),
         "repetition": _optional_int(row.repetition),
         "permutation_seed": _optional_int(row.permutation_seed), "n": str(row.n),
-        "reference_mae_kg": _optional_number(row.reference_mae_kg),
+        "reference_mae_kg": format_optional_csv_number(row.reference_mae_kg),
         "result_mae_kg": format_csv_number(row.result_mae_kg),
-        "delta_mae_kg": _optional_number(row.delta_mae_kg), "effect": row.effect or "",
+        "delta_mae_kg": format_optional_csv_number(row.delta_mae_kg),
+        "effect": row.effect or "",
     }
 
 
@@ -122,13 +124,6 @@ def _write_csv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> No
         writer = csv.DictWriter(destination, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-
-
-def _optional_number(value: float | None) -> str:
-    if value is None:
-        return ""
-    formatted = format_csv_number(value)
-    return formatted
 
 
 def _optional_int(value: int | None) -> str:

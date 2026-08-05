@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,7 +10,11 @@ from unittest.mock import patch
 
 import torch
 
-from buffalo_weight.resnet18_weights import build_offline_resnet18, default_offline_resnet18
+from buffalo_weight.resnet18_weights import (
+    build_offline_resnet18,
+    default_offline_resnet18,
+    require_offline_resnet18_weights,
+)
 from tests.fake_filesystem import MemoryPath
 
 
@@ -75,6 +80,21 @@ class FakeTorchStateLoader:
 
 
 class ResNet18WeightsTest(unittest.TestCase):
+    def test_missing_offline_weights_instruct_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.pth"
+
+            with self.assertRaisesRegex(ValueError, "missing.*python main.py setup"):
+                require_offline_resnet18_weights(missing, "a" * 64)
+
+    def test_invalid_offline_weights_instruct_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            changed = Path(directory) / "weights.pth"
+            changed.write_bytes(b"changed")
+
+            with self.assertRaisesRegex(ValueError, "SHA-256.*python main.py setup"):
+                require_offline_resnet18_weights(changed, "a" * 64)
+
     def test_default_offline_builder_uses_local_state_without_url_weights(self) -> None:
         content = b"official weights"
         cache_path = MemoryPath("weights.pth", {"weights.pth": content})

@@ -12,6 +12,16 @@ def format_csv_number(value: float) -> str:
     return f"{value:.6f}"
 
 
+def format_optional_csv_number(value: float | None) -> str:
+    """Format a nullable derived number.
+
+    Example: ``format_optional_csv_number(None)`` returns an empty CSV field.
+    """
+    if value is None:
+        return ""
+    return format_csv_number(value)
+
+
 def csv_row_count(path: Path) -> int:
     """Count CSV records after the header.
 

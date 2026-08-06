@@ -28,7 +28,7 @@ TRAIN_DRY_RUN = --dry-run
 endif
 ENSEMBLE_MODELS ?= dual_pca24_canonical16,tuned_96_pca24,fusion_original_stretch_log,fusion_original_stretch_cube_root,geometry_resnet18_pretrained_last_block,hist_gradient_boosting_baseline
 
-.PHONY: setup inputs feature-selection confirm-features baselines report-clean features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
+.PHONY: setup inputs feature-selection confirm-features baselines compare-baselines report-clean features split train train-mask-experiments train-fusion-experiments train-allometric-experiments train-geometry-channel-experiments train-target-transform-experiments train-fusion-tuning train-canonical-fusion train-heavy-weighting calibrate clean stability compare-categories analyze-features ensemble diagnostics test
 
 setup: $(PYTHON)
 	$(PYTHON) main.py setup
@@ -44,6 +44,9 @@ confirm-features: setup
 
 baselines: setup
 	$(PYTHON) main.py baselines --config $(REPORT_CONFIG)
+
+compare-baselines: setup
+	$(PYTHON) main.py compare-baselines --config $(REPORT_CONFIG)
 
 report-clean: setup
 	$(PYTHON) main.py clean $(STAGE) --config $(REPORT_CONFIG)

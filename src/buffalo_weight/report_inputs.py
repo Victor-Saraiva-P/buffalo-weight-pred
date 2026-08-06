@@ -28,9 +28,12 @@ from buffalo_weight.snapshot_io import (
 )
 
 STAGE_DESCENDANTS = {
-    "inputs": ("inputs", "feature_selection", "baselines", "tuning", "diagnostics"),
-    "feature_selection": ("feature_selection", "baselines", "tuning", "diagnostics"),
-    "baselines": ("baselines", "tuning", "diagnostics"),
+    "inputs": ("inputs", "feature_selection", "baselines", "approach_selection",
+               "tuning", "diagnostics"),
+    "feature_selection": ("feature_selection", "baselines", "approach_selection",
+                          "tuning", "diagnostics"),
+    "baselines": ("baselines", "approach_selection", "tuning", "diagnostics"),
+    "approach_selection": ("approach_selection", "tuning", "diagnostics"),
     "tuning": ("tuning", "diagnostics"),
     "diagnostics": ("diagnostics",),
 }

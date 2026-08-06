@@ -72,6 +72,20 @@ O snapshot confirmado é escrito em
 bloqueado antes de treino enquanto esse pacote estiver ausente, provisório,
 adulterado ou incompatível com as entradas atuais.
 
+Depois que as quatro Configurações Baseline e a referência estiverem atuais,
+gere a comparação controlada sem iniciar novo treino:
+
+```bash
+python main.py compare-baselines --dry-run --config configs/report.yaml
+PYTHON=.venv/bin/python make compare-baselines
+```
+
+O comando recusa configurações ausentes, obsoletas ou incompatíveis. O pacote
+provisório fica em `generated/report/approach_selection/` com
+`baseline_metrics.csv`, três figuras canônicas, a minuta de seleção, o modelo de
+contrato ainda sem decisão humana e um manifesto escrito por último. O schema é
+documentado em [`docs/schemas/baselines.md`](docs/schemas/baselines.md).
+
 Criar ambiente e instalar dependências:
 
 ```bash

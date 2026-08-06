@@ -154,6 +154,8 @@ def _validate_feature_compatibility(
 def _validate_mask_model_feature_gate(
     manifest: dict[str, object], source: _PredictionSource, contract: ReportContract,
 ) -> None:
+    # ResNet-18 is a convolutional mask model reading raw binary masks directly.
+    # It operates outside the tabular feature selection report contract.
     if source.configuration == "resnet18_pretrained_partial":
         return
     report_path = contract.confirmed_feature_selection_dir / "feature_selection_report.md"

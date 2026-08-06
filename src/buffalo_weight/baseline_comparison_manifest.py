@@ -48,7 +48,7 @@ def comparison_identity(
         "command": "python main.py compare-baselines",
         "recipe_sha256": provenance.comparison_recipe_hash(),
         "dependencies": provenance.comparison_dependencies(),
-        "inputs": _input_records(contract), "validations": VALIDATIONS,
+        "inputs": baseline_comparison_input_records(contract), "validations": VALIDATIONS,
     }
 
 
@@ -121,7 +121,11 @@ def _validate_metric_schema(outputs: dict[str, dict[str, object]]) -> None:
         raise ValueError(f"comparison metrics were {actual!r}; expected {expected!r}")
 
 
-def _input_records(contract: ReportContract) -> dict[str, dict[str, object]]:
+def baseline_comparison_input_records(contract: ReportContract) -> dict[str, dict[str, object]]:
+    """Return the input records for baseline comparison; for example, ``baseline_comparison_input_records(contract)``.
+
+    Example: ``inputs = baseline_comparison_input_records(contract)`` fingerprints all baselines.
+    """
     comparison_input_paths: dict[str, Path] = {}
     for source in SOURCES:
         root = contract.artifacts_root / "baselines" / source.directory_name

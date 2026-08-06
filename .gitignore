@@ -4,3 +4,5 @@ __pycache__/
 *.py[cod]
 scripts/tmp/
 generated/
+/.agents/skills
+/skills-lock.json

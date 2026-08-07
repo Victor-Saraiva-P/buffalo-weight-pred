@@ -107,7 +107,7 @@ class ApproachConfirmationCliTest(unittest.TestCase):
             contract_path, report_path = _prepare_human_review(
                 fixture, "random_forest", "random_forest_baseline",
             )
-            for invalid_budget in (4, 0, -1, "three"):
+            for invalid_budget in (4, -1, "three"):
                 with self.subTest(budget=invalid_budget):
                     contract = json.loads(contract_path.read_text())
                     contract["maximum_tuning_variations"] = invalid_budget

@@ -103,7 +103,7 @@ class TestDiagnosticConfirmationManifest(unittest.TestCase):
         with sens_path.open("w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["configuration", "evaluation_scope", "file_name", "perturbation", "status", "rejection_reason", "original_prediction_kg", "perturbed_prediction_kg", "delta_kg"])
-            w.writerow(["random_forest_baseline", "all_eligible", "mask_001.png", "erosion_3x3", "evaluated", "", "450.0", "448.0", "-2.0"])
+            w.writerow(["random_forest_baseline", "all_eligible", "mask_001.png", "erosion_3x3", "eligible", "", "450.0", "448.0", "-2.0"])
 
     def test_validate_canonical_tables_success(self) -> None:
         validate_canonical_tables(self.package_dir, 5)

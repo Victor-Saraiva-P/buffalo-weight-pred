@@ -100,7 +100,7 @@ class TestDiagnosticConfirmationStage(unittest.TestCase):
 
         sens_dir = diag_root / "sensitivity"
         sens_dir.mkdir(parents=True, exist_ok=True)
-        self._write_csv(sens_dir / "sensitivity_perturbations.csv", ["configuration", "evaluation_scope", "file_name", "perturbation", "status", "rejection_reason", "original_prediction_kg", "perturbed_prediction_kg", "delta_kg"], [["random_forest_baseline", "all_eligible", "mask_001.png", "erosion_3x3", "evaluated", "", "450.0", "448.0", "-2.0"]])
+        self._write_csv(sens_dir / "sensitivity_perturbations.csv", ["configuration", "evaluation_scope", "file_name", "perturbation", "status", "rejection_reason", "original_prediction_kg", "perturbed_prediction_kg", "delta_kg"], [["random_forest_baseline", "all_eligible", "mask_001.png", "erosion_3x3", "eligible", "", "450.0", "448.0", "-2.0"]])
         (sens_dir / "manifest.json").write_text(json.dumps({"status": "complete"}), encoding="utf-8")
 
     def _write_csv(self, path: Path, headers: list[str], rows: list[list[str]]) -> None:

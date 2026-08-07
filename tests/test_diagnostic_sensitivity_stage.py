@@ -54,7 +54,12 @@ class DiagnosticSensitivityStageTest(unittest.TestCase):
             self.assertTrue((out_dir / "manifest.json").is_file())
             self.assertTrue((out_dir / "sensitivity_perturbations.csv").is_file())
             self.assertTrue((out_dir / "morphology_eligibility.csv").is_file())
-            self.assertTrue((out_dir / "sensitivity_report.md").is_file())
+            report_text = (out_dir / "sensitivity_report.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "Deslocamentos de 5% que cortam o foreground são rejeitados da análise.",
+                report_text,
+            )
+            self.assertNotIn("nunca cortam foreground", report_text)
             # Demo PNG should exist since the fake masks are eligible
             self.assertTrue((out_dir / "morphology_demo.png").is_file())
             # Verify manifest

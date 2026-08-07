@@ -180,7 +180,7 @@ def _validate_learning_summary_integrity(rows: list[dict[str, str]]) -> None:
 
 
 def _validate_sensitivity_integrity(rows: list[dict[str, str]]) -> None:
-    valid_statuses = {"evaluated", "rejected"}
+    valid_statuses = {"eligible", "rejected"}
     for r in rows:
         if r.get("status") not in valid_statuses:
             raise ValueError(

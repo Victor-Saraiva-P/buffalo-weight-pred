@@ -162,7 +162,7 @@ def _report_rejection_notes(target_slice: SensitivitySlice) -> list[str]:
         "- Deltas são sempre perturbado menos original.",
         "- Contração e expansão formam par inseparável: ambas ou nenhuma.",
         "- Perturbações de escala usam ±5% do foreground ao redor do centro.",
-        "- Deslocamentos de 5% em cada direção nunca cortam foreground.",
+        "- Deslocamentos de 5% que cortam o foreground são rejeitados da análise.",
         "- Perturbações sintéticas medem sensibilidade local, não substituem máscaras manuais de referência.",
     ])
     return lines

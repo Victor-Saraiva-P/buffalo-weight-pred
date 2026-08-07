@@ -55,6 +55,7 @@ from buffalo_weight.tuning_provenance import TuningProvenance
 from buffalo_weight.tuning_stage import run_tuning_stage
 from buffalo_weight.diagnostic_descriptive_stage import run_diagnostic_descriptive_stage
 from buffalo_weight.diagnostic_learning_stage import run_diagnostic_learning_stage
+from buffalo_weight.diagnostic_sensitivity_stage import run_diagnostic_sensitivity_stage
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,8 @@ def _dispatch_report_command(
         return _run_diagnostic_descriptive_command(arguments, dependencies, contract, stdout)
     if arguments.command == "diagnostics-learning":
         return _run_diagnostic_learning_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "diagnostics-sensitivity":
+        return _run_diagnostic_sensitivity_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -325,6 +328,18 @@ def _run_diagnostic_learning_command(
     return 0
 
 
+def _run_diagnostic_sensitivity_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    status = run_diagnostic_sensitivity_stage(
+        contract, arguments.dry_run, dependencies.snapshot_publisher,
+        random_forest_baseline=dependencies.random_forest_baseline,
+    )
+    print(f"diagnostics_sensitivity: {status}", file=stdout)
+    return 0
+
+
 def _comparison_upstream_dependencies(
     dependencies: _CliDependencies,
 ) -> BaselineComparisonUpstreamDependencies:
@@ -378,6 +393,11 @@ def _add_reconstructible_stage_parsers(
     )
     diag_learning_parser.add_argument("--config", default="configs/report.yaml")
     diag_learning_parser.add_argument("--dry-run", action="store_true")
+    diag_sensitivity_parser = subcommands.add_parser(
+        "diagnostics-sensitivity", help="measure controlled sensitivity of predictions to mask perturbations"
+    )
+    diag_sensitivity_parser.add_argument("--config", default="configs/report.yaml")
+    diag_sensitivity_parser.add_argument("--dry-run", action="store_true")
 
 
 def _add_confirmation_parsers(

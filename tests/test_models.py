@@ -28,15 +28,14 @@ from tests.fake_compute import fake_available_cuda, fake_unavailable_cuda
 
 
 class ModelConfigTest(unittest.TestCase):
-    def test_rejects_duplicate_model_configuration_names(self) -> None:
+    def test_accepts_unique_model_configuration_names(self) -> None:
         configs = [
-            ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
-            ModelConfig("same2", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
+            ModelConfig("first", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
+            ModelConfig("second", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
         ]
-
-        # Duplicate check passes when names are unique
         validate_unique_model_configs(configs)
 
+    def test_rejects_duplicate_model_configuration_names(self) -> None:
         duplicates = [
             ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
             ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),

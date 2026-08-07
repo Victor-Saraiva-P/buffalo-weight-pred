@@ -149,13 +149,18 @@ def build_model(config: ModelConfig) -> ClassicalRegressor:
     raise ValueError(f"unsupported model: {config.model}")
 
 
-def _build_sklearn_model(
-    config: ModelConfig, constructor: Callable[..., ClassicalRegressor]
-) -> ClassicalRegressor:
-    params = dict(config.params)
-    return constructor(**params)
-
-
 def _build_random_forest(config: ModelConfig) -> ClassicalRegressor:
-    return _build_sklearn_model(config, RandomForestRegressor)
+    """Build a Random Forest regressor instance from configuration parameters.
+
+    Example: ``_build_random_forest(config)`` returns a configured RandomForestRegressor.
+    """
+    model_params = dict(config.params)
+    n_estimators = int(model_params.get("n_estimators", 100))
+    random_state = int(model_params.get("random_state", 42))
+    return RandomForestRegressor(
+        n_estimators=n_estimators,
+        random_state=random_state,
+        **{key: value for key, value in model_params.items() if key not in {"n_estimators", "random_state"}},
+    )
+
 

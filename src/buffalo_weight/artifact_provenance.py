@@ -245,9 +245,7 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
                 *[("buffalo_weight.cnn_mask", symbol) for symbol in symbols],
             ]
         )
-    symbol = {
-        "random_forest": "_build_random_forest",
-    }.get(config.model, "build_model")
+    symbol = "_build_random_forest" if config.model == "random_forest" else "build_model"
     pairs = [("buffalo_weight.models", symbol)]
     if config.model in MASK_PREDICTION_MODELS:
         pairs.extend(
@@ -258,8 +256,6 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
             ]
         )
     pairs.append(("buffalo_weight.split", "parse_weight"))
-    if config.model == "random_forest":
-        pairs.append(("buffalo_weight.models", "_build_sklearn_model"))
     return _source_bundle(pairs)
 
 

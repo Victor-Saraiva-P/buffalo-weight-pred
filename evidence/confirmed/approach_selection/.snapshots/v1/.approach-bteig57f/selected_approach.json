@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "confirmed",
+  "selected_approach": "random_forest",
+  "baseline_configuration": "random_forest_baseline",
+  "maximum_tuning_variations": 3,
+  "source_report_sha256": "5cae880215c5b7a416705958d3852d4c0b4e131b4a34e22cbd36988cbc28ae92",
+  "human_decision": {
+    "decision_url": "https://github.com/Victor-Saraiva-P/buffalo-weight-pred/issues/22#issuecomment-5208834642",
+    "reviewer": "Victor Alexandre Saraiva Pimentel",
+    "reviewed_at": "2026-08-06"
+  }
+}

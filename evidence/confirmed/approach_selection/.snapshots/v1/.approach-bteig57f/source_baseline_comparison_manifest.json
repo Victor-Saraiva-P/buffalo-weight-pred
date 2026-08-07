@@ -1,0 +1,133 @@
+{
+  "command": "python main.py compare-baselines",
+  "decision_url": null,
+  "dependencies": {
+    "Pillow": "12.2.0",
+    "matplotlib": "3.11.0",
+    "numpy": "2.5.0"
+  },
+  "inputs": {
+    "baselines/compact_cnn/manifest.json": {
+      "sha256": "243e9f4118c949c980a3fda06f0c3a01a418bdda59fdeaaf2ec233f7b6a5a653"
+    },
+    "baselines/compact_cnn/predictions.csv": {
+      "sha256": "1de85e2dab3ef429e8517e4b48ba2773866910af09f201ce106b14500991813c"
+    },
+    "baselines/dense/manifest.json": {
+      "sha256": "41583d4e0495210e231a4439105799102d3695e070f6357dd9aa60226afc83ea"
+    },
+    "baselines/dense/predictions.csv": {
+      "sha256": "c9df96ffcf02f7ee9b9f1974de7f2d7b979d388e63db00080c0de44e82a429f9"
+    },
+    "baselines/random_forest_baseline/manifest.json": {
+      "sha256": "6ce5e78ca3528c7bd0ea90595ac20b8c9a9422c5988777d7f1dde8ef2ee670c9"
+    },
+    "baselines/random_forest_baseline/predictions.csv": {
+      "sha256": "f94871bc1318a0ed09dfbd463e0ee4c6e0f8fd16ea5e83b84d3b8fc5fff661af"
+    },
+    "baselines/resnet18_pretrained_partial/manifest.json": {
+      "sha256": "cc122db55eb03d1f62d7721262102d18a3acbdb7749fc0a870509241431e63e1"
+    },
+    "baselines/resnet18_pretrained_partial/predictions.csv": {
+      "sha256": "92a5ee4d17c9649e324c1967d86ca697bfd5e7f238160ac10fafc7558c3933e1"
+    },
+    "baselines/training_mean_reference/manifest.json": {
+      "sha256": "a4eb647fb4be65b81aa53c7f8c0de79fe77fb1489f2b647afaef02ef1ed800e3"
+    },
+    "baselines/training_mean_reference/predictions.csv": {
+      "sha256": "10b09d520517d3df0a7ec4609588eadf7fe67cdf8464c8bae939d74b4f4df13a"
+    },
+    "confirmed_features/manifest.json": {
+      "sha256": "e95d809ddc1b1b23edc399d7abf5d9e40ad0bf38ea179a11243456ae6b0a5052"
+    },
+    "confirmed_features/shared_feature_contract.json": {
+      "sha256": "521c71eac312cc333d7cdf8cddc8fb900064fce3a331795007b423fc3d57cb5c"
+    }
+  },
+  "manifest_version": 1,
+  "outputs": {
+    "approach_selection_report.md": {
+      "row_count": 41,
+      "schema": "markdown",
+      "sha256": "ddb3ae118fa653a05b8980d8fc9ba5dcc696bb5130b6eaf7d6bb1aa43f122e7d"
+    },
+    "baseline_metrics.csv": {
+      "row_count": 40,
+      "schema": [
+        "configuration",
+        "approach",
+        "evaluation_role",
+        "scope",
+        "fold",
+        "population",
+        "n",
+        "mae_kg",
+        "rmse_kg",
+        "bias_kg",
+        "r2"
+      ],
+      "sha256": "c9ef345ba2c8264774b3a18ede9df589c652fb3fc865eaae61adea8c99128434"
+    },
+    "global_mae.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "de1d9b2157a5642c416f544b0f4d3fe0f639dbe6ea0ac149dd7cfaa41f90e8a2"
+    },
+    "predicted_vs_observed.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "8bbc1e98692c02d6f2701c3bd4ecb382782476e8d38b3e256e0d6ebce732140e"
+    },
+    "residuals_vs_observed.png": {
+      "row_count": 1,
+      "schema": {
+        "dpi": 300,
+        "format": "png",
+        "height_px": 1800,
+        "width_px": 2400
+      },
+      "sha256": "2411c9032682581b23ce0546ffd52a01424c95d3fc2b6a858ff78f6541bcdce2"
+    },
+    "selected_approach.json": {
+      "row_count": 1,
+      "schema": [
+        "eligible_approaches",
+        "human_decision",
+        "maximum_tuning_variations",
+        "schema_version",
+        "source_report_sha256",
+        "status"
+      ],
+      "sha256": "d1d78a38caa932354bc34a79976c57e66cf73d24af818af2b03fa7c18decea45"
+    }
+  },
+  "package_type": "provisional_evidence",
+  "recipe_sha256": "c1c4ab0b2642f59cd2ea736d4d35f256bf2c00b75d271e47388ec0f0b7f9869d",
+  "report_sha256": "ddb3ae118fa653a05b8980d8fc9ba5dcc696bb5130b6eaf7d6bb1aa43f122e7d",
+  "revision": 1,
+  "source_commit": "5abbd60e35ccc4861f94dfcce58ee3d1c40131f4",
+  "stage": "approach_selection",
+  "status": "provisional",
+  "validations": [
+    "current_baseline_manifests",
+    "one_oof_prediction_per_valid_mask",
+    "matching_canonical_folds",
+    "confirmed_feature_contract",
+    "pooled_oof_metrics",
+    "signed_residuals",
+    "schemas",
+    "ordering",
+    "sha256",
+    "human_decision_unset"
+  ]
+}

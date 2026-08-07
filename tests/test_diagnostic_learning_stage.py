@@ -5,11 +5,13 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from buffalo_weight.diagnostic_learning_stage import (
     diagnostic_learning_output_dir,
     run_diagnostic_learning_stage,
 )
+from buffalo_weight.diagnostic_learning_types import LearningCurvesSlice
 from buffalo_weight.reproduction_config import InputsContract, ReportContract
 
 
@@ -43,6 +45,27 @@ class DiagnosticLearningStageTest(unittest.TestCase):
 
             status = run_diagnostic_learning_stage(contract, dry_run=True)
             self.assertEqual(status, "reusable")
+
+    def test_execution_resolves_default_gpu_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            contract = ReportContract(
+                inputs=_dummy_inputs_contract(),
+                artifacts_root=Path(directory),
+            )
+            empty_slice = LearningCurvesSlice((), ())
+            with (
+                patch(
+                    "buffalo_weight.diagnostic_learning_stage.evaluate_learning_curves",
+                    return_value=empty_slice,
+                ) as evaluate,
+                patch("buffalo_weight.diagnostic_learning_stage.write_learning_curves_artifacts"),
+                patch("buffalo_weight.diagnostic_learning_stage._write_stage_manifest"),
+            ):
+                status = run_diagnostic_learning_stage(contract)
+
+            self.assertEqual(status, "rebuilt")
+            self.assertIsNotNone(evaluate.call_args.kwargs["compact_adapter"])
+            self.assertIsNotNone(evaluate.call_args.kwargs["resnet_runner"])
 
 
 def _dummy_inputs_contract() -> InputsContract:

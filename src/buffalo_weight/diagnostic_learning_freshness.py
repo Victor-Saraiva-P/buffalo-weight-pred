@@ -21,6 +21,14 @@ from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance, 
 from buffalo_weight.resnet_baseline_stage import resnet_baseline_status
 
 
+def _baseline_artifact_configuration(configuration: str) -> str:
+    aliases = {
+        "dense_baseline": "dense",
+        "compact_cnn_baseline": "compact_cnn",
+    }
+    return aliases.get(configuration, configuration)
+
+
 def check_baseline_100_reusability(
     contract: ReportContract,
     configuration: str,
@@ -32,7 +40,8 @@ def check_baseline_100_reusability(
 
     Example: ``check_baseline_100_reusability(contract, "random_forest_baseline")`` returns True or False.
     """
-    output_dir = contract.artifacts_root / "baselines" / configuration
+    artifact_configuration = _baseline_artifact_configuration(configuration)
+    output_dir = contract.artifacts_root / "baselines" / artifact_configuration
     manifest_path = output_dir / "manifest.json"
     predictions_path = output_dir / "predictions.csv"
 
@@ -79,7 +88,8 @@ def load_reused_fold_metrics(
 
     Example: ``load_reused_fold_metrics(contract, "random_forest_baseline", fold=1)`` returns (mae, bias, n_eval).
     """
-    predictions_path = contract.artifacts_root / "baselines" / configuration / "predictions.csv"
+    artifact_configuration = _baseline_artifact_configuration(configuration)
+    predictions_path = contract.artifacts_root / "baselines" / artifact_configuration / "predictions.csv"
     if not predictions_path.is_file():
         raise ValueError(f"predictions.csv missing at {predictions_path} for configuration {configuration!r}")
 

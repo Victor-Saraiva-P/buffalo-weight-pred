@@ -73,6 +73,35 @@ class DiagnosticLearningFreshnessTest(unittest.TestCase):
             self.assertAlmostEqual(bias, -2.5)
             self.assertEqual(n_eval, 2)
 
+    def test_learning_names_resolve_to_baseline_artifact_directories(self) -> None:
+        for learning_name, artifact_name in (
+            ("dense_baseline", "dense"),
+            ("compact_cnn_baseline", "compact_cnn"),
+        ):
+            with self.subTest(configuration=learning_name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                contract = ReportContract(
+                    inputs=_dummy_inputs_contract(),
+                    artifacts_root=root,
+                )
+                base_dir = root / "baselines" / artifact_name
+                base_dir.mkdir(parents=True, exist_ok=True)
+                rows = [
+                    {
+                        "file_name": "s1.png",
+                        "fold": "1",
+                        "observed_weight_kg": "100.0",
+                        "predicted_weight_kg": "105.0",
+                    }
+                ]
+                write_csv_rows(rows, base_dir / "predictions.csv", list(rows[0].keys()))
+
+                mae, bias, n_eval = load_reused_fold_metrics(contract, learning_name, fold=1)
+
+                self.assertAlmostEqual(mae, 5.0)
+                self.assertAlmostEqual(bias, 5.0)
+                self.assertEqual(n_eval, 1)
+
 
 def _dummy_inputs_contract() -> InputsContract:
     return InputsContract(Path("index.csv"), Path("masks"), 132, 1024, 10, 5, 42)

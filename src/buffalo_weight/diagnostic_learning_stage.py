@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from buffalo_weight.baseline_provenance import BaselineProvenance
+from buffalo_weight.compact_cnn_adapter import CompactCnnAdapter
 from buffalo_weight.compact_cnn_provenance import CompactCnnProvenance
 from buffalo_weight.compact_cnn_types import CompactCnnTrainingAdapter
 from buffalo_weight.diagnostic_learning_artifacts import write_learning_curves_artifacts
@@ -19,7 +20,10 @@ from buffalo_weight.diagnostic_learning_evaluation import (
 from buffalo_weight.feature_evaluation import FeatureBaseline
 from buffalo_weight.reproduction_config import ReportContract
 from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance
-from buffalo_weight.resnet_baseline_stage import ResNetBaselineRunner
+from buffalo_weight.resnet_baseline_stage import (
+    ResNetBaselineRunner,
+    ScientificResNetBaselineRunner,
+)
 from buffalo_weight.snapshot_io import (
     FilesystemSnapshotPublisher,
     SnapshotPublisher,
@@ -58,9 +62,11 @@ def run_diagnostic_learning_stage(
         return "reusable" if manifest_path.is_file() else "reconstructible"
 
     resolved_publisher = publisher or FilesystemSnapshotPublisher()
+    resolved_compact_adapter = compact_adapter or CompactCnnAdapter()
+    resolved_resnet_runner = resnet_runner or ScientificResNetBaselineRunner()
     return _execute_stage_rebuild(
         contract, output_dir, resolved_publisher, random_forest_baseline,
-        dense_runner, compact_adapter, resnet_runner,
+        dense_runner, resolved_compact_adapter, resolved_resnet_runner,
         baseline_provenance, compact_provenance, resnet_provenance,
     )
 

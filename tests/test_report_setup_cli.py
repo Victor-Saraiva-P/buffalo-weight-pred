@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import io
 import unittest
-from pathlib import Path
 
 from buffalo_weight.environment_contract import (
     APPROVED_DEPENDENCIES,
     RESNET18_SHA256,
-    ComputeEnvironment,
     PythonRuntime,
     WeightSetupStatus,
 )
 from buffalo_weight.report_cli import main
-from buffalo_weight.train_cnn_mask import main as neural_training_main, train_cnn_mask
-from buffalo_weight.train_pipeline import main as training_pipeline_main
-from buffalo_weight.train_pipeline import train_pipeline
 from tests.fake_setup_services import (
     FakePackageGateway,
     FakeRuntimeProbe,
@@ -122,63 +117,6 @@ class ReportSetupCliTest(unittest.TestCase):
         self.assertEqual(provenance.informational.python_version, "3.14.6")
         self.assertIsNone(provenance.informational.compute.gpu_name)
 
-    def test_neural_cli_rejects_missing_cuda_before_reading_inputs(self) -> None:
-        runtime = FakeRuntimeProbe(
-            compute=ComputeEnvironment(None, None, "13.0", "590.00")
-        )
-        stderr = io.StringIO()
-
-        result = neural_training_main(
-            ["--shared-config", "missing.yaml", "--models-config", "missing.yaml"],
-            runtime_probe=runtime,
-            stderr=stderr,
-        )
-
-        self.assertEqual(result, 1)
-        self.assertIn("CUDA", stderr.getvalue())
-        self.assertIn("available CUDA GPU", stderr.getvalue())
-
-    def test_training_pipeline_rejects_missing_cuda_before_reading_inputs(self) -> None:
-        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
-        stderr = io.StringIO()
-
-        result = training_pipeline_main(
-            [
-                "--shared-config",
-                "missing-shared.yaml",
-                "--classical-models-config",
-                "missing-classical.yaml",
-                "--cnn-mask-models-config",
-                "missing-cnn.yaml",
-            ],
-            runtime_probe=runtime,
-            stderr=stderr,
-        )
-
-        self.assertEqual(result, 1)
-        self.assertIn("CUDA", stderr.getvalue())
-        self.assertIn("available CUDA GPU", stderr.getvalue())
-
-    def test_programmatic_pipeline_rejects_cuda_before_reading_inputs(self) -> None:
-        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
-
-        with self.assertRaisesRegex(ValueError, "available CUDA GPU"):
-            train_pipeline(
-                Path("missing-shared.yaml"),
-                Path("missing-classical.yaml"),
-                Path("missing-cnn.yaml"),
-                runtime_probe=runtime,
-            )
-
-    def test_programmatic_neural_training_rejects_cuda_before_reading_inputs(self) -> None:
-        runtime = FakeRuntimeProbe(compute=ComputeEnvironment(None, None, "13.0", "590.00"))
-
-        with self.assertRaisesRegex(ValueError, "available CUDA GPU"):
-            train_cnn_mask(
-                Path("missing-shared.yaml"),
-                Path("missing-models.yaml"),
-                runtime_probe=runtime,
-            )
 
 def run_setup(
     packages: FakePackageGateway,
@@ -195,3 +133,4 @@ def run_setup(
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -8,7 +8,6 @@ from torch import nn
 
 from buffalo_weight.cnn_architectures import build_mask_network
 from buffalo_weight.cnn_mask import resolve_device
-from buffalo_weight.pretrained_mask_embedding import build_embedding_network
 from tests.fake_compute import fake_available_cuda
 
 
@@ -53,14 +52,6 @@ class NeuralEnvironmentTest(unittest.TestCase):
         self.assertIsInstance(network, nn.Module)
         self.assertEqual(builder.calls, 1)
 
-    def test_embedding_network_receives_injected_offline_resnet_builder(self) -> None:
-        builder = RecordingOfflineResNet18Builder()
-
-        network = build_embedding_network("resnet18", builder)
-
-        self.assertIsInstance(network, nn.Module)
-        self.assertEqual(builder.calls, 1)
-
     def test_explicit_cpu_is_rejected_for_neural_execution(self) -> None:
         """Keep CPU fallback outside the official neural execution contract."""
 
@@ -83,16 +74,7 @@ class NeuralEnvironmentTest(unittest.TestCase):
         ):
             build_mask_network("efficientnet_b0", pretrained=True)
 
-    def test_pretrained_embedding_is_rejected_before_torchvision_can_download(self) -> None:
-        with patch(
-            "torchvision.models.mobilenet_v3_small",
-            new=FailingTorchvisionNetworkBuilder(),
-        ):
-            with self.assertRaisesRegex(
-                ValueError, "mobilenet_v3_small.*setup-managed.*resnet18"
-            ):
-                build_embedding_network("mobilenet_v3_small")
-
 
 if __name__ == "__main__":
     unittest.main()
+

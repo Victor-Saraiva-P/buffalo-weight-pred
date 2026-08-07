@@ -51,6 +51,8 @@ from buffalo_weight.resnet_baseline_stage import (
 )
 from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
+from buffalo_weight.tuning_provenance import TuningProvenance
+from buffalo_weight.tuning_stage import run_tuning_stage
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,7 @@ class _CliDependencies:
     resnet_baseline_runner: ResNetBaselineRunner | None
     resnet_baseline_provenance: ResNetBaselineProvenance | None
     baseline_comparison_provenance: BaselineComparisonProvenance | None
+    tuning_provenance: TuningProvenance | None
 
 
 def main(
@@ -86,6 +89,7 @@ def main(
     resnet_baseline_runner: ResNetBaselineRunner | None = None,
     resnet_baseline_provenance: ResNetBaselineProvenance | None = None,
     baseline_comparison_provenance: BaselineComparisonProvenance | None = None,
+    tuning_provenance: TuningProvenance | None = None,
 ) -> int:
     """Run the public CLI; for example, ``main(["setup"])`` prepares the environment."""
     dependencies = _CliDependencies(
@@ -95,7 +99,7 @@ def main(
         dense_baseline_dependencies,
         compact_cnn_adapter, compact_cnn_provenance,
         resnet_baseline_runner, resnet_baseline_provenance,
-        baseline_comparison_provenance,
+        baseline_comparison_provenance, tuning_provenance,
     )
     return _execute_cli(argv, dependencies, stdout, stderr)
 
@@ -141,6 +145,8 @@ def _dispatch_report_command(
         return _run_baselines_command(arguments, dependencies, contract, stdout)
     if arguments.command == "compare-baselines":
         return _run_baseline_comparison_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "tuning":
+        return _run_tuning_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -268,6 +274,22 @@ def _run_baseline_comparison_command(
     return 0
 
 
+def _run_tuning_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    dense_adapter = dependencies.dense_baseline_dependencies.adapter if (
+        dependencies.dense_baseline_dependencies is not None
+    ) else None
+    status = run_tuning_stage(
+        contract, arguments.dry_run, dependencies.tuning_provenance,
+        dependencies.snapshot_publisher, dense_adapter,
+        dependencies.compact_cnn_adapter, dependencies.resnet_baseline_runner,
+    )
+    print(f"tuning: {status}", file=stdout)
+    return 0
+
+
 def _comparison_upstream_dependencies(
     dependencies: _CliDependencies,
 ) -> BaselineComparisonUpstreamDependencies:
@@ -306,6 +328,11 @@ def _add_reconstructible_stage_parsers(
     )
     baseline_comparison_parser.add_argument("--config", default="configs/report.yaml")
     baseline_comparison_parser.add_argument("--dry-run", action="store_true")
+    tuning_parser = subcommands.add_parser(
+        "tuning", help="execute pre-registered configuration tuning for the confirmed approach"
+    )
+    tuning_parser.add_argument("--config", default="configs/report.yaml")
+    tuning_parser.add_argument("--dry-run", action="store_true")
 
 
 def _add_confirmation_parsers(

@@ -78,12 +78,12 @@ def _validate_approach_and_config(contract: dict[str, object]) -> None:
 def _validate_tuning_budget(candidate: object) -> None:
     if isinstance(candidate, bool) or not isinstance(candidate, int):
         raise ValueError(
-            f"maximum_tuning_variations was {candidate!r}; expected an integer between 1 and "
+            f"maximum_tuning_variations was {candidate!r}; expected an integer between 0 and "
             f"{MAX_TUNING_VARIATIONS_CEILING}"
         )
-    if candidate <= 0 or candidate > MAX_TUNING_VARIATIONS_CEILING:
+    if candidate < 0 or candidate > MAX_TUNING_VARIATIONS_CEILING:
         raise ValueError(
-            f"maximum_tuning_variations was {candidate}; expected an integer between 1 and "
+            f"maximum_tuning_variations was {candidate}; expected an integer between 0 and "
             f"{MAX_TUNING_VARIATIONS_CEILING}"
         )
 

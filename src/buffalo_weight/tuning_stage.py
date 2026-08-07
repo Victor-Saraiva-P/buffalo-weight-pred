@@ -32,6 +32,9 @@ from buffalo_weight.tuning_manifest import (
 from buffalo_weight.tuning_provenance import SystemTuningProvenance, TuningProvenance
 
 
+from buffalo_weight.tuning_types import TuningVariation
+
+
 def run_tuning_stage(
     contract: ReportContract, dry_run: bool = False,
     provenance: TuningProvenance | None = None,
@@ -62,7 +65,7 @@ def run_tuning_stage(
 
 def _run_locked_tuning(
     contract: ReportContract, approach: str, baseline_config: str, budget: int,
-    frozen_features: tuple[str, ...] | None, variations: tuple,
+    frozen_features: tuple[str, ...] | None, variations: tuple[TuningVariation, ...],
     provenance: TuningProvenance, publisher: SnapshotPublisher,
     dense_adapter: DenseFeatureAdapter | None,
     compact_cnn_adapter: CompactCnnTrainingAdapter | None,
@@ -89,7 +92,8 @@ def _run_locked_tuning(
 
 def _write_snapshot(
     temporary: Path, contract: ReportContract, approach: str, baseline_config: str,
-    budget: int, frozen_features: tuple[str, ...] | None, variations: tuple,
+    budget: int, frozen_features: tuple[str, ...] | None,
+    variations: tuple[TuningVariation, ...],
     provenance: TuningProvenance, dense_adapter: DenseFeatureAdapter | None,
     compact_cnn_adapter: CompactCnnTrainingAdapter | None,
     resnet_runner: ResNetBaselineRunner | None,
@@ -114,9 +118,12 @@ def _write_baseline_maintained_manifest(
     contract: ReportContract, approach: str, baseline_config: str,
     budget: int, provenance: TuningProvenance,
 ) -> None:
-    output_dir = tuning_output_dir(contract)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    manifest = build_tuning_manifest(
-        output_dir, contract, approach, baseline_config, budget, (), provenance,
-    )
-    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    lock_dir = contract.artifacts_root / ".locks" / "tuning"
+    with training_lock(lock_dir):
+        output_dir = tuning_output_dir(contract)
+        clean_snapshot_stage(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        manifest = build_tuning_manifest(
+            output_dir, contract, approach, baseline_config, budget, (), provenance,
+        )
+        (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

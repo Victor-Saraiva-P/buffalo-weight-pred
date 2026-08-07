@@ -247,5 +247,7 @@ def _extract_compact_recipe(recipe: object) -> CompactCnnRecipe:
     return recipe
 
 
-def _extract_resnet_recipe(recipe: object) -> object:
+def _extract_resnet_recipe(recipe: object) -> ResNetTrainingRecipe:
+    if not isinstance(recipe, ResNetTrainingRecipe):
+        raise ValueError(f"recipe was {recipe!r}; expected a ResNetTrainingRecipe")
     return recipe

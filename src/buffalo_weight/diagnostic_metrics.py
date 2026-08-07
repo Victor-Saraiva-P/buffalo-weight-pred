@@ -5,7 +5,7 @@ import math
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from buffalo_weight.train import format_metric
+from buffalo_weight.csv_io import format_metric
 
 
 METRIC_FIELDS = ["group_type", "group", "n", "mae", "median_ae", "rmse", "bias", "p90_ae", "r2"]

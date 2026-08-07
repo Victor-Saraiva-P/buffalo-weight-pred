@@ -19,10 +19,12 @@ from buffalo_weight.feature_baselines import DenseFeatureBaseline
 from buffalo_weight.feature_evaluation import PredictionPartition, TrainingPartition
 from buffalo_weight.input_schema import SPLIT_COLUMNS
 from buffalo_weight.reproduction_config import ReportContract
+from buffalo_weight.resnet_baseline_adapter import ResNetTrainingRecipe
 from buffalo_weight.resnet_baseline_artifacts import load_resnet_samples
 from buffalo_weight.resnet_baseline_evaluation import ResNetBaselineEvaluator, ResNetOofPrediction
 from buffalo_weight.resnet_baseline_stage import ResNetBaselineRunner, ScientificResNetBaselineRunner
 from buffalo_weight.tuning_types import TuningVariation
+
 
 
 def evaluate_tuning_variations(

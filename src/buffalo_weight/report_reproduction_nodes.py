@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal, TextIO
 
 from buffalo_weight.approach_confirmation import approach_gate_status
 from buffalo_weight.baseline_comparison_manifest import baseline_comparison_status
+from buffalo_weight.baseline_comparison_provenance import SystemBaselineComparisonProvenance
 from buffalo_weight.baseline_manifest import baseline_configuration_status
 from buffalo_weight.baseline_provenance import SystemBaselineProvenance
 from buffalo_weight.baseline_types import BASELINE_DEFINITIONS

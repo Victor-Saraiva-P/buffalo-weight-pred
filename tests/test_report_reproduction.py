@@ -15,12 +15,24 @@ from buffalo_weight.report_reproduction import (
     plan_reproduction_nodes,
     run_report_reproduction,
 )
+from buffalo_weight.report_reproduction_nodes import _evaluate_compare_baselines_node
 from buffalo_weight.reproduction_config import load_report_contract
 from tests.fake_report_provenance import FixedReportProvenance
 from tests.report_inputs_fixture import CuratedInputsFixture
 
 
 class ReportReproductionUnitTest(unittest.TestCase):
+    def test_compare_baselines_node_resolves_default_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CuratedInputsFixture(Path(directory))
+            contract = load_report_contract(fixture.config_path)
+
+            node = _evaluate_compare_baselines_node(
+                contract, ReproductionDependencies(), False, False,
+            )
+
+            self.assertEqual(node.name, "compare-baselines")
+
     def test_reproduction_node_fields(self) -> None:
         node = ReproductionNode("inputs", "stage", "reusable", "snapshot intact")
         self.assertEqual(node.name, "inputs")

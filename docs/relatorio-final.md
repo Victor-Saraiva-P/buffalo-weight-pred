@@ -521,46 +521,74 @@ Em B10, Random Forest, rede densa e CNN compacta apresentaram viés negativo de 
 
 A minuta automática de comparação indicou inicialmente a rede densa por possuir o menor MAE OOF em valor não arredondado. Entretanto, a diferença de aproximadamente 0,007 kg em relação à Random Forest foi considerada desprezível na revisão humana. Com MAE praticamente empatado, a Random Forest apresentou RMSE menor (73,52 contra 76,33 kg) e R² maior (0,756 contra 0,737), além de manter comportamento considerado estruturalmente estável com o conjunto compartilhado de 25 atributos. Com base nesse conjunto de evidências, a Random Forest foi confirmada em 6 de agosto de 2026 como a abordagem de maior potencial para continuidade do estudo.
 
-A decisão confirmou a configuração `random_forest_baseline` como ponto de partida e limitou a etapa seguinte a, no máximo, três variações adicionais previamente definidas. Os resultados desse ajuste fino ainda não integram esta versão do relatório e serão incorporados somente após a execução e confirmação dos respectivos artefatos.
+A decisão confirmou a configuração `random_forest_baseline` como ponto de partida e limitou a etapa seguinte a, no máximo, três variações adicionais previamente definidas. O ajuste fino mostrou que nenhuma das três variações superou a configuração de referência. A Tabela P2-05 apresenta a comparação consolidada.
+
+**Tabela P2-05 – Ajuste fino pré-registrado da Random Forest.**
+
+| Configuração | MAE (kg) | RMSE (kg) | Viés (kg) | R² |
+|---|---:|---:|---:|---:|
+| `random_forest_baseline` | 53,33 | 73,52 | 4,03 | 0,756 |
+| `rf_tuning_estimators` | 55,19 | 75,55 | 5,61 | 0,742 |
+| `rf_tuning_depth` | 54,90 | 76,65 | 4,52 | 0,735 |
+| `rf_tuning_features` | 56,48 | 77,53 | 1,17 | 0,729 |
+
+**Fonte:** Elaborado pelo autor com base no ajuste fino pré-registrado e nas predições OOF (2026).
+
+Como todas as variações apresentaram MAE superior ao baseline, não houve evidência para substituir a configuração originalmente selecionada. Dessa forma, a `random_forest_baseline` permaneceu como configuração final da abordagem escolhida para os diagnósticos subsequentes.
 
 ### 2.5.5 Desempenho Preditivo Consolidado e Padrões de Erro
 
-<!-- PENDENTE DOS DIAGNÓSTICOS CONFIRMADOS. -->
+O diagnóstico expandido confirmou que o desempenho global da Random Forest não foi uniforme ao longo da distribuição de pesos. A categoria B1 apresentou MAE de 31,71 kg e viés de +31,71 kg, enquanto B10 apresentou MAE de 126,92 kg e viés de -126,92 kg. O comportamento em B10 mostra forte tendência de subestimação dos animais mais pesados dentro da amostra estudada. Esse padrão é consistente com a dificuldade observada também em outros modelos, uma vez que cinco casos foram classificados como difíceis de forma compartilhada e 14 apresentaram divergência elevada entre as abordagens.
+
+Na comparação por origem, a Random Forest apresentou MAE de 65,45 kg na fazenda Faco e 29,92 kg na fazenda Manezinho. A diferença permaneceu quando a análise foi restringida à faixa de peso compartilhada entre 92 e 265 kg: os MAEs foram, respectivamente, 80,49 kg e 31,30 kg. Esses valores não permitem atribuir a diferença à fazenda, pois origem, distribuição de peso e condições de aquisição permanecem parcialmente sobrepostas na amostra. Os resíduos da Random Forest apresentaram correlação de Pearson de 0,788 com os da rede densa, 0,786 com os da CNN compacta e 0,490 com os da ResNet-18, indicando que parte dos casos difíceis é compartilhada entre representações distintas.
+
+As curvas de aprendizado controladas também revelaram comportamentos diferentes entre os modelos. Para a Random Forest, o MAE OOF médio entre folds foi de 52,87 kg com 50% dos dados externos de treinamento, 53,15 kg com 75% e 53,50 kg com 100%. Portanto, dentro das frações avaliadas, não houve redução monotônica do erro com o aumento do subconjunto de treinamento. Esse resultado não implica que novas coletas sejam incapazes de melhorar o modelo; ele descreve apenas o comportamento observado nos subconjuntos derivados desta mesma amostra.
+
+![Curvas de aprendizado controladas](../evidence/confirmed/diagnostics/v1/learning_curves_canonical.png)
+
+**Figura P2-04 –** Curvas de aprendizado controladas dos quatro modelos de referência nas frações de 50%, 75% e 100% do conjunto externo de treinamento.
+**Fonte:** Elaborado pelo autor com base no diagnóstico expandido confirmado (2026).
+
+A análise de sensibilidade gerou 1.056 registros de perturbação para a Random Forest. Das 132 máscaras, 96 foram elegíveis para o par de operações morfológicas e 36 foram rejeitadas por critérios de topologia ou margem. Entre as rejeições morfológicas, 27 ocorreram por violação topológica após contração, quatro após expansão e cinco por margem insuficiente para expansão.
+
+Nas translações que preservaram integralmente a silhueta dentro da imagem, a alteração da predição foi de 0 kg. Esse resultado é compatível com o fato de os 25 atributos confirmados descreverem a geometria da silhueta em relação a ela própria e ao seu retângulo delimitador, e não a uma posição absoluta no quadro. Vinte e três deslocamentos foram rejeitados porque moveriam parte do primeiro plano para fora dos limites da imagem.
+
+Mudanças que alteraram o tamanho ou o contorno produziram respostas maiores. O crescimento da silhueta em 5% gerou variação absoluta média de 11,82 kg, enquanto a redução em 5% produziu 14,60 kg. A contração morfológica apresentou variação absoluta média de 43,86 kg e deslocamento médio de -42,67 kg; a expansão apresentou variação absoluta média de 51,92 kg e deslocamento médio de +49,12 kg. Assim, a abordagem demonstrou invariância às translações válidas avaliadas, mas sensibilidade relevante a alterações geométricas que modificam área e contorno.
+
+![Exemplo de perturbações morfológicas](../evidence/confirmed/diagnostics/v1/morphology_demo.png)
+
+**Figura P2-05 –** Exemplo de máscara original e perturbações morfológicas utilizadas na análise de sensibilidade.
+**Fonte:** Elaborado pelo autor com base no diagnóstico expandido confirmado (2026).
 
 ### 2.5.6 Limitações
 
-<!-- PENDENTE DO DIAGNÓSTICO EXPANDIDO CONFIRMADO.
-Não concluir esta seção antes das issues #24, #25, #26 e #27.
-A redação final deverá incorporar, conforme os resultados confirmados:
-- cobertura e erros por categorias de peso, fazenda e resolução;
-- comparação entre fazendas na amostra completa e na faixa compartilhada de 92–265 kg;
-- curvas de aprendizado controladas com 50%, 75% e 100% do treino externo;
-- sensibilidade a escala aparente, deslocamento e perturbações morfológicas;
-- tamanho e cobertura desigual da amostra;
-- confundimento entre fazenda, peso e aquisição;
-- ausência de calibração física da escala;
-- caráter de MAE OOF Pós-Seleção e ausência de validação independente em novos animais.
-Evitar alegações causais; os diagnósticos caracterizam associações e sensibilidades.
--->
+A principal limitação da Parte II é o tamanho e a estrutura da amostra. Embora as 132 observações tenham sido distribuídas de forma aproximadamente equilibrada entre dez categorias auxiliares de peso e cinco folds, a cobertura não é independente entre todas as variáveis de interesse. Os animais mais pesados estão concentrados na fazenda Faco e os mais leves na Manezinho, de modo que origem, peso e condições de aquisição não podem ser isolados completamente. As diferenças de erro observadas entre fazendas devem, portanto, ser interpretadas como associações presentes neste conjunto de dados, e não como efeitos causais da origem dos animais.
+
+A distribuição de resoluções também é desigual: 111 máscaras apresentam resolução 4032 × 3024 pixels, 18 apresentam 1600 × 900 pixels e apenas três apresentam 1600 × 1200 pixels. Esse desequilíbrio restringe a capacidade de comparar de forma robusta o desempenho entre condições de aquisição. Além disso, as máscaras foram padronizadas para uma escala canônica sem uma referência física explícita em centímetros ou metros. Dessa forma, as medidas geométricas representam relações na escala da imagem e da silhueta, não medidas corporais calibradas fisicamente.
+
+Os diagnósticos de sensibilidade mostram ainda que a Random Forest depende da fidelidade geométrica das máscaras. Pequenos deslocamentos que preservam integralmente a forma não alteraram as predições, porém mudanças de escala e, principalmente, alterações morfológicas de área e contorno produziram variações expressivas no peso estimado. Isso reforça a importância da qualidade da segmentação usada como entrada e indica que erros sistemáticos na delimitação da silhueta podem se propagar para a estimativa de peso.
+
+As curvas de aprendizado não mostraram redução monotônica do MAE da Random Forest entre 50%, 75% e 100% das observações de treinamento disponíveis em cada fold. Esse comportamento não deve ser extrapolado para afirmar que uma amostra maior não traria benefício, pois todas as frações foram construídas a partir das mesmas 132 observações e compartilham as limitações de cobertura do conjunto original.
+
+Por fim, a seleção de atributos, a escolha da abordagem, o ajuste e os diagnósticos utilizaram diferentes etapas sobre a mesma base de 132 máscaras. Embora as predições tenham sido obtidas fora do fold de treinamento de cada modelo e o protocolo tenha empregado gates de decisão e rastreabilidade de proveniência, o MAE OOF apresentado é uma evidência de desenvolvimento pós-seleção. Não foi utilizado um conjunto externo de animais completamente separado de todas as decisões metodológicas. Consequentemente, o desempenho observado não deve ser interpretado como uma estimativa independente da capacidade de generalização para novos animais, fazendas ou condições de aquisição.
 
 ## 2.6 CONSIDERAÇÕES FINAIS DA PARTE II
 
-<!-- PENDENTE DA CONCLUSÃO DOS EXPERIMENTOS.
-A redação final deverá afirmar explicitamente que o MAE OOF pós-seleção representa evidência de
-desenvolvimento e não validação independente em novos animais.
--->
+A Parte II avaliou a viabilidade de predizer o peso vivo de bubalinos a partir de máscaras binárias, comparando representações geométricas explícitas e modelos convolucionais sob uma divisão experimental comum. Entre 26 atributos candidatos, `area_power_1_5` foi removido por redundância estrutural e evidência preditiva, resultando em um conjunto compartilhado de 25 atributos. Na comparação das quatro abordagens, Random Forest e rede neural densa apresentaram desempenho praticamente empatado em MAE, mas a Random Forest apresentou RMSE menor e R² maior e foi confirmada como abordagem de continuidade.
+
+O ajuste fino restrito a três variações não produziu redução do MAE, mantendo-se a configuração `random_forest_baseline`, com MAE OOF de 53,33 kg, RMSE de 73,52 kg, viés de 4,03 kg e R² de 0,756. Os diagnósticos posteriores mostraram que esse desempenho global oculta diferenças importantes ao longo da amostra. O erro foi especialmente elevado no extremo superior de peso, com MAE de 126,92 kg em B10 e forte tendência de subestimação. Também foram observadas diferenças de erro entre as fazendas, sem possibilidade de isolar a origem das demais características associadas à amostra.
+
+As curvas de aprendizado da Random Forest permaneceram praticamente estáveis entre as frações avaliadas, enquanto a análise de sensibilidade mostrou que a posição absoluta da silhueta, quando preservada integralmente dentro da imagem, não alterou as predições. Em contraste, mudanças de escala e contorno provocaram alterações relevantes, indicando dependência direta da qualidade geométrica das máscaras.
+
+Em conjunto, os resultados mostram que máscaras binárias contêm informação útil para estimar o peso e que uma abordagem baseada em atributos geométricos e Random Forest constitui uma referência promissora para continuidade do estudo. Entretanto, o desempenho atual deve ser interpretado como evidência interna de desenvolvimento. A etapa necessária para avaliar a generalização do método é sua aplicação futura em uma coleta independente, com maior cobertura de pesos, origens e condições de aquisição e, idealmente, com referência física de escala que permita relacionar as medidas extraídas da imagem às dimensões corporais reais dos animais.
 
 ## 2.7 DIFICULDADES ENCONTRADAS NA PARTE II
 
-<!-- PENDENTE DE REDAÇÃO FINAL.
-Possíveis pontos, condicionados ao que efetivamente ocorreu:
-- tamanho reduzido da amostra;
-- desbalanceamento da distribuição dos pesos;
-- confundimento entre origem/fazenda e categorias extremas;
-- custo computacional dos modelos convolucionais;
-- necessidade de manter rastreabilidade e comparabilidade entre experimentos;
-- ausência de um conjunto externo independente.
--->
+O desenvolvimento da Parte II foi condicionado principalmente pelo tamanho reduzido e pela distribuição heterogênea da amostra. A associação entre fazenda e faixa de peso dificultou separar a influência da origem dos animais de diferenças relacionadas ao próprio alvo e às condições de aquisição das imagens. A ausência de um conjunto externo independente também exigiu cuidado adicional para distinguir desempenho OOF de evidência efetiva de generalização.
+
+Do ponto de vista computacional, a comparação entre abordagens baseadas em atributos e modelos convolucionais exigiu a criação de protocolos específicos para preservar a mesma divisão experimental, controlar as subdivisões internas de treinamento e manter reprodutibilidade entre execuções. Os modelos neurais, principalmente os baseados diretamente nas máscaras, demandaram maior tempo de treinamento e uso de GPU, tornando mais custosa a repetição de experimentos e das curvas de aprendizado.
+
+Outra dificuldade foi assegurar rastreabilidade entre as etapas. Como seleção de atributos, comparação de modelos, ajuste fino e diagnósticos dependem umas das outras, alterações no código ou na proveniência dos artefatos precisaram invalidar resultados derivados mesmo quando os dados de entrada permaneciam iguais. Para reduzir esse risco, foram implementados manifestos, hashes, snapshots atômicos, seeds fixas, validações de integridade e gates de revisão humana. Essa estrutura aumentou a complexidade operacional do projeto, mas foi necessária para manter comparabilidade entre os resultados e evitar que conclusões fossem baseadas em artefatos desatualizados.
 
 # 3 REFERÊNCIAS BIBLIOGRÁFICAS
 

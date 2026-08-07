@@ -54,6 +54,7 @@ from buffalo_weight.system_setup import default_setup_services
 from buffalo_weight.tuning_provenance import TuningProvenance
 from buffalo_weight.tuning_stage import run_tuning_stage
 from buffalo_weight.diagnostic_descriptive_stage import run_diagnostic_descriptive_stage
+from buffalo_weight.diagnostic_learning_stage import run_diagnostic_learning_stage
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,8 @@ def _dispatch_report_command(
         return _run_tuning_command(arguments, dependencies, contract, stdout)
     if arguments.command == "diagnostics-descriptive":
         return _run_diagnostic_descriptive_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "diagnostics-learning":
+        return _run_diagnostic_learning_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -304,6 +307,24 @@ def _run_diagnostic_descriptive_command(
     return 0
 
 
+def _run_diagnostic_learning_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    dense_runner = dependencies.dense_baseline_dependencies.runner if (
+        dependencies.dense_baseline_dependencies is not None
+    ) else None
+    status = run_diagnostic_learning_stage(
+        contract, arguments.dry_run, dependencies.snapshot_publisher,
+        dependencies.random_forest_baseline, dense_runner,
+        dependencies.compact_cnn_adapter, dependencies.resnet_baseline_runner,
+        dependencies.baseline_provenance, dependencies.compact_cnn_provenance,
+        dependencies.resnet_baseline_provenance,
+    )
+    print(f"diagnostics_learning: {status}", file=stdout)
+    return 0
+
+
 def _comparison_upstream_dependencies(
     dependencies: _CliDependencies,
 ) -> BaselineComparisonUpstreamDependencies:
@@ -352,6 +373,11 @@ def _add_reconstructible_stage_parsers(
     )
     diag_descriptive_parser.add_argument("--config", default="configs/report.yaml")
     diag_descriptive_parser.add_argument("--dry-run", action="store_true")
+    diag_learning_parser = subcommands.add_parser(
+        "diagnostics-learning", help="evaluate controlled learning curves for four baselines"
+    )
+    diag_learning_parser.add_argument("--config", default="configs/report.yaml")
+    diag_learning_parser.add_argument("--dry-run", action="store_true")
 
 
 def _add_confirmation_parsers(

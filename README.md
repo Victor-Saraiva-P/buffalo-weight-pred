@@ -22,8 +22,6 @@ com base no relatório upstream
 
 ## Configuração
 
-`configs/shared.yaml` define dados, Índice de Features, Divisão Estratificada e diretório de treino compartilhados.
-
 `configs/report.yaml` define a configuração do relatório e o diretório de artefatos da reprodução oficial.
 
 ## Arquivos Gerados
@@ -89,18 +87,6 @@ Criar ambiente e instalar dependências:
 ```bash
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-```
-
-Gerar índice de features:
-
-```bash
-PYTHON=.venv/bin/python make features
-```
-
-Gerar divisão estratificada e gráfico de categorias de peso:
-
-```bash
-PYTHON=.venv/bin/python make split
 ```
 
 Executar reprodução integral do relatório:

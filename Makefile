@@ -1,4 +1,3 @@
-SHARED_CONFIG ?= configs/shared.yaml
 REPORT_CONFIG ?= configs/report.yaml
 FEATURE_CONTRACT ?=
 FEATURE_REPORT ?=
@@ -11,7 +10,7 @@ ifeq ($(DRY_RUN),true)
 TRAIN_DRY_RUN = --dry-run
 endif
 
-.PHONY: setup reproduce inputs feature-selection confirm-features baselines compare-baselines tuning report-clean features split test
+.PHONY: setup reproduce inputs feature-selection confirm-features baselines compare-baselines tuning report-clean test
 
 setup: $(PYTHON)
 	$(PYTHON) main.py setup
@@ -42,12 +41,6 @@ report-clean: setup
 
 $(PYTHON):
 	python -m venv $(VENV)
-
-features: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.features --shared-config $(SHARED_CONFIG)
-
-split: setup
-	PYTHONPATH=src $(PYTHON) -m buffalo_weight.split --shared-config $(SHARED_CONFIG)
 
 test:
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests

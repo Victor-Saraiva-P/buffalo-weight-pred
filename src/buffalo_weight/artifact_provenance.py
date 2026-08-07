@@ -153,9 +153,9 @@ def write_manifest(output_dir: Path, config: ModelConfig, evidence: TrainingEvid
 
 
 def recipe_source(config: ModelConfig) -> tuple[list[str], str]:
-    shared = _module_text("buffalo_weight.train")
+    shared = _module_text("buffalo_weight.models")
     selected = _selected_source(config)
-    sources = ["buffalo_weight.train:predict_fold_weights", *selected[0]]
+    sources = ["buffalo_weight.models:build_model", *selected[0]]
     return sources, _digest([shared, selected[1]])
 
 
@@ -169,14 +169,6 @@ def dependency_versions(config: ModelConfig) -> dict[str, str | None]:
             names["torchvision"] = "torchvision"
         if config.params.get("input_representation") == "geometry_channels":
             names["scipy"] = "scipy"
-    if config.model == "pretrained_mask_embedding":
-        names["torch"] = "torch"
-        names["torchvision"] = "torchvision"
-    if config.model == "xgboost":
-        names["xgboost"] = "xgboost"
-        names["torch"] = "torch"
-    if config.model == "pca_feature_fusion":
-        names["scipy"] = "scipy"
     return {name: _package_version(module) for name, module in names.items()}
 
 
@@ -253,39 +245,8 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
                 *[("buffalo_weight.cnn_mask", symbol) for symbol in symbols],
             ]
         )
-    module = {
-        "pca_feature_fusion": "pca_feature_fusion",
-        "pca_svr_mask": "pca_svr_mask",
-        "mask_feature": "mask_classical",
-        "pretrained_mask_embedding": "pretrained_mask_embedding",
-    }.get(config.model, "models")
-    symbol = {
-        "random_forest": "_build_random_forest",
-        "extra_trees": "_build_extra_trees",
-        "hist_gradient_boosting": "_build_hist_gradient_boosting",
-        "xgboost": "_build_xgboost",
-        "pca_feature_fusion": "PcaFeatureFusionRegressor",
-        "pca_svr_mask": "PcaSvrMaskRegressor",
-        "mask_feature": "MaskFeatureRegressor",
-        "pretrained_mask_embedding": "PretrainedMaskEmbeddingRegressor",
-    }.get(config.model, "build_model")
-    pairs = [(f"buffalo_weight.{module}", symbol)]
-    if module == "models":
-        pairs.append(("buffalo_weight.models", "_target_regressor"))
-    if config.model == "pca_feature_fusion":
-        pairs.extend(
-            [
-                ("buffalo_weight.cnn_mask", "load_masks"),
-                ("buffalo_weight.canonical_mask", "canonicalize_mask"),
-                ("buffalo_weight.canonical_mask", "principal_axis_angle"),
-                ("buffalo_weight.canonical_mask", "load_canonical_masks"),
-                ("buffalo_weight.pca_feature_fusion", "_feature_value"),
-                ("buffalo_weight.target_transform", "transform_target"),
-                ("buffalo_weight.target_transform", "inverse_target"),
-                ("buffalo_weight.target_transform", "transform_target_power"),
-                ("buffalo_weight.target_transform", "inverse_target_power"),
-            ]
-        )
+    symbol = "_build_random_forest" if config.model == "random_forest" else "build_model"
+    pairs = [("buffalo_weight.models", symbol)]
     if config.model in MASK_PREDICTION_MODELS:
         pairs.extend(
             [
@@ -295,18 +256,6 @@ def _selected_source(config: ModelConfig) -> tuple[list[str], str]:
             ]
         )
     pairs.append(("buffalo_weight.split", "parse_weight"))
-    if config.model == "mask_feature":
-        pairs.extend(
-            [
-                ("buffalo_weight.mask_classical", "shape_profile_features"),
-                ("buffalo_weight.mask_classical", "_regressor"),
-                ("buffalo_weight.mask_classical", "regression_pipeline"),
-            ]
-        )
-    if config.model == "pretrained_mask_embedding":
-        pairs.append(("buffalo_weight.pretrained_mask_embedding", "build_embedding_network"))
-    if config.model in {"random_forest", "extra_trees", "hist_gradient_boosting"}:
-        pairs.append(("buffalo_weight.models", "_build_sklearn_model"))
     return _source_bundle(pairs)
 
 

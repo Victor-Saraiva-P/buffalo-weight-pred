@@ -149,11 +149,11 @@ class ArtifactProvenanceTest(unittest.TestCase):
 
         self.assertEqual(plan.status, "reuse")
 
-    def test_selected_fusion_feature_change_makes_artifact_stale(self) -> None:
+    def test_selected_feature_change_makes_artifact_stale(self) -> None:
         config = ModelConfig(
-            "fusion",
-            "pca_feature_fusion",
-            {"image_size": 8, "n_components": 2, "n_estimators": 2, "random_state": 1},
+            "forest_test",
+            "random_forest",
+            {"n_estimators": 2, "random_state": 1},
         )
         evidence = TrainingEvidence(
             self.evidence.split_rows,

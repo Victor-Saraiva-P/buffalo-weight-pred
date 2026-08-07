@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import importlib.util
 import tempfile
 import unittest
-import warnings
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -21,95 +18,30 @@ from buffalo_weight.cnn_mask import (
     resolve_device,
 )
 from buffalo_weight.models import (
-    EXTRA_TREES_MODEL,
     RANDOM_FOREST_MODEL,
     ModelConfig,
     build_model,
     parse_model_configs,
     validate_unique_model_configs,
-    xgboost_compute_params,
 )
-from buffalo_weight.pca_feature_fusion import PcaFeatureFusionRegressor
-from buffalo_weight.pca_svr_mask import PcaSvrMaskRegressor
 from tests.fake_compute import fake_available_cuda, fake_unavailable_cuda
 
 
 class ModelConfigTest(unittest.TestCase):
+    def test_accepts_unique_model_configuration_names(self) -> None:
+        configs = [
+            ModelConfig("first", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
+            ModelConfig("second", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
+        ]
+        validate_unique_model_configs(configs)
+
     def test_rejects_duplicate_model_configuration_names(self) -> None:
-        configs = [
+        duplicates = [
             ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
-            ModelConfig("same", EXTRA_TREES_MODEL, {"n_estimators": 2, "random_state": 1}),
+            ModelConfig("same", RANDOM_FOREST_MODEL, {"n_estimators": 2, "random_state": 1}),
         ]
-
         with self.assertRaisesRegex(ValueError, "duplicate model configuration names"):
-            validate_unique_model_configs(configs)
-
-    def test_classical_model_can_transform_target_inside_fit(self) -> None:
-        model = build_model(
-            ModelConfig(
-                "forest_cube_root",
-                "random_forest",
-                {"n_estimators": 10, "random_state": 42, "target_transform": "cube_root"},
-            )
-        )
-        features = np.arange(12, dtype=float).reshape(6, 2)
-        weights = np.asarray([64.0, 125.0, 216.0, 343.0, 512.0, 729.0])
-
-        model.fit(features, weights)
-        predictions = model.predict(features)
-
-        self.assertTrue(np.isfinite(predictions).all())
-        self.assertTrue((predictions > 0).all())
-
-    def test_builds_additional_classical_models(self) -> None:
-        configs = [
-            ModelConfig("extra", "extra_trees", {"n_estimators": 5, "random_state": 42}),
-            ModelConfig("hist", "hist_gradient_boosting", {"random_state": 42}),
-        ]
-
-        models = [build_model(config) for config in configs]
-
-        self.assertEqual(
-            [type(model).__name__ for model in models],
-            ["ExtraTreesRegressor", "HistGradientBoostingRegressor"],
-        )
-
-    def test_xgboost_uses_cuda_histogram_when_available(self) -> None:
-        self.assertEqual(
-            xgboost_compute_params(cuda_available=True, cuda_build=True),
-            {"device": "cuda", "tree_method": "hist"},
-        )
-
-    def test_xgboost_falls_back_to_cpu_without_cuda(self) -> None:
-        self.assertEqual(
-            xgboost_compute_params(cuda_available=False, cuda_build=True),
-            {"device": "cpu", "tree_method": "hist"},
-        )
-
-    def test_xgboost_falls_back_to_cpu_without_cuda_build(self) -> None:
-        self.assertEqual(
-            xgboost_compute_params(cuda_available=True, cuda_build=False),
-            {"device": "cpu", "tree_method": "hist"},
-        )
-
-    @unittest.skipUnless(
-        importlib.util.find_spec("xgboost"),
-        "XGBoost is an optional dependency outside the official environment",
-    )
-    def test_xgboost_prediction_avoids_mismatched_device_fallback(self) -> None:
-        model = build_model(
-            ModelConfig("xgboost_test", "xgboost", {"n_estimators": 2, "random_state": 42})
-        )
-        features = np.arange(20, dtype=float).reshape(10, 2)
-        targets = np.arange(10, dtype=float)
-
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            warnings.simplefilter("always")
-            model.fit(features, targets)
-            predictions = model.predict(features)
-
-        self.assertEqual(predictions.shape, (10,))
-        self.assertFalse(any("mismatched devices" in str(item.message) for item in caught_warnings))
+            validate_unique_model_configs(duplicates)
 
     def test_parses_cnn_mask_model_config(self) -> None:
         configs = parse_model_configs(
@@ -131,21 +63,6 @@ class ModelConfigTest(unittest.TestCase):
 
         self.assertEqual(configs[0].name, "cnn_mask_baseline")
         self.assertEqual(configs[0].model, "cnn_mask")
-
-    def test_parses_pca_svr_mask_model_config(self) -> None:
-        configs = parse_model_configs(
-            {
-                "model_configs": {
-                    "pca_svr_mask_baseline": {
-                        "model": "pca_svr_mask",
-                        "params": {"image_size": 128, "n_components": 16, "random_state": 42},
-                    }
-                }
-            }
-        )
-
-        self.assertEqual(configs[0].name, "pca_svr_mask_baseline")
-        self.assertEqual(configs[0].model, "pca_svr_mask")
 
     def test_rejects_unknown_model_param(self) -> None:
         with self.assertRaisesRegex(ValueError, "unsupported params"):
@@ -403,49 +320,6 @@ class CnnMaskTest(unittest.TestCase):
         self.assertEqual(float(translated.sum()), 0.0)
 
 
-class PcaSvrMaskTest(unittest.TestCase):
-    def test_fits_and_predicts_from_binary_mask_pixels(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir = Path(directory)
-            rows = []
-            for index in range(6):
-                pixels = np.zeros((8, 8), dtype=np.uint8)
-                pixels[2:6, 1 : index + 2] = 255
-                Image.fromarray(pixels).save(masks_dir / f"mask-{index}.png")
-                rows.append({"file_name": f"mask-{index}", "weight": str(100 + index * 20)})
-            model = PcaSvrMaskRegressor(
-                masks_dir,
-                {"image_size": 8, "n_components": 2, "random_state": 42, "c": 10.0},
-            )
-
-            model.fit(rows)
-            predictions = model.predict(rows)
-
-        self.assertEqual(predictions.shape, (6,))
-        self.assertTrue(np.isfinite(predictions).all())
-
-
-class PcaFeatureFusionTest(unittest.TestCase):
-    def test_fits_geometry_and_mask_components_inside_model(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            masks_dir = Path(directory)
-            rows = []
-            for index in range(8):
-                pixels = np.zeros((8, 8), dtype=np.uint8)
-                pixels[1:7, 1 : index + 1] = 255
-                Image.fromarray(pixels).save(masks_dir / f"mask-{index}.png")
-                rows.append(
-                    {"file_name": f"mask-{index}", "weight": str(100 + index * 10), "area": str(index + 1)}
-                )
-            params = {"image_size": 8, "n_components": 3, "n_estimators": 10, "random_state": 42}
-            model = PcaFeatureFusionRegressor(masks_dir, params)
-
-            model.fit(rows, ["area"])
-            predictions = model.predict(rows, ["area"])
-
-        self.assertEqual(predictions.shape, (8,))
-        self.assertTrue(np.isfinite(predictions).all())
-
-
 if __name__ == "__main__":
     unittest.main()
+

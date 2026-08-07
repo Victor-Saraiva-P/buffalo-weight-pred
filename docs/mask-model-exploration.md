@@ -37,17 +37,8 @@ O ganho do `stretch` no split fixo diminui entre seeds. As duas variantes devem 
 
 ## Reprodução
 
-```bash
-make train-mask-experiments
-make train-fusion-experiments
-make ensemble
-```
+*Nota: As famílias exploratórias desta página foram encerradas durante a contração do projeto (ver [`docs/closed-experiments.md`](closed-experiments.md)).*
 
-Artefatos principais:
-
-- `generated/mask_classical/model_comparison.csv`
-- `generated/ensemble/model_comparison.csv`
-- `generated/stability_fusion_candidates/model_comparison.csv`
 
 ## Segunda rodada dirigida
 

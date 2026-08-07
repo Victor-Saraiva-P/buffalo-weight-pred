@@ -140,20 +140,38 @@ def count_four_neighbor_components(mask: np.ndarray) -> int:
 
     Example: ``count_four_neighbor_components(mask)`` returns the component count.
     """
-    # 4-connectivity structure: only orthogonal neighbors
     structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8)
-    _, n_components = label(mask > 0, structure=structure)
-    return int(n_components)
+    _, count = label(mask > 0, structure=structure)
+    return int(count)
 
 
-def has_valid_topology(
-    original_mask: np.ndarray, perturbed_mask: np.ndarray
-) -> bool:
-    """Check 1:1 four-neighbor component correspondence between original and perturbed masks.
+def has_valid_topology(original_mask: np.ndarray, perturbed_mask: np.ndarray) -> bool:
+    """Check strict 1:1 component correspondence between original and perturbed masks.
 
-    Elimination (losing a component), division (one → many), or union (many → one)
-    violates the constraint.
+    Neither component elimination, splitting, nor merging is permitted.
 
-    Example: ``has_valid_topology(original, eroded)`` returns True if component count matches.
+    Example: ``has_valid_topology(orig, pert)`` returns True if 1:1 topology holds.
     """
-    return count_four_neighbor_components(original_mask) == count_four_neighbor_components(perturbed_mask)
+    orig_count = count_four_neighbor_components(original_mask)
+    pert_count = count_four_neighbor_components(perturbed_mask)
+    if orig_count != pert_count or orig_count == 0:
+        return orig_count == pert_count
+    return _verify_component_mapping(original_mask, perturbed_mask, orig_count)
+
+
+def _verify_component_mapping(orig: np.ndarray, pert: np.ndarray, count: int) -> bool:
+    """Verify that every original component maps 1:1 to a unique perturbed component."""
+    struct = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8)
+    orig_labeled, _ = label(orig > 0, structure=struct)
+    pert_labeled, _ = label(pert > 0, structure=struct)
+    mapped_pert_labels: set[int] = set()
+    for comp_id in range(1, count + 1):
+        overlapping = pert_labeled[orig_labeled == comp_id]
+        nonzero_overlaps = overlapping[overlapping > 0]
+        if len(nonzero_overlaps) == 0:
+            return False
+        unique_targets = set(nonzero_overlaps)
+        if len(unique_targets) != 1:
+            return False
+        mapped_pert_labels.add(next(iter(unique_targets)))
+    return len(mapped_pert_labels) == count

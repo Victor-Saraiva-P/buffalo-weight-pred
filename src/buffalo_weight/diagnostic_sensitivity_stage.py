@@ -56,26 +56,15 @@ def run_diagnostic_sensitivity_stage(
 
 
 def _execute_stage_rebuild(
-    contract: ReportContract,
-    output_dir: Path,
-    publisher: SnapshotPublisher,
-    mask_loader: SensitivityMaskLoader | None,
-    rf_baseline: FeatureBaseline | None,
+    contract: ReportContract, output_dir: Path, publisher: SnapshotPublisher,
+    mask_loader: SensitivityMaskLoader | None, rf_baseline: FeatureBaseline | None,
 ) -> str:
     clean_snapshot_stage(output_dir)
-
-    slice_data = evaluate_sensitivity(
-        contract,
-        mask_loader=mask_loader,
-        random_forest_baseline=rf_baseline,
-    )
-
-    # Load masks for demo PNG
+    target_slice = evaluate_sensitivity(contract, mask_loader=mask_loader, random_forest_baseline=rf_baseline)
     loader = mask_loader or FilesystemMaskLoader(contract.inputs.masks_dir)
-    demo_masks = _load_demo_masks(slice_data, loader)
-
-    write_sensitivity_artifacts(output_dir, slice_data, demo_masks)
-    _write_stage_manifest(output_dir, slice_data)
+    demo_masks = _load_demo_masks(target_slice, loader)
+    write_sensitivity_artifacts(output_dir, target_slice, demo_masks)
+    _write_stage_manifest(output_dir, target_slice)
     return "rebuilt"
 
 

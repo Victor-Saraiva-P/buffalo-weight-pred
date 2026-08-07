@@ -6,6 +6,7 @@ Reference: GitHub Issue #25.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 LEARNING_CURVE_CONFIGURATIONS = (
@@ -14,6 +15,9 @@ LEARNING_CURVE_CONFIGURATIONS = (
     "compact_cnn_baseline",
     "resnet18_pretrained_partial",
 )
+
+EvaluatedPopulation = Literal["oof"]
+ArtifactAction = Literal["reused", "retrained"]
 
 
 @dataclass(frozen=True)
@@ -27,11 +31,11 @@ class LearningPointRecord:
     fold: int
     fraction: float
     n_train: int
-    evaluated_population: str
+    evaluated_population: EvaluatedPopulation
     n_eval: int
     mae_kg: float
     bias_kg: float
-    artifact_action: str
+    artifact_action: ArtifactAction
 
 
 @dataclass(frozen=True)

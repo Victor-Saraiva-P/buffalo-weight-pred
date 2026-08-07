@@ -50,7 +50,7 @@ def write_learning_curves_artifacts(
     _write_report_markdown(output_dir / "learning_curves_report.md", slice_data)
 
 
-def _write_points_csv(path: Path, data: LearningCurvesSlice) -> None:
+def _write_points_csv(path: Path, slice_data: LearningCurvesSlice) -> None:
     rows = [
         {
             "configuration": p.configuration,
@@ -63,12 +63,12 @@ def _write_points_csv(path: Path, data: LearningCurvesSlice) -> None:
             "bias_kg": format_csv_number(p.bias_kg),
             "artifact_action": p.artifact_action,
         }
-        for p in data.point_records
+        for p in slice_data.point_records
     ]
     write_csv_rows(rows, path, POINT_COLUMNS)
 
 
-def _write_summary_csv(path: Path, data: LearningCurvesSlice) -> None:
+def _write_summary_csv(path: Path, slice_data: LearningCurvesSlice) -> None:
     rows = [
         {
             "configuration": s.configuration,
@@ -79,17 +79,17 @@ def _write_summary_csv(path: Path, data: LearningCurvesSlice) -> None:
             "mean_bias_kg": format_csv_number(s.mean_bias_kg),
             "reused_points_count": str(s.reused_points_count),
         }
-        for s in data.summary_records
+        for s in slice_data.summary_records
     ]
     write_csv_rows(rows, path, SUMMARY_COLUMNS)
 
 
-def _write_report_markdown(path: Path, data: LearningCurvesSlice) -> None:
+def _write_report_markdown(path: Path, slice_data: LearningCurvesSlice) -> None:
     lines = [
         "# Relatório de Diagnóstico: Curvas de Aprendizado Controladas",
         "",
-        f"Total de pontos de avaliação processados: {len(data.point_records)}",
-        f"Total de configurações avaliadas: {len(set(p.configuration for p in data.point_records))}",
+        f"Total de pontos de avaliação processados: {len(slice_data.point_records)}",
+        f"Total de configurações avaliadas: {len(set(p.configuration for p in slice_data.point_records))}",
         "",
         "## Resumo das Curvas de Aprendizado (MAE OOF Médio em kg)",
         "",
@@ -97,17 +97,7 @@ def _write_report_markdown(path: Path, data: LearningCurvesSlice) -> None:
         "| :--- | :---: | :---: | :---: |",
     ]
 
-    configs = sorted({s.configuration for s in data.summary_records})
-    for config in configs:
-        res: dict[float, float] = {}
-        for s in data.summary_records:
-            if s.configuration == config:
-                res[s.fraction] = s.mean_mae_kg
-        f50 = f"{res.get(0.50, 0.0):.2f}"
-        f75 = f"{res.get(0.75, 0.0):.2f}"
-        f100 = f"{res.get(1.00, 0.0):.2f}"
-        lines.append(f"| {config} | {f50} | {f75} | {f100} |")
-
+    lines.extend(_summary_table_rows(slice_data))
     lines.extend([
         "",
         "Nota: Subconjuntos de 50% e 75% foram gerados de forma aninhada, estratificada e determinística com seed 45.",
@@ -115,3 +105,17 @@ def _write_report_markdown(path: Path, data: LearningCurvesSlice) -> None:
     ])
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _summary_table_rows(slice_data: LearningCurvesSlice) -> list[str]:
+    lines: list[str] = []
+    configs = sorted({s.configuration for s in slice_data.summary_records})
+    for config in configs:
+        mae_by_fraction: dict[float, float] = {
+            s.fraction: s.mean_mae_kg for s in slice_data.summary_records if s.configuration == config
+        }
+        f50 = f"{mae_by_fraction.get(0.50, 0.0):.2f}"
+        f75 = f"{mae_by_fraction.get(0.75, 0.0):.2f}"
+        f100 = f"{mae_by_fraction.get(1.00, 0.0):.2f}"
+        lines.append(f"| {config} | {f50} | {f75} | {f100} |")
+    return lines

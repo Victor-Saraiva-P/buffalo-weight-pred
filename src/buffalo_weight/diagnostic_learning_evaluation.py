@@ -5,18 +5,21 @@ Reference: GitHub Issue #25.
 
 from __future__ import annotations
 
+from typing import Protocol
+
 import numpy as np
 from numpy.typing import NDArray
 
+from buffalo_weight.baseline_provenance import BaselineProvenance
 from buffalo_weight.compact_cnn_evaluation import (
     CompactCnnSample,
     fit_compact_target_scale,
     load_compact_cnn_samples,
     load_letterboxed_mask,
 )
+from buffalo_weight.compact_cnn_provenance import CompactCnnProvenance
 from buffalo_weight.compact_cnn_types import (
     COMPACT_CNN_RECIPE,
-    CompactCnnRecipe,
     CompactCnnTrainingAdapter,
     MaskBatch,
 )
@@ -44,17 +47,28 @@ from buffalo_weight.reproduction_config import ReportContract
 from buffalo_weight.resnet_baseline_evaluation import (
     ResNetSample,
 )
-from buffalo_weight.resnet_baseline_stage import (
-    ResNetBaselineRunner,
-)
+from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance
+from buffalo_weight.resnet_baseline_stage import ResNetBaselineRunner
+
+
+class DenseBaselineRunnerSeam(Protocol):
+    """Evaluation seam protocol for DenseBaselineRunner."""
+
+    def evaluate(
+        self, samples: list[FeatureSample], feature_names: tuple[str, ...]
+    ) -> object:
+        ...
 
 
 def evaluate_learning_curves(
     contract: ReportContract,
     random_forest_baseline: FeatureBaseline | None = None,
-    dense_runner: object | None = None,
+    dense_runner: DenseBaselineRunnerSeam | None = None,
     compact_adapter: CompactCnnTrainingAdapter | None = None,
     resnet_runner: ResNetBaselineRunner | None = None,
+    baseline_provenance: BaselineProvenance | None = None,
+    compact_provenance: CompactCnnProvenance | None = None,
+    resnet_provenance: ResNetBaselineProvenance | None = None,
 ) -> LearningCurvesSlice:
     """Evaluate controlled learning curves across the four baselines.
 
@@ -65,45 +79,71 @@ def evaluate_learning_curves(
     split_path = contract.inputs_output_dir / "canonical_split.csv"
     cnn_samples = load_compact_cnn_samples(split_path, contract.inputs.masks_dir)
 
-    points: list[LearningPointRecord] = []
-    for config in LEARNING_CURVE_CONFIGURATIONS:
-        points.extend(
-            _evaluate_config(
-                contract, config, feature_names, feature_samples, cnn_samples,
-                random_forest_baseline, dense_runner, compact_adapter, resnet_runner,
-            )
-        )
+    points = _evaluate_all_configurations(
+        contract, feature_names, feature_samples, cnn_samples,
+        random_forest_baseline, dense_runner, compact_adapter, resnet_runner,
+        baseline_provenance, compact_provenance, resnet_provenance,
+    )
 
-    points_tuple = tuple(sorted(points, key=lambda p: (p.configuration, p.fraction, p.fold)))
-    summaries = _build_summary_records(points_tuple)
-    return LearningCurvesSlice(points_tuple, summaries)
+    ordered_points = tuple(sorted(points, key=lambda p: (p.configuration, p.fraction, p.fold)))
+    summaries = _build_summary_records(ordered_points)
+    return LearningCurvesSlice(ordered_points, summaries)
 
 
-def _evaluate_config(
+def _evaluate_all_configurations(
     contract: ReportContract,
-    config: str,
     feature_names: tuple[str, ...],
     feature_samples: list[FeatureSample],
     cnn_samples: list[CompactCnnSample],
-    random_forest_baseline: FeatureBaseline | None,
-    dense_runner: object | None,
+    rf_baseline: FeatureBaseline | None,
+    dense_runner: DenseBaselineRunnerSeam | None,
     compact_adapter: CompactCnnTrainingAdapter | None,
     resnet_runner: ResNetBaselineRunner | None,
+    baseline_prov: BaselineProvenance | None,
+    compact_prov: CompactCnnProvenance | None,
+    resnet_prov: ResNetBaselineProvenance | None,
 ) -> list[LearningPointRecord]:
     points: list[LearningPointRecord] = []
-    is_reusable = check_baseline_100_reusability(contract, config)
-
-    for fold in range(1, 6):
+    for config in LEARNING_CURVE_CONFIGURATIONS:
         points.extend(
-            _evaluate_fold(
-                contract, config, fold, is_reusable, feature_names, feature_samples,
-                cnn_samples, random_forest_baseline, dense_runner, compact_adapter, resnet_runner,
+            _evaluate_config_folds(
+                contract, config, feature_names, feature_samples, cnn_samples,
+                rf_baseline, dense_runner, compact_adapter, resnet_runner,
+                baseline_prov, compact_prov, resnet_prov,
             )
         )
     return points
 
 
-def _evaluate_fold(
+def _evaluate_config_folds(
+    contract: ReportContract,
+    config: str,
+    feature_names: tuple[str, ...],
+    feature_samples: list[FeatureSample],
+    cnn_samples: list[CompactCnnSample],
+    rf_baseline: FeatureBaseline | None,
+    dense_runner: DenseBaselineRunnerSeam | None,
+    compact_adapter: CompactCnnTrainingAdapter | None,
+    resnet_runner: ResNetBaselineRunner | None,
+    baseline_prov: BaselineProvenance | None,
+    compact_prov: CompactCnnProvenance | None,
+    resnet_prov: ResNetBaselineProvenance | None,
+) -> list[LearningPointRecord]:
+    points: list[LearningPointRecord] = []
+    is_reusable = check_baseline_100_reusability(
+        contract, config, baseline_prov, compact_prov, resnet_prov
+    )
+    for fold in range(1, 6):
+        points.extend(
+            _evaluate_fold_fractions(
+                contract, config, fold, is_reusable, feature_names, feature_samples,
+                cnn_samples, rf_baseline, dense_runner, compact_adapter, resnet_runner,
+            )
+        )
+    return points
+
+
+def _evaluate_fold_fractions(
     contract: ReportContract,
     config: str,
     fold: int,
@@ -111,28 +151,33 @@ def _evaluate_fold(
     feature_names: tuple[str, ...],
     feature_samples: list[FeatureSample],
     cnn_samples: list[CompactCnnSample],
-    random_forest_baseline: FeatureBaseline | None,
-    dense_runner: object | None,
+    rf_baseline: FeatureBaseline | None,
+    dense_runner: DenseBaselineRunnerSeam | None,
     compact_adapter: CompactCnnTrainingAdapter | None,
     resnet_runner: ResNetBaselineRunner | None,
 ) -> list[LearningPointRecord]:
     points: list[LearningPointRecord] = []
-    feature_subsets = generate_nested_subsets(feature_samples, outer_fold=fold, seed=45)
-    cnn_subsets = generate_nested_subsets(cnn_samples, outer_fold=fold, seed=45)
+    feat_subs = generate_nested_subsets(feature_samples, outer_fold=fold, seed=45)
+    cnn_subs = generate_nested_subsets(cnn_samples, outer_fold=fold, seed=45)
 
     for fraction in (0.50, 0.75, 1.00):
         if fraction == 1.00 and is_100_reusable:
-            mae, bias, n_eval = load_reused_fold_metrics(contract, config, fold)
-            n_train = len(feature_subsets[1.00])
-            points.append(LearningPointRecord(config, fold, fraction, n_train, "oof", n_eval, mae, bias, "reused"))
+            points.append(_reused_point(contract, config, fold, len(feat_subs[1.00])))
         else:
             rec = _evaluate_single_point(
-                config, fold, fraction, feature_names, feature_subsets[fraction],
-                feature_samples, cnn_subsets[fraction], cnn_samples,
-                random_forest_baseline, dense_runner, compact_adapter, resnet_runner,
+                config, fold, fraction, feature_names, feat_subs[fraction],
+                feature_samples, cnn_subs[fraction], cnn_samples,
+                rf_baseline, dense_runner, compact_adapter, resnet_runner,
             )
             points.append(rec)
     return points
+
+
+def _reused_point(
+    contract: ReportContract, config: str, fold: int, n_train: int,
+) -> LearningPointRecord:
+    mae, bias, n_eval = load_reused_fold_metrics(contract, config, fold)
+    return LearningPointRecord(config, fold, 1.00, n_train, "oof", n_eval, mae, bias, "reused")
 
 
 def _evaluate_single_point(
@@ -144,35 +189,46 @@ def _evaluate_single_point(
     all_feature_samples: list[FeatureSample],
     train_cnn_sub: list[CompactCnnSample],
     all_cnn_samples: list[CompactCnnSample],
-    random_forest_baseline: FeatureBaseline | None,
-    dense_runner: object | None,
+    rf_baseline: FeatureBaseline | None,
+    dense_runner: DenseBaselineRunnerSeam | None,
     compact_adapter: CompactCnnTrainingAdapter | None,
     resnet_runner: ResNetBaselineRunner | None,
 ) -> LearningPointRecord:
     held_feature = [s for s in all_feature_samples if s.fold == fold]
     held_cnn = [s for s in all_cnn_samples if s.fold == fold]
 
-    if config == "random_forest_baseline":
-        mae, bias = _fit_predict_rf(train_feature_sub, held_feature, feature_names, random_forest_baseline)
-    elif config == "dense_baseline":
-        mae, bias = _fit_predict_dense(train_feature_sub, held_feature, feature_names, dense_runner)
-    elif config == "compact_cnn_baseline":
-        mae, bias = _fit_predict_compact_cnn(train_cnn_sub, held_cnn, compact_adapter)
-    elif config == "resnet18_pretrained_partial":
-        mae, bias = _fit_predict_resnet(train_cnn_sub, held_cnn, resnet_runner)
-    else:
-        raise ValueError(f"unknown baseline configuration {config!r}")
+    mae, bias = _dispatch_fit_predict(
+        config, feature_names, train_feature_sub, held_feature,
+        train_cnn_sub, held_cnn, rf_baseline, dense_runner, compact_adapter, resnet_runner,
+    )
 
     return LearningPointRecord(
-        configuration=config,
-        fold=fold,
-        fraction=fraction,
-        n_train=len(train_feature_sub),
-        evaluated_population="oof",
-        n_eval=len(held_feature),
-        mae_kg=mae,
-        bias_kg=bias,
-        artifact_action="retrained",
+        config, fold, fraction, len(train_feature_sub), "oof", len(held_feature), mae, bias, "retrained",
+    )
+
+
+def _dispatch_fit_predict(
+    config: str,
+    feature_names: tuple[str, ...],
+    train_feat: list[FeatureSample],
+    held_feat: list[FeatureSample],
+    train_cnn: list[CompactCnnSample],
+    held_cnn: list[CompactCnnSample],
+    rf_baseline: FeatureBaseline | None,
+    dense_runner: DenseBaselineRunnerSeam | None,
+    compact_adapter: CompactCnnTrainingAdapter | None,
+    resnet_runner: ResNetBaselineRunner | None,
+) -> tuple[float, float]:
+    if config == "random_forest_baseline":
+        return _fit_predict_rf(train_feat, held_feat, feature_names, rf_baseline)
+    if config == "dense_baseline":
+        return _fit_predict_dense(train_feat, held_feat, feature_names, dense_runner)
+    if config == "compact_cnn_baseline":
+        return _fit_predict_compact_cnn(train_cnn, held_cnn, compact_adapter)
+    if config == "resnet18_pretrained_partial":
+        return _fit_predict_resnet(train_cnn, held_cnn, resnet_runner)
+    raise ValueError(
+        f"unknown baseline configuration {config!r}; expected one of {LEARNING_CURVE_CONFIGURATIONS!r}"
     )
 
 
@@ -188,23 +244,23 @@ def _fit_predict_rf(
     held_p = PredictionPartition(_feature_matrix(held_out_samples, feature_names), tuple(s.file_name for s in held_out_samples))
     preds = predictor.predict(held_p)
     obs = np.asarray([s.weight_kg for s in held_out_samples], dtype=np.float64)
-    diff = preds - obs
-    return float(np.mean(np.abs(diff))), float(np.mean(diff))
+    return _calculate_mae_and_bias(preds, obs)
 
 
 def _fit_predict_dense(
     train_samples: list[FeatureSample],
     held_out_samples: list[FeatureSample],
     feature_names: tuple[str, ...],
-    runner: object | None,
+    runner: DenseBaselineRunnerSeam | None,
 ) -> tuple[float, float]:
-    if runner is not None and hasattr(runner, "evaluate"):
-        # Seam runner passed for testing
-        eval_res = runner.evaluate([*train_samples, *held_out_samples], feature_names)  # type: ignore
+    if runner is not None:
+        eval_res = runner.evaluate([*train_samples, *held_out_samples], feature_names)
         held_ids = {s.file_name for s in held_out_samples}
-        preds = [p for p in eval_res.predictions if p.file_name in held_ids]
-        diffs = np.asarray([p.predicted_weight_kg - p.observed_weight_kg for p in preds], dtype=np.float64)
-        return float(np.mean(np.abs(diffs))), float(np.mean(diffs))
+        predictions = getattr(eval_res, "predictions", ())
+        preds_list = [p for p in predictions if getattr(p, "file_name", None) in held_ids]
+        preds = np.asarray([getattr(p, "predicted_weight_kg") for p in preds_list], dtype=np.float64)
+        obs = np.asarray([getattr(p, "observed_weight_kg") for p in preds_list], dtype=np.float64)
+        return _calculate_mae_and_bias(preds, obs)
 
     dense_model = DenseFeatureBaseline()
     train_p = _to_training_partition(train_samples, feature_names)
@@ -212,8 +268,7 @@ def _fit_predict_dense(
     held_p = PredictionPartition(_feature_matrix(held_out_samples, feature_names), tuple(s.file_name for s in held_out_samples))
     preds = predictor.predict(held_p)
     obs = np.asarray([s.weight_kg for s in held_out_samples], dtype=np.float64)
-    diff = preds - obs
-    return float(np.mean(np.abs(diff))), float(np.mean(diff))
+    return _calculate_mae_and_bias(preds, obs)
 
 
 def _fit_predict_compact_cnn(
@@ -222,7 +277,9 @@ def _fit_predict_compact_cnn(
     adapter: CompactCnnTrainingAdapter | None,
 ) -> tuple[float, float]:
     if adapter is None:
-        raise ValueError("compact_cnn_adapter was unavailable; GPU training requires adapter")
+        raise ValueError(
+            f"compact_cnn_adapter was unavailable (received {adapter!r}); GPU training requires adapter"
+        )
 
     recipe = COMPACT_CNN_RECIPE
     sel, stop = _inner_split(train_samples, recipe.inner_seed)
@@ -236,8 +293,7 @@ def _fit_predict_compact_cnn(
     held_b = _to_mask_batch(held_out_samples)
     preds = predictor.predict_kg(held_b)
     obs = np.asarray([s.weight_kg for s in held_out_samples], dtype=np.float64)
-    diff = preds - obs
-    return float(np.mean(np.abs(diff))), float(np.mean(diff))
+    return _calculate_mae_and_bias(preds, obs)
 
 
 def _fit_predict_resnet(
@@ -245,20 +301,23 @@ def _fit_predict_resnet(
     held_out_samples: list[CompactCnnSample],
     runner: ResNetBaselineRunner | None,
 ) -> tuple[float, float]:
-    if runner is not None:
-        resnet_train = tuple(ResNetSample(s.file_name, s.mask_path, s.weight_category, s.fold, s.weight_kg) for s in train_samples)
-        resnet_held = tuple(ResNetSample(s.file_name, s.mask_path, s.weight_category, s.fold, s.weight_kg) for s in held_out_samples)
-        all_resnet = resnet_train + resnet_held
-        predictions = runner.evaluate(all_resnet)
-        held_ids = {s.file_name for s in held_out_samples}
-        held_preds = [p for p in predictions if p.file_name in held_ids]
-        diffs = np.asarray([p.prediction_kg - p.weight_kg for p in held_preds], dtype=np.float64)
-        return float(np.mean(np.abs(diffs))), float(np.mean(diffs))
+    if runner is None:
+        raise ValueError(
+            f"resnet_runner was unavailable (received {runner!r}); GPU training requires runner"
+        )
 
-    # Fallback placeholder if runner is omitted
-    obs = np.asarray([s.weight_kg for s in held_out_samples], dtype=np.float64)
-    mean_val = float(np.mean([s.weight_kg for s in train_samples]))
-    diff = mean_val - obs
+    resnet_train = tuple(ResNetSample(s.file_name, s.mask_path, s.weight_category, s.fold, s.weight_kg) for s in train_samples)
+    resnet_held = tuple(ResNetSample(s.file_name, s.mask_path, s.weight_category, s.fold, s.weight_kg) for s in held_out_samples)
+    predictions = runner.evaluate(resnet_train + resnet_held)
+    held_ids = {s.file_name for s in held_out_samples}
+    held_preds = [p for p in predictions if p.file_name in held_ids]
+    preds = np.asarray([p.prediction_kg for p in held_preds], dtype=np.float64)
+    obs = np.asarray([p.weight_kg for p in held_preds], dtype=np.float64)
+    return _calculate_mae_and_bias(preds, obs)
+
+
+def _calculate_mae_and_bias(predicted: NDArray[np.float64], observed: NDArray[np.float64]) -> tuple[float, float]:
+    diff = predicted - observed
     return float(np.mean(np.abs(diff))), float(np.mean(diff))
 
 
@@ -293,27 +352,27 @@ def _to_mask_batch(samples: list[CompactCnnSample]) -> MaskBatch:
 def _build_summary_records(points: tuple[LearningPointRecord, ...]) -> tuple[LearningCurveSummaryRecord, ...]:
     summaries: list[LearningCurveSummaryRecord] = []
     configs = sorted({p.configuration for p in points})
-    fractions = (0.50, 0.75, 1.00)
 
     for config in configs:
-        for frac in fractions:
-            group = [p for p in points if p.configuration == config and p.fraction == frac]
-            if not group:
-                continue
-            maes = np.asarray([p.mae_kg for p in group], dtype=np.float64)
-            biases = np.asarray([p.bias_kg for p in group], dtype=np.float64)
-            ntrains = np.asarray([p.n_train for p in group], dtype=np.float64)
-            reused_cnt = sum(1 for p in group if p.artifact_action == "reused")
-
-            summaries.append(
-                LearningCurveSummaryRecord(
-                    configuration=config,
-                    fraction=frac,
-                    mean_n_train=float(np.mean(ntrains)),
-                    mean_mae_kg=float(np.mean(maes)),
-                    std_mae_kg=float(np.std(maes)),
-                    mean_bias_kg=float(np.mean(biases)),
-                    reused_points_count=reused_cnt,
-                )
-            )
+        for frac in (0.50, 0.75, 1.00):
+            group = [p for p in points if p.configuration == config and abs(p.fraction - frac) < 1e-4]
+            if group:
+                summaries.append(_summarize_point_group(config, frac, group))
     return tuple(summaries)
+
+
+def _summarize_point_group(config: str, frac: float, group: list[LearningPointRecord]) -> LearningCurveSummaryRecord:
+    maes = np.asarray([p.mae_kg for p in group], dtype=np.float64)
+    biases = np.asarray([p.bias_kg for p in group], dtype=np.float64)
+    ntrains = np.asarray([p.n_train for p in group], dtype=np.float64)
+    reused_cnt = sum(1 for p in group if p.artifact_action == "reused")
+
+    return LearningCurveSummaryRecord(
+        configuration=config,
+        fraction=frac,
+        mean_n_train=float(np.mean(ntrains)),
+        mean_mae_kg=float(np.mean(maes)),
+        std_mae_kg=float(np.std(maes)),
+        mean_bias_kg=float(np.mean(biases)),
+        reused_points_count=reused_cnt,
+    )

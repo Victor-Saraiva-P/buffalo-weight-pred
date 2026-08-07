@@ -50,39 +50,52 @@ def plot_canonical_learning_curves(
     frac_percents = [50, 75, 100]
 
     for config, label in CONFIGURATION_LABELS.items():
-        config_points = [p for p in points if p.configuration == config]
-        if not config_points:
-            continue
+        _plot_single_configuration(axis, points, config, label, fractions, frac_percents)
 
-        mean_maes: list[float] = []
-        for frac in fractions:
-            frac_pts = [p for p in config_points if abs(p.fraction - frac) < 1e-4]
-            if frac_pts:
-                mean_maes.append(float(np.mean([p.mae_kg for p in frac_pts])))
-            else:
-                mean_maes.append(0.0)
-
-        color = CONFIGURATION_COLORS.get(config, "#333333")
-        marker = CONFIGURATION_MARKERS.get(config, "o")
-
-        axis.plot(
-            frac_percents,
-            mean_maes,
-            marker=marker,
-            linewidth=2.0,
-            markersize=7,
-            label=label,
-            color=color,
-        )
-
-    axis.set_xlabel("Fração da Partição de Treino Externo (%)")
-    axis.set_ylabel("MAE OOF (kg)")
-    axis.set_title("Curvas de Aprendizado Controladas dos Baselines")
-    axis.set_xticks(frac_percents)
-    axis.set_xticklabels(["50%", "75%", "100%"])
-    axis.grid(True, linestyle="--", alpha=0.5)
-    axis.legend(loc="upper right")
-
+    _format_learning_curves_axis(axis, frac_percents)
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)
+
+
+def _plot_single_configuration(
+    axis: object,
+    points: tuple[LearningPointRecord, ...],
+    config: str,
+    label: str,
+    fractions: tuple[float, ...],
+    frac_percents: list[int],
+) -> None:
+    config_points = [p for p in points if p.configuration == config]
+    if not config_points:
+        return
+
+    mean_maes = _calculate_mean_maes(config_points, fractions)
+    color = CONFIGURATION_COLORS.get(config, "#333333")
+    marker = CONFIGURATION_MARKERS.get(config, "o")
+
+    axis.plot(  # type: ignore
+        frac_percents, mean_maes, marker=marker, linewidth=2.0,
+        markersize=7, label=label, color=color,
+    )
+
+
+def _calculate_mean_maes(
+    config_points: list[LearningPointRecord], fractions: tuple[float, ...]
+) -> list[float]:
+    mean_maes: list[float] = []
+    for frac in fractions:
+        frac_pts = [p for p in config_points if abs(p.fraction - frac) < 1e-4]
+        mae_val = float(np.mean([p.mae_kg for p in frac_pts])) if frac_pts else 0.0
+        mean_maes.append(mae_val)
+    return mean_maes
+
+
+def _format_learning_curves_axis(axis: object, frac_percents: list[int]) -> None:
+    axis.set_xlabel("Fração da Partição de Treino Externo (%)")  # type: ignore
+    axis.set_ylabel("MAE OOF (kg)")  # type: ignore
+    axis.set_title("Curvas de Aprendizado Controladas dos Baselines")  # type: ignore
+    axis.set_xticks(frac_percents)  # type: ignore
+    axis.set_xticklabels(["50%", "75%", "100%"])  # type: ignore
+    axis.grid(True, linestyle="--", alpha=0.5)  # type: ignore
+    axis.legend(loc="upper right")  # type: ignore

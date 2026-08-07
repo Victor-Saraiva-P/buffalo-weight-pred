@@ -25,6 +25,16 @@ class DiagnosticLearningFreshnessTest(unittest.TestCase):
             reusable = check_baseline_100_reusability(contract, "random_forest_baseline")
             self.assertFalse(reusable)
 
+    def test_reusability_returns_false_for_unknown_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contract = ReportContract(
+                inputs=_dummy_inputs_contract(),
+                artifacts_root=root,
+            )
+            reusable = check_baseline_100_reusability(contract, "unknown_config")
+            self.assertFalse(reusable)
+
     def test_load_reused_fold_metrics_from_predictions_csv(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -60,7 +70,7 @@ class DiagnosticLearningFreshnessTest(unittest.TestCase):
 
             mae, bias, n_eval = load_reused_fold_metrics(contract, "random_forest_baseline", fold=1)
             self.assertAlmostEqual(mae, 7.5)
-            self.assertAlmostEqual(bias, -2.5)  # (5 + (-10)) / 2 = -2.5
+            self.assertAlmostEqual(bias, -2.5)
             self.assertEqual(n_eval, 2)
 
 

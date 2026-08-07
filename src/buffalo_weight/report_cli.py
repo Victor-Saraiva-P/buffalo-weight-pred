@@ -318,6 +318,8 @@ def _run_diagnostic_learning_command(
         contract, arguments.dry_run, dependencies.snapshot_publisher,
         dependencies.random_forest_baseline, dense_runner,
         dependencies.compact_cnn_adapter, dependencies.resnet_baseline_runner,
+        dependencies.baseline_provenance, dependencies.compact_cnn_provenance,
+        dependencies.resnet_baseline_provenance,
     )
     print(f"diagnostics_learning: {status}", file=stdout)
     return 0

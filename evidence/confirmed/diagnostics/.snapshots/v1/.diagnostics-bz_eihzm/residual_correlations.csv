@@ -1,0 +1,11 @@
+configuration_1,configuration_2,evaluation_role_1,evaluation_role_2,pearson_r
+random_forest_baseline,random_forest_baseline,baseline,baseline,1.000000
+random_forest_baseline,dense,baseline,baseline,0.787638
+random_forest_baseline,compact_cnn,baseline,baseline,0.786444
+random_forest_baseline,resnet18_pretrained_partial,baseline,baseline,0.489993
+dense,dense,baseline,baseline,1.000000
+dense,compact_cnn,baseline,baseline,0.670436
+dense,resnet18_pretrained_partial,baseline,baseline,0.449276
+compact_cnn,compact_cnn,baseline,baseline,1.000000
+compact_cnn,resnet18_pretrained_partial,baseline,baseline,0.557719
+resnet18_pretrained_partial,resnet18_pretrained_partial,baseline,baseline,1.000000

@@ -1,0 +1,69 @@
+{
+  "canonical_tables": {
+    "learning_curves_summary.csv": {
+      "row_count": 12,
+      "sha256": "80b93cb4090f19e2baa7d8a8be86e06753b78406f9706d5a7e49d5c8ba43cfdb"
+    },
+    "notable_cases.csv": {
+      "row_count": 19,
+      "sha256": "11ea886096f2829d0f6848c3148d2a719e83c6f492ccc2dd5b3cd0590bfbc2b6"
+    },
+    "residual_correlations.csv": {
+      "row_count": 10,
+      "sha256": "01821d0cc256fdae3cafab77212752452d331cd782e8f8bc3df2ba5e4d8e6af2"
+    },
+    "sample_coverage.csv": {
+      "row_count": 15,
+      "sha256": "0d45d2dee576926fe5881b1683c5c38a06028a38353bdfd07c3005d44412bb0d"
+    },
+    "sensitivity_perturbations.csv": {
+      "row_count": 1056,
+      "sha256": "269a9bc6dee97f856511fdfbce2db58746e51eb52fc9f759a873dad9a4273aa1"
+    },
+    "stratified_metrics.csv": {
+      "row_count": 56,
+      "sha256": "6c0a9493ff29eedae56e627c1baa02e5454e3da52740e5d203e99a771855dbc9"
+    }
+  },
+  "contract_identity": {
+    "canonical_long_side": 1024,
+    "expected_mask_count": 132,
+    "fold_count": 5,
+    "fold_seed": 42,
+    "mask_index_path": "data/mask_index.csv",
+    "masks_dir": "data/conjunto-de-mascaras",
+    "weight_category_count": 10
+  },
+  "execution": "cuda_official",
+  "human_decision": {
+    "decision_url": "https://github.com/Victor-Saraiva-P/buffalo-weight-pred/issues/27",
+    "reviewed_at": "2026-08-07",
+    "reviewer": "Victor Alexandre Saraiva Pimentel"
+  },
+  "outputs": {
+    "descriptive_diagnostics_report.md": "17e0beddc2ef678a6d30a9aa95a0f0af4366ccff75a658d3746e6a3b235d8544",
+    "diagnostics_contract.json": "81a959a03535b2e6522e6bbf7383f5ba325f208236fb875a88c8bdac0f98f206",
+    "expanded_diagnostics_report.md": "79d6e383a274df266e007120064a3c426050c8f440ee418082c7ad86467ef58a",
+    "farm_comparison.csv": "9a4f7070904ee3aae4df7cf6db28705bca666f5ae4bf1ac2826d153986e4768a",
+    "learning_curves_canonical.png": "fef8db2cff31347cd05a34a842576f81d6bd81ec2787c5840b2c5265c040bec4",
+    "learning_curves_points.csv": "6dd2e6dec07147de84398ef0fe089b53d254758279ab2cc6bae2f271f9cd2b3a",
+    "learning_curves_report.md": "a9178bf46d353a473c53bdfe01c6177a8a46bd2f343e2607be5856c6b5116ba1",
+    "learning_curves_summary.csv": "80b93cb4090f19e2baa7d8a8be86e06753b78406f9706d5a7e49d5c8ba43cfdb",
+    "morphology_demo.png": "1f92f4d65448e41cd1cf1c883cc640a3ce2552742e638931627a369c8d369860",
+    "morphology_eligibility.csv": "6a222a5f16b25f5ac0254e73eba94cecd5c18766b9c4c5418f43ce8d9a15b727",
+    "notable_cases.csv": "11ea886096f2829d0f6848c3148d2a719e83c6f492ccc2dd5b3cd0590bfbc2b6",
+    "residual_correlations.csv": "01821d0cc256fdae3cafab77212752452d331cd782e8f8bc3df2ba5e4d8e6af2",
+    "sample_coverage.csv": "0d45d2dee576926fe5881b1683c5c38a06028a38353bdfd07c3005d44412bb0d",
+    "sensitivity_perturbations.csv": "269a9bc6dee97f856511fdfbce2db58746e51eb52fc9f759a873dad9a4273aa1",
+    "sensitivity_report.md": "e719542cbb9cc8dd2afd0fc73ac90df25e3abd3548ee5bdd97b81cd9db1200cd",
+    "source_descriptive_manifest.json": "b468a5a2d7451f425128700ff7adad61c362ed3b6146a7725c2da13725551cd3",
+    "source_learning_manifest.json": "e7de2c3c51d1eae0d41ec8d57cc505c8e4468627db08fd9c6818ce5c012dde93",
+    "source_sensitivity_manifest.json": "1fc6a083c8c16412bba82229915e66de1290f741fa3aa3451724bc06aae4ac10",
+    "stratified_metrics.csv": "6c0a9493ff29eedae56e627c1baa02e5454e3da52740e5d203e99a771855dbc9"
+  },
+  "report_sha256": "79d6e383a274df266e007120064a3c426050c8f440ee418082c7ad86467ef58a",
+  "repository_commit": "33bdceddf6526fe4bd3f1d560ca47de2d3c2775c",
+  "schema_version": 1,
+  "stage": "confirmed_diagnostics",
+  "status": "confirmed"
+}

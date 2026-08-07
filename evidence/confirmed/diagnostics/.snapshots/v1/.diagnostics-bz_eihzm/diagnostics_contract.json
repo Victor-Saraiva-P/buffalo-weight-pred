@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "confirmed",
+  "diagnostic_scope": "expanded",
+  "source_report_sha256": "79d6e383a274df266e007120064a3c426050c8f440ee418082c7ad86467ef58a",
+  "no_decision_reopening": true,
+  "human_decision": {
+    "decision_url": "https://github.com/Victor-Saraiva-P/buffalo-weight-pred/issues/27",
+    "reviewer": "Victor Alexandre Saraiva Pimentel",
+    "reviewed_at": "2026-08-07"
+  }
+}

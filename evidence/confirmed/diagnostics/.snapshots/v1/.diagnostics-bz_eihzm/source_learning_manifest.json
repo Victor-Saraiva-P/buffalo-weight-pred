@@ -1,0 +1,12 @@
+{
+  "configurations": [
+    "compact_cnn_baseline",
+    "dense_baseline",
+    "random_forest_baseline",
+    "resnet18_pretrained_partial"
+  ],
+  "point_count": 60,
+  "stage": "diagnostics_learning",
+  "status": "complete",
+  "summary_count": 12
+}

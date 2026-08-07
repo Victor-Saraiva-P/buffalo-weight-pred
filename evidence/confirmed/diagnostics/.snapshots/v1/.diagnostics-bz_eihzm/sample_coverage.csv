@@ -1,0 +1,16 @@
+stratum_type,stratum_value,sample_count
+weight_category,B1,14
+weight_category,B10,13
+weight_category,B2,13
+weight_category,B3,13
+weight_category,B4,13
+weight_category,B5,13
+weight_category,B6,14
+weight_category,B7,13
+weight_category,B8,13
+weight_category,B9,13
+farm,Faco,87
+farm,Manezinho,45
+resolution,1600x1200,3
+resolution,1600x900,18
+resolution,4032x3024,111

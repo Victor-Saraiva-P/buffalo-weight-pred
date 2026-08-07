@@ -1,0 +1,11 @@
+{
+  "configurations": [
+    "random_forest"
+  ],
+  "eligible_mask_count": 96,
+  "rejected_mask_count": 36,
+  "stage": "diagnostics_sensitivity",
+  "status": "complete",
+  "total_mask_count": 132,
+  "total_perturbation_records": 1056
+}

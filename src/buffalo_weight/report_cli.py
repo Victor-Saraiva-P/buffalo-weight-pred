@@ -23,6 +23,7 @@ from buffalo_weight.dense_baseline_stage import (
     DenseBaselineDependencies,
     run_dense_baseline_stage,
 )
+from buffalo_weight.approach_confirmation import confirm_approach_selection
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.feature_confirmation import (
@@ -131,6 +132,11 @@ def _dispatch_report_command(
             arguments, contract, dependencies.feature_confirmation_environment,
             dependencies.feature_selection_provenance, stdout,
         )
+    if arguments.command == "confirm-approach":
+        return _run_approach_confirmation_command(
+            arguments, contract, dependencies.feature_confirmation_environment,
+            dependencies.baseline_comparison_provenance, stdout,
+        )
     if arguments.command == "baselines":
         return _run_baselines_command(arguments, dependencies, contract, stdout)
     if arguments.command == "compare-baselines":
@@ -195,6 +201,19 @@ def _run_confirmation_command(
         environment, provenance,
     )
     print(f"feature_confirmation: {status}", file=stdout)
+    return 0
+
+
+def _run_approach_confirmation_command(
+    arguments: argparse.Namespace, contract: ReportContract,
+    environment: FeatureConfirmationEnvironment | None,
+    provenance: BaselineComparisonProvenance | None, stdout: TextIO,
+) -> int:
+    status = confirm_approach_selection(
+        contract, Path(arguments.contract), Path(arguments.report), arguments.dry_run,
+        environment, provenance,
+    )
+    print(f"approach_confirmation: {status}", file=stdout)
     return 0
 
 
@@ -299,6 +318,13 @@ def _add_confirmation_parsers(
     confirmation.add_argument("--contract", required=True)
     confirmation.add_argument("--report", required=True)
     confirmation.add_argument("--dry-run", action="store_true")
+    approach_confirmation = subcommands.add_parser(
+        "confirm-approach", help="promote a reviewed approach decision"
+    )
+    approach_confirmation.add_argument("--config", default="configs/report.yaml")
+    approach_confirmation.add_argument("--contract", required=True)
+    approach_confirmation.add_argument("--report", required=True)
+    approach_confirmation.add_argument("--dry-run", action="store_true")
     baselines = subcommands.add_parser(
         "baselines", help="evaluate frozen baselines after the shared-feature gate"
     )

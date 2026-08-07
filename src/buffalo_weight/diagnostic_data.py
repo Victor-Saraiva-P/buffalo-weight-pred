@@ -17,7 +17,7 @@ from sklearn.neighbors import NearestNeighbors
 from buffalo_weight.canonical_mask import load_canonical_masks
 from buffalo_weight.cnn_mask import find_mask_path, load_masks
 from buffalo_weight.split import assign_folds, assign_weight_categories
-from buffalo_weight.train import format_metric
+from buffalo_weight.csv_io import format_metric
 
 
 QUALITY_FIELDS = [

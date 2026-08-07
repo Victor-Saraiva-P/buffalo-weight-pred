@@ -1,102 +1,114 @@
 # buffalo-weight-pred
 
-Base Python para treinamento de modelo de predição de peso de búfalos a partir de máscaras binarizadas.
+Núcleo Reprodutível do Relatório PIBIC para estimativa do peso vivo de búfalos a partir de máscaras binarizadas.
 
-## Dados
+## Objetivo
 
-`data/` contém dois itens esperados:
+Fornecer uma superfície pública limpa, determinística e auditável para treinamento, avaliação e reprodução integral do pipeline de predição de peso de búfalos a partir de feições geométricas extraídas de máscaras binárias.
 
-- `indice.xlsx`: índice de máscaras com nome do arquivo, fazenda, peso e tag de uso.
-- `conjunto-de-mascaras/`: máscaras binarizadas usadas no treinamento.
+## Limitações do Estudo
 
-## Máscaras Binarizadas
+- Os resultados numéricos de desempenho preditivo reportados constituem métricas de **MAE OOF Pós-Seleção** (out-of-fold cross-validation) obtidas na amostra curada de 132 máscaras válidas.
+- Os resultados representam evidência de desenvolvimento e seleção metodológica, **não reivindicam validação independente em animais novos** ou provenientes de outras fazendas.
 
-O treinamento usa máscaras geradas pelo modelo de segmentação `birefnet-general` com método de binarização `LimiarFixoBaixa`.
+## Requisitos de Ambiente (Python / CUDA)
 
-Somente máscaras presentes no `indice.xlsx` devem ser usadas no treinamento.
+- **Python**: 3.11+.
+- **CUDA**: Ambiente com suporte a GPU/CUDA para execução das etapas neurais (Rede Densa por Feições, CNN compacta e ResNet-18) via PyTorch.
 
-A qualidade da segmentação e da binarização é documentada em
-[`docs/mask-segmentation-reference.md`](docs/mask-segmentation-reference.md),
-com base no relatório upstream
-`Relatório PIBIC_ PROCESSAMENTO DE IMAGEM PARA ESTIMATIVA DO PESO DE BÚFALO .pdf`.
+## Instalação e Setup
 
-## Configuração
-
-`configs/report.yaml` define a configuração do relatório e o diretório de artefatos da reprodução oficial.
-
-## Arquivos Gerados
-
-`generated/` contém artefatos derivados de `data/`, como o Índice de Features e a Divisão Estratificada.
-
-Esses arquivos podem ser recriados a partir de `data/` e das configurações em `configs/`.
-
-## Comandos
-
-O Núcleo Reprodutível do Relatório usa a interface pública `python main.py`.
-Depois de preparar o ambiente oficial, o estágio de entradas deve preceder a
-Seleção Manual de Features:
-
-```bash
-PYTHON=.venv/bin/python make setup
-PYTHON=.venv/bin/python make inputs
-PYTHON=.venv/bin/python make feature-selection
-```
-
-`feature-selection` executa o Random Forest congelado em CPU e a Rede Densa por
-Feições em CUDA sobre a Divisão Estratificada Canônica. O resultado provisório
-fica em `generated/report/feature_selection/`, com as duas tabelas tidy, três
-figuras a 300 DPI, a minuta auditável e um contrato que permanece sem
-`selected_features` ou decisão humana. Use
-`python main.py feature-selection --dry-run --config configs/report.yaml` para
-consultar `blocked`, `absent`, `obsolete` ou `reusable` sem gravar arquivos.
-
-Depois da revisão científica, crie manualmente o contrato descrito em
-[`docs/schemas/feature-selection.md`](docs/schemas/feature-selection.md) e uma
-versão revisada da minuta. Ambos devem estar versionados em um worktree limpo.
-Confira o portão sem gravar e então promova o pacote confirmed:
-
-```bash
-python main.py confirm-features --dry-run --config configs/report.yaml \
-  --contract caminho/contrato.json --report caminho/relatorio-revisado.md
-python main.py confirm-features --config configs/report.yaml \
-  --contract caminho/contrato.json --report caminho/relatorio-revisado.md
-python main.py baselines --dry-run --config configs/report.yaml
-```
-
-O snapshot confirmado é escrito em
-`evidence/confirmed/feature_selection/v1/`. O comando `baselines` permanece
-bloqueado antes de treino enquanto esse pacote estiver ausente, provisório,
-adulterado ou incompatível com as entradas atuais.
-
-Depois que as quatro Configurações Baseline e a referência estiverem atuais,
-gere a comparação controlada sem iniciar novo treino:
-
-```bash
-python main.py compare-baselines --dry-run --config configs/report.yaml
-PYTHON=.venv/bin/python make compare-baselines
-```
-
-O comando recusa configurações ausentes, obsoletas ou incompatíveis. O pacote
-provisório fica em `generated/report/approach_selection/` com
-`baseline_metrics.csv`, três figuras canônicas, a minuta de seleção, o modelo de
-contrato ainda sem decisão humana e um manifesto escrito por último. O schema é
-documentado em [`docs/schemas/baselines.md`](docs/schemas/baselines.md).
-
-Criar ambiente e instalar dependências:
+Criar ambiente virtual e instalar dependências:
 
 ```bash
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Executar reprodução integral do relatório:
+Preparar e auditar o ambiente oficial:
 
 ```bash
+PYTHON=.venv/bin/python make setup
+# ou diretamente via CLI Python:
+.venv/bin/python main.py setup
+```
+
+## Entradas Curadas
+
+A pasta `data/` contém os dados de entrada oficiais do repositório:
+
+- `data/mask_index.csv` (ou `data/indice.xlsx`): índice curado com nome do arquivo, fazenda, peso contínuo (kg) e tag de uso para as 132 máscaras válidas.
+- `data/conjunto-de-mascaras/`: repositório das 132 máscaras binarizadas em formato PNG (geradas pelo modelo `birefnet-general` com método `LimiarFixoBaixa`).
+
+A documentação de proveniência e qualidade de segmentação está em [`docs/mask-segmentation-reference.md`](docs/mask-segmentation-reference.md).
+
+## Configuração e Artefatos Reconstruíveis
+
+- `configs/report.yaml`: arquivo de configuração canônico do relatório, especificando contagem de folds (5), sementes e diretório de saída.
+- `generated/report/`: diretório onde são gravados os artefatos intermediários e provisórios reconstruíveis.
+
+Para limpar artefatos reconstruíveis de um estágio específico:
+
+```bash
+.venv/bin/python main.py clean inputs --config configs/report.yaml
+# ou via Makefile:
+PYTHON=.venv/bin/python make report-clean STAGE=inputs
+```
+
+## Portões de Decisão Humana
+
+O pipeline exige revisão humana em pontos de transição metodológica antes de avançar para estágios dependentes. Os contratos e minutas revisados devem ser promovidos para snapshots confirmados versionados:
+
+- **Seleção de Atributos** (`confirm-features`): promove o snapshot em `evidence/confirmed/feature_selection/v1/`. Schema em [`docs/schemas/feature-selection.md`](docs/schemas/feature-selection.md).
+- **Escolha da Abordagem** (`confirm-approach`): promove o snapshot em `evidence/confirmed/approach_selection/v1/`. Schema em [`docs/schemas/baselines.md`](docs/schemas/baselines.md).
+- **Diagnósticos Expandidos** (`confirm-diagnostics`): promove o snapshot em `evidence/confirmed/diagnostics/v1/`.
+
+## Comandos Públicos da CLI
+
+Todos os comandos públicos aceitam `--dry-run` para inspecionar ações e estados sem gravar artefatos em disco.
+
+### 1. Entradas e Feições
+```bash
+.venv/bin/python main.py inputs --config configs/report.yaml
+.venv/bin/python main.py feature-selection --config configs/report.yaml
+.venv/bin/python main.py confirm-features --config configs/report.yaml --contract <caminho/contrato.json> --report <caminho/relatorio.md>
+```
+
+### 2. Baselines e Comparação de Abordagens
+```bash
+.venv/bin/python main.py baselines --config configs/report.yaml
+.venv/bin/python main.py compare-baselines --config configs/report.yaml
+.venv/bin/python main.py confirm-approach --config configs/report.yaml --contract <caminho/contrato.json> --report <caminho/relatorio.md>
+```
+
+### 3. Ajuste Fino e Diagnósticos Expandidos
+```bash
+.venv/bin/python main.py tuning --config configs/report.yaml
+.venv/bin/python main.py diagnostics-descriptive --config configs/report.yaml
+.venv/bin/python main.py diagnostics-learning --config configs/report.yaml
+.venv/bin/python main.py diagnostics-sensitivity --config configs/report.yaml
+.venv/bin/python main.py confirm-diagnostics --config configs/report.yaml --contract <caminho/contrato.json> --report <caminho/relatorio.md>
+```
+
+### 4. Reprodução Integral
+Orquestra o grafo completo de 11 nós entre estágios e portões:
+
+```bash
+.venv/bin/python main.py reproduce --config configs/report.yaml --dry-run
 PYTHON=.venv/bin/python make reproduce
 ```
 
-Rodar testes:
+## Suíte de Testes
+
+O comando `make test` é o único ponto de entrada para a suíte de testes do projeto:
 
 ```bash
 PYTHON=.venv/bin/python make test
 ```
+
+## Evidências Confirmadas do Núcleo Reprodutível
+
+Artefatos de evidência confirmados e imutáveis estão mantidos sob versionamento:
+
+- `evidence/confirmed/feature_selection/v1/`: pacote confirmado da seleção de 25 atributos.
+- `evidence/confirmed/approach_selection/v1/`: pacote confirmado da escolha da Random Forest.

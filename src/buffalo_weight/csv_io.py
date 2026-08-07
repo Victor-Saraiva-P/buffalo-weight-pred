@@ -12,6 +12,15 @@ def format_csv_number(value: float) -> str:
     return f"{value:.6f}"
 
 
+def format_metric(value: float) -> str:
+    """Format a metric value to a 4-decimal string representation.
+
+    Example: ``format_metric(12.34567)`` returns ``"12.3457"``.
+    """
+    return f"{value:.4f}"
+
+
+
 def format_optional_csv_number(value: float | None) -> str:
     """Format a nullable derived number.
 

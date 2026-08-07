@@ -11,7 +11,7 @@ from buffalo_weight.canonical_mask import load_canonical_masks
 from buffalo_weight.cnn_mask import load_masks
 from buffalo_weight.models import ModelParam
 from buffalo_weight.split import assign_folds, assign_weight_categories
-from buffalo_weight.train import format_metric
+from buffalo_weight.csv_io import format_metric
 
 
 LEARNING_FIELDS = [

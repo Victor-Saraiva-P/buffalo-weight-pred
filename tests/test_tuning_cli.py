@@ -32,10 +32,10 @@ APPROACH_CANDIDATES = (
 
 class TuningCliTest(unittest.TestCase):
     def test_cli_supports_all_four_approach_classes(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = prepared_comparison_fixture(Path(directory))
-            for approach, baseline_config in APPROACH_CANDIDATES:
-                with self.subTest(approach=approach):
+        for approach, baseline_config in APPROACH_CANDIDATES:
+            with self.subTest(approach=approach):
+                with tempfile.TemporaryDirectory() as directory:
+                    fixture = prepared_comparison_fixture(Path(directory))
                     _setup_confirmed_approach(fixture, approach, baseline_config, 2)
                     result, stdout, stderr = _run_tuning(fixture)
                     self.assertEqual(result, 0, stderr)
@@ -43,6 +43,7 @@ class TuningCliTest(unittest.TestCase):
                     out_dir = tuning_output_dir(load_report_contract(fixture.config_path))
                     self.assertTrue((out_dir / "manifest.json").is_file())
                     self.assertTrue((out_dir / "tuning_metrics.csv").is_file())
+
 
     def test_budget_zero_maintains_baseline_without_duplication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

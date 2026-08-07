@@ -53,6 +53,7 @@ from buffalo_weight.snapshot_io import SnapshotPublisher
 from buffalo_weight.system_setup import default_setup_services
 from buffalo_weight.tuning_provenance import TuningProvenance
 from buffalo_weight.tuning_stage import run_tuning_stage
+from buffalo_weight.diagnostic_descriptive_stage import run_diagnostic_descriptive_stage
 
 
 @dataclass(frozen=True)
@@ -147,6 +148,8 @@ def _dispatch_report_command(
         return _run_baseline_comparison_command(arguments, dependencies, contract, stdout)
     if arguments.command == "tuning":
         return _run_tuning_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "diagnostics-descriptive":
+        return _run_diagnostic_descriptive_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -290,6 +293,17 @@ def _run_tuning_command(
     return 0
 
 
+def _run_diagnostic_descriptive_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    status = run_diagnostic_descriptive_stage(
+        contract, arguments.dry_run, dependencies.snapshot_publisher,
+    )
+    print(f"diagnostics_descriptive: {status}", file=stdout)
+    return 0
+
+
 def _comparison_upstream_dependencies(
     dependencies: _CliDependencies,
 ) -> BaselineComparisonUpstreamDependencies:
@@ -333,6 +347,11 @@ def _add_reconstructible_stage_parsers(
     )
     tuning_parser.add_argument("--config", default="configs/report.yaml")
     tuning_parser.add_argument("--dry-run", action="store_true")
+    diag_descriptive_parser = subcommands.add_parser(
+        "diagnostics-descriptive", help="characterize sample coverage and error patterns"
+    )
+    diag_descriptive_parser.add_argument("--config", default="configs/report.yaml")
+    diag_descriptive_parser.add_argument("--dry-run", action="store_true")
 
 
 def _add_confirmation_parsers(

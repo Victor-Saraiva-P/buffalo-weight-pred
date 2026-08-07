@@ -43,6 +43,10 @@ from buffalo_weight.feature_selection_stage import (
 )
 from buffalo_weight.report_inputs import clean_reconstructible_stage, run_inputs_stage
 from buffalo_weight.report_provenance import ReportProvenance
+from buffalo_weight.report_reproduction import (
+    ReproductionDependencies,
+    run_report_reproduction,
+)
 from buffalo_weight.reproduction_config import ReportContract, load_report_contract
 from buffalo_weight.resnet_baseline_provenance import ResNetBaselineProvenance
 from buffalo_weight.resnet_baseline_stage import (
@@ -162,6 +166,8 @@ def _dispatch_report_command(
         return _run_diagnostic_learning_command(arguments, dependencies, contract, stdout)
     if arguments.command == "diagnostics-sensitivity":
         return _run_diagnostic_sensitivity_command(arguments, dependencies, contract, stdout)
+    if arguments.command == "reproduce":
+        return _run_reproduce_command(arguments, dependencies, contract, stdout)
     removed = clean_reconstructible_stage(contract, arguments.stage)
     print(f"cleaned: {', '.join(removed) if removed else 'nothing'}", file=stdout)
     return 0
@@ -359,6 +365,31 @@ def _run_diagnostic_sensitivity_command(
     return 0
 
 
+def _run_reproduce_command(
+    arguments: argparse.Namespace, dependencies: _CliDependencies,
+    contract: ReportContract, stdout: TextIO,
+) -> int:
+    repro_deps = ReproductionDependencies(
+        snapshot_publisher=dependencies.snapshot_publisher,
+        report_provenance=dependencies.report_provenance,
+        feature_evidence_runner=dependencies.feature_evidence_runner,
+        feature_selection_provenance=dependencies.feature_selection_provenance,
+        feature_confirmation_environment=dependencies.feature_confirmation_environment,
+        random_forest_baseline=dependencies.random_forest_baseline,
+        baseline_provenance=dependencies.baseline_provenance,
+        dense_baseline_dependencies=dependencies.dense_baseline_dependencies,
+        compact_cnn_adapter=dependencies.compact_cnn_adapter,
+        compact_cnn_provenance=dependencies.compact_cnn_provenance,
+        resnet_baseline_runner=dependencies.resnet_baseline_runner,
+        resnet_baseline_provenance=dependencies.resnet_baseline_provenance,
+        baseline_comparison_provenance=dependencies.baseline_comparison_provenance,
+        tuning_provenance=dependencies.tuning_provenance,
+    )
+    return run_report_reproduction(
+        contract, arguments.dry_run, repro_deps, stdout,
+    )
+
+
 def _comparison_upstream_dependencies(
     dependencies: _CliDependencies,
 ) -> BaselineComparisonUpstreamDependencies:
@@ -384,6 +415,11 @@ def _build_parser() -> argparse.ArgumentParser:
 def _add_reconstructible_stage_parsers(
     subcommands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    reproduce = subcommands.add_parser(
+        "reproduce", help="orchestrate integral reproduction of the report"
+    )
+    reproduce.add_argument("--config", default="configs/report.yaml")
+    reproduce.add_argument("--dry-run", action="store_true")
     inputs = subcommands.add_parser("inputs", help="validate masks and build features and folds")
     inputs.add_argument("--config", default="configs/report.yaml")
     inputs.add_argument("--dry-run", action="store_true")

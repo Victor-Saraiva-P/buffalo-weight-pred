@@ -60,6 +60,7 @@ class DenseBaselineDependencies:
     runner: DenseBaselineRunner | None = None
     provenance: DenseBaselineProvenance | None = None
     runtime_probe: RuntimeProbe | None = None
+    adapter: DenseTrainingAdapter | None = None
 
 
 def run_dense_baseline_stage(

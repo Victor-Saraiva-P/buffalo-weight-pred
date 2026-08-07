@@ -24,6 +24,7 @@ from buffalo_weight.dense_baseline_stage import (
     run_dense_baseline_stage,
 )
 from buffalo_weight.approach_confirmation import confirm_approach_selection
+from buffalo_weight.diagnostic_confirmation import confirm_diagnostics
 from buffalo_weight.environment_contract import SetupServices
 from buffalo_weight.environment_setup import setup_official_environment
 from buffalo_weight.feature_confirmation import (
@@ -144,6 +145,11 @@ def _dispatch_report_command(
             arguments, contract, dependencies.feature_confirmation_environment,
             dependencies.baseline_comparison_provenance, stdout,
         )
+    if arguments.command == "confirm-diagnostics":
+        return _run_diagnostic_confirmation_command(
+            arguments, contract, dependencies.feature_confirmation_environment,
+            dependencies.report_provenance, stdout,
+        )
     if arguments.command == "baselines":
         return _run_baselines_command(arguments, dependencies, contract, stdout)
     if arguments.command == "compare-baselines":
@@ -229,6 +235,19 @@ def _run_approach_confirmation_command(
         environment, provenance,
     )
     print(f"approach_confirmation: {status}", file=stdout)
+    return 0
+
+
+def _run_diagnostic_confirmation_command(
+    arguments: argparse.Namespace, contract: ReportContract,
+    environment: FeatureConfirmationEnvironment | None,
+    provenance: ReportProvenance | None, stdout: TextIO,
+) -> int:
+    status = confirm_diagnostics(
+        contract, Path(arguments.contract), Path(arguments.report), arguments.dry_run,
+        environment, provenance,
+    )
+    print(f"diagnostic_confirmation: {status}", file=stdout)
     return 0
 
 
@@ -417,6 +436,14 @@ def _add_confirmation_parsers(
     approach_confirmation.add_argument("--contract", required=True)
     approach_confirmation.add_argument("--report", required=True)
     approach_confirmation.add_argument("--dry-run", action="store_true")
+    diag_confirmation = subcommands.add_parser(
+        "confirm-diagnostics", help="promote a reviewed expanded diagnostics evidence package"
+    )
+    diag_confirmation.add_argument("--config", default="configs/report.yaml")
+    diag_confirmation.add_argument("--contract", required=True)
+    diag_confirmation.add_argument("--report", required=True)
+    diag_confirmation.add_argument("--dry-run", action="store_true")
+
     baselines = subcommands.add_parser(
         "baselines", help="evaluate frozen baselines after the shared-feature gate"
     )
